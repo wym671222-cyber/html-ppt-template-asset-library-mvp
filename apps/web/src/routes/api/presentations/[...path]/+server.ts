@@ -3,10 +3,10 @@ import { catalogApiBaseUrl, forwardPresentationJson } from '$lib/server/catalog-
 
 const SEGMENT = /^[a-z0-9-]+$/
 
-export const GET: RequestHandler = async ({ request, params }) => forward(request, params.path)
-export const POST: RequestHandler = async ({ request, params }) => forward(request, params.path)
-export const PATCH: RequestHandler = async ({ request, params }) => forward(request, params.path)
-export const DELETE: RequestHandler = async ({ request, params }) => forward(request, params.path)
+export const GET: RequestHandler = async ({ request, params, url }) => url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(request, params.path)
+export const POST: RequestHandler = async ({ request, params, url }) => url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(request, params.path)
+export const PATCH: RequestHandler = async ({ request, params, url }) => url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(request, params.path)
+export const DELETE: RequestHandler = async ({ request, params, url }) => url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(request, params.path)
 
 async function forward(request: Request, path: string): Promise<Response> {
   const segments = path.split('/')

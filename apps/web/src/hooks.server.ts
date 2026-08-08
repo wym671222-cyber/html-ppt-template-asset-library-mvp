@@ -24,7 +24,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   const catalogRoute = event.url.pathname === '/api/catalog' || event.url.pathname.startsWith('/api/catalog/assets/')
   const presentationRoute = event.url.pathname === '/api/presentations' || event.url.pathname.startsWith('/api/presentations/')
-  // Only the P07 asset-library root and its exact catalog/presentation proxies, and
+  // Only the P08 asset-library root and its exact catalog/presentation/export proxies, and
   // generated app assets are active. Legacy routes remain unreachable history.
   if (event.url.pathname !== '/' && !event.url.pathname.startsWith('/_app/') && !catalogRoute && !presentationRoute) {
     return new Response('Not found', { status: 404 })

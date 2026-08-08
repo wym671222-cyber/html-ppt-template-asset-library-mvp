@@ -11,6 +11,7 @@ import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { LocalJobRepository } from '../apps/api/src/jobs/local-jobs.js'
 import { TEMPLATE_PREVIEW_JOB_TYPE, TemplatePreviewJobWorker } from '../apps/api/src/previews/preview-jobs.js'
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
+import { PresentationExportRepository } from '../apps/api/src/presentation-exports/presentation-export-repository.js'
 import { SecurePreviewRenderer } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
 
@@ -50,7 +51,11 @@ async function main(): Promise<void> {
   if (jobs.get('p06-e2e-preview')?.status !== 'succeeded') throw new Error('P06 E2E fixture preview failed P05 verification')
 
   const port = Number(process.env.P06_API_PORT ?? 3018)
-  const app = createApp({ catalog: new AssetLibraryCatalog(database as never, store), presentations: new PresentationRepository(database as never) })
+  const app = createApp({
+    catalog: new AssetLibraryCatalog(database as never, store),
+    presentations: new PresentationRepository(database as never),
+    exports: new PresentationExportRepository(database as never, store),
+  })
   serve({ fetch: app.fetch, hostname: '127.0.0.1', port }, () => {
     console.log(`P06 fixture API ready at http://127.0.0.1:${port}`)
   })

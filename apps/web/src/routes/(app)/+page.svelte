@@ -3,7 +3,7 @@
   import AssetGrid from '$lib/components/library/AssetGrid.svelte'
   import FilterRail from '$lib/components/library/FilterRail.svelte'
   import { loadCatalog, type CatalogResponse } from '$lib/asset-library'
-  import { addTemplate, copyItem, createPresentation, deleteItem, loadPresentations, moveItem, renamePresentation, reviseOverrides, type Presentation } from '$lib/presentations'
+  import { addTemplate, copyItem, createPresentation, createPresentationExport, deleteItem, loadPresentationExports, loadPresentations, moveItem, renamePresentation, reviseOverrides, safeExportUrl, type Presentation, type PresentationExport } from '$lib/presentations'
 
   let search = $state('')
   let category = $state('')
@@ -20,6 +20,11 @@
   let presentationNotice = $state('')
   let newPresentationName = $state('本机汇报')
   let renameValue = $state('')
+  let exportRecords = $state<PresentationExport[]>([])
+  let exportLoading = $state(false)
+  let exportError = $state('')
+  let exportNotice = $state('')
+  let exportStatus: HTMLElement | undefined = $state()
 
   const requestKey = $derived(JSON.stringify({ search, category, tags: [...selectedTags].sort(), retry }))
   const selectedItem = $derived(catalog?.items.find((item) => item.id === selectedId) ?? null)
@@ -50,6 +55,25 @@
       window.clearTimeout(timer)
       controller.abort()
     }
+  })
+
+  $effect(() => {
+    const presentationId = selectedPresentationId
+    if (!presentationId) {
+      exportRecords = []
+      exportLoading = false
+      exportError = ''
+      return
+    }
+    let active = true
+    exportLoading = true
+    exportError = ''
+    void loadPresentationExports(presentationId).then((next) => {
+      if (active) exportRecords = next
+    }).catch((cause) => {
+      if (active) exportError = cause instanceof Error ? cause.message : '导出记录加载失败'
+    }).finally(() => { if (active) exportLoading = false })
+    return () => { active = false }
   })
 
   $effect(() => {
@@ -98,6 +122,33 @@
         } catch { /* Preserve the conflict message when recovery is unavailable. */ }
       }
     }
+  }
+
+  async function exportPresentation(): Promise<void> {
+    if (!selectedPresentation || selectedPresentation.items.length === 0 || exportLoading) return
+    exportLoading = true
+    exportError = ''
+    exportNotice = ''
+    try {
+      const result = await createPresentationExport(selectedPresentation)
+      exportRecords = [result, ...exportRecords.filter((item) => item.id !== result.id)]
+      exportNotice = `Revision ${result.presentationRevision} 已生成离线 HTML/ZIP。`
+      requestAnimationFrame(() => exportStatus?.focus())
+    } catch (cause) {
+      exportError = cause instanceof Error ? cause.message : '本机导出失败'
+      if (/已变更|has changed|revision/i.test(exportError)) {
+        try {
+          const latest = await loadPresentations()
+          presentations = latest
+          const current = latest.find((item) => item.id === selectedPresentationId) ?? latest[0] ?? null
+          selectedPresentationId = current?.id ?? null
+          renameValue = current?.name ?? ''
+          exportRecords = current ? await loadPresentationExports(current.id) : []
+          exportNotice = '检测到较新 revision，已重新加载；请确认项目后再导出。'
+          requestAnimationFrame(() => exportStatus?.focus())
+        } catch { /* Preserve the bounded export error when recovery is unavailable. */ }
+      }
+    } finally { exportLoading = false }
   }
 </script>
 
@@ -196,6 +247,23 @@
             </ol>
           {:else}<p class="cart-empty">购物车为空。选择上方模板后加入此汇报。</p>{/if}
           <p class="revision">Revision {selectedPresentation.revision}</p>
+          <section class="export-panel" aria-labelledby="export-heading" aria-busy={exportLoading}>
+            <header><div><h3 id="export-heading">离线导出</h3><p>固定 revision · 可审计 manifest · 本机 CAS</p></div><button type="button" disabled={selectedPresentation.items.length === 0 || exportLoading} onclick={() => { void exportPresentation() }}>{exportLoading ? '正在生成…' : '生成 HTML/ZIP'}</button></header>
+            {#if exportLoading && exportRecords.length === 0}
+              <p role="status">正在读取或生成本机导出…</p>
+            {:else if exportError}
+              <div class="export-error" role="alert"><p>{exportError}</p><button type="button" onclick={() => { exportLoading = true; loadPresentationExports(selectedPresentation.id).then((next) => { exportRecords = next; exportError = '' }).catch((cause) => { exportError = cause instanceof Error ? cause.message : '导出记录加载失败' }).finally(() => { exportLoading = false }) }}>重新读取</button></div>
+            {:else if exportRecords.length === 0}
+              <p class="export-empty">暂无导出。加入至少一个模板后，可生成完全离线的 HTML/ZIP。</p>
+            {:else}
+              <ul class="export-list">
+                {#each exportRecords as record}
+                  <li><span>Revision {record.presentationRevision} · {record.itemCount} 项</span><div><a href={safeExportUrl(record.manifestUrl)}>Manifest</a><a href={safeExportUrl(record.htmlUrl)} download>HTML</a><a href={safeExportUrl(record.zipUrl)} download>ZIP</a></div></li>
+                {/each}
+              </ul>
+            {/if}
+            {#if exportNotice}<p class="export-notice" role="status" tabindex="-1" bind:this={exportStatus}>{exportNotice}</p>{/if}
+          </section>
         {/if}
         {#if presentationNotice}<p class="presentation-notice" role="status">{presentationNotice}</p>{/if}
       </section>
@@ -256,6 +324,17 @@
   .override input { width: 100%; }
   .presentation-error { display: flex; gap: 12px; align-items: center; color: #a33b3b; margin-top: 14px; }
   .presentation-notice { color: #1768e5; }
+  .export-panel { margin-top: 18px; padding: 14px; border: 1px solid #d7e1ee; border-radius: 8px; background: #f8fafc; }
+  .export-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .export-panel h3 { font-size: 14px; }
+  .export-panel header p, .export-empty, .export-notice { margin-top: 4px; color: #637289; font-size: 12px; }
+  .export-list { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+  .export-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; border: 1px solid #dce2ea; border-radius: 6px; background: #fff; color: #45556d; font-size: 12px; }
+  .export-list li div { display: flex; gap: 8px; }
+  .export-list a { color: #155fcf; font-weight: 700; }
+  .export-list a:focus-visible, .export-notice:focus-visible { outline: 3px solid rgba(23, 104, 229, .24); outline-offset: 2px; }
+  .export-error { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: #a33b3b; font-size: 12px; }
+  .export-notice { color: #1768e5; }
   @keyframes pulse { 50% { opacity: .5; } }
   @media (max-width: 1320px) {
     .workspace { grid-template-columns: 250px minmax(360px, 1fr) minmax(330px, 400px); }
@@ -272,6 +351,7 @@
     .app-header h1 { font-size: 21px; }
     .app-header p { font-size: 12px; }
     .results-panel { padding: 20px 16px; }
+    .export-panel > header, .export-list li { align-items: flex-start; flex-direction: column; }
   }
   @media (prefers-reduced-motion: reduce) { .skeleton div, .skeleton i { animation: none; } }
 </style>

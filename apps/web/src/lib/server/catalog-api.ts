@@ -34,3 +34,24 @@ export async function forwardPresentationJson(request: Request, target: URL): Pr
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
   })
 }
+
+export async function forwardPresentationArtifact(target: URL, kind: 'html' | 'zip'): Promise<Response> {
+  const response = await fetch(target, { method: 'GET', redirect: 'error', credentials: 'omit' })
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+  if (!response.ok) {
+    if (!contentType.startsWith('application/json')) return Response.json({ error: '导出服务返回了无效响应' }, { status: 502 })
+    return new Response(await response.arrayBuffer(), { status: response.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } })
+  }
+  const expected = kind === 'html' ? 'text/html' : 'application/zip'
+  if (!contentType.startsWith(expected)) return Response.json({ error: '导出物媒体类型不符合契约' }, { status: 502 })
+  return new Response(await response.arrayBuffer(), {
+    status: 200,
+    headers: {
+      'Content-Type': kind === 'html' ? 'text/html; charset=utf-8' : 'application/zip',
+      'Content-Disposition': response.headers.get('content-disposition') ?? `attachment; filename="export.${kind}"`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      ...(kind === 'html' ? { 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'" } : {}),
+    },
+  })
+}

@@ -93,6 +93,16 @@ export const templatePreviewDerivatives = sqliteTable('template_preview_derivati
   uniqueIndex('template_preview_derivatives_identity_unique').on(table.templateVersionId, table.kind, table.sourceDigest, table.rendererVersion),
 ])
 
+export const presentationExports = sqliteTable('presentation_exports', {
+  id: text('id').primaryKey(),
+  presentationId: text('presentation_id').notNull().references(() => presentations.id),
+  presentationRevision: integer('presentation_revision').notNull(),
+  manifestDigest: text('manifest_digest').notNull().references(() => contentObjects.digest),
+  htmlDigest: text('html_digest').notNull().references(() => contentObjects.digest),
+  zipDigest: text('zip_digest').notNull().references(() => contentObjects.digest),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, (table) => [uniqueIndex('presentation_exports_revision_unique').on(table.presentationId, table.presentationRevision)])
+
 export const auditEvents = sqliteTable('audit_events', {
   id: text('id').primaryKey(),
   action: text('action').notNull(),

@@ -16,6 +16,7 @@ const targetTables = new Set([
   'template_asset_tags',
   'presentations',
   'presentation_items',
+  'presentation_exports',
   'jobs',
   'template_preview_derivatives',
   'audit_events',

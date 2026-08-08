@@ -2,13 +2,41 @@
 
 ## 当前状态
 
-- 当前阶段：**P07 已完成并通过门禁**
-- 下一阶段：P08 HTML/ZIP 导出闭环（仅在本文件、`docs/implementation/handoffs/P07.md` 和 P07 原子提交证明通过后创建）
+- 当前阶段：**P08 已完成并通过门禁**
+- 下一阶段：P09 集成加固与恢复演练（仅在本文件、`docs/implementation/handoffs/P08.md` 和 P08 原子提交证明通过后创建）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P08 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| 固定 revision 导出 | 新增 `PresentationExportRepository`，每次 POST 必须提交当前 `expectedRevision` 与按 position 精确排列、无重复的 `itemIds`；在 SQLite 事务中读取快照，生成后再于最终事务重读并比较快照指纹。陈旧 revision、未知/跨 Presentation item、空/重复 item、不可用固定版本或中途变化均拒绝，无导出记录或内容对象登记。 |
+| 来源与 P05 重验 | 每个 item 只读取其已固定 `template_version_id`，重新验证 verified/available、source/content digest、P04 CAS 相对路径/字节/实际 SHA-256、规范 P03 包身份/slot schema，以及同 renderer 的 P05 preview/thumbnail PNG pair、CAS 哈希和 1280×720/320×180 尺寸；不依赖 asset current version。 |
+| HTML/slot 边界 | 仅对 P03 fixture profile 的已验证 HTML/CSS 做静态受控组装；text slot 经过 HTML 转义，color slot 只接受 P07 已验证 hex 值，CSS 作用域隔离。成品 HTML 自包含且无外链、父目录、`file:`/data/blob/javascript URL、script、iframe、form、事件属性或宿主 cookie；Web 只显示 JSON/安全 PNG 和下载链接，不注入模板 HTML、iframe/srcdoc/blob。 |
+| ZIP 与 manifest | 使用固定时间戳、UTF-8、stored-entry 的本机 ZIP writer；文件路径仅允许明确相对 allowlist，禁止绝对/父目录/反斜线/协议/重复路径。audit manifest 固定 Presentation revision、item position、具体 TemplateVersion、slot overrides、source/content SHA-256、P05 derivative SHA-256、每个文件 SHA-256/字节/媒体类型及 HTML/ZIP SHA-256；每次 list/read/download 都重验 CAS、canonical manifest、ZIP local/central/CRC、allowlist 和全部文件哈希。 |
+| 追加写与失败诊断 | HTML、ZIP、audit manifest 以 SHA-256 追加写 P04 CAS；`presentation_exports` 仅在全部对象与最终 revision 复核成功后事务登记，同 Presentation revision 幂等回读既有已验证导出。表和导出对象引用不可更新/删除；失败只返回 300 字以内非秘密诊断，不覆盖既有输出，也不改变 Presentation/item/TemplateVersion/P05 派生物。 |
+| API/Web | 活动 P02 composition root 只新增 `/api/presentations/:id/exports` 与其 manifest/html/zip 回读；固定 Owner、loopback Host/Origin、无 query、16KB JSON、受限 id/item 数继续生效；旧 `/api/export`、preview/auth/admin/search 等保持 404。Svelte UI 覆盖加载、空态、失败、revision 冲突重载、键盘焦点、下载入口与 680px 响应式。 |
+| migration/实际库 | 新增 `0004_p08_presentation_exports.sql` 与 4 个 current-revision/content-type/append-only trigger。实际库迁移前业务表全 0、`quick_check=ok`、4 migrations，备份 `asset-library.1786209246469.pre-migration.db` SHA-256 为 `ca65c083e5478a0aab4e6b3bb877e78a875b8bdfef71d5958ab2fd2fc55f8dad`；迁移后 SHA-256 `7c4d335c80cbf99327f2dbde8790222ddf4c35f82358a7824702ab56f4ee7579`、5 migrations、`foreign_keys=1`、`foreign_key_check=0`、业务表仍全 0。实际重复迁移备份 `asset-library.1786209246723.pre-migration.db` 后哈希不变。 |
+| 验证 | Vitest 27 files/729 tests；shell 8/8；shared/API TypeScript；Web `svelte-check` 0 errors（9 个上游 warnings）与 Vite build；真实 Google Chrome P02 1/1、P06-P08 8/8。P08 离线用例在断网 context 解包打开，仅访问解包目录内受控 `file:` 入口，0 HTTP(S)、0 cookie、0 active element。根 `pnpm build` 仍受 pnpm ignored lifecycle approval 阻断，自动占位已精确移除且审批策略未变。 |
+| 禁区 | 没有读取、扫描、导入、复制、移动或改写 sibling `02_HTML_PPT_组件与模板`；没有实施 P09 恢复、P10 验收、P11、旧在线 export route、身份/RBAC/approval、云服务、remote/push/发布/部署。 |
+
+## P08 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| 固定 revision 生成/读取 HTML/ZIP 与完整 UI 状态 | 通过 | `tests/p08-presentation-export.test.ts` 6/6；`e2e/p08-offline-export.spec.ts` 3/3 |
+| manifest 固定 item/version/source/override/output hash 且既有导出不漂移 | 通过 | P08 unit 覆盖 manifest/ZIP 全哈希回读、同 revision 幂等、current version 置空后既有 manifest 不变 |
+| 受控相对文件与离线断网打开 | 通过 | stored ZIP local/central/CRC/allowlist 重验；Chrome 离线打开只访问解包目录，0 HTTP(S)/cookie/script/iframe/form |
+| CAS/revision/JSON/path/URL/跨 item/不可用/篡改负向及无半写 | 通过 | P08 unit/API 覆盖 stale、unknown/cross/duplicate/empty item、malformed JSON/manifest、query/path/active URL、unavailable version、CAS tamper，失败时 export/content 计数不变 |
+| Owner/loopback、旧能力 404、Web 不执行模板 | 通过 | P02/P06/P07/P08 API 与 E2E 回归；HTML 仅为带 attachment/CSP 的导出物回读，宿主页面无 iframe/srcdoc/blob/HTML 注入 |
+| migration/SQLite/P04-P07 不变量 | 通过 | 空库/重复迁移、实际库备份/哈希/quick_check/FK、append-only trigger、全量 P04-P07 回归通过 |
+| 全量验证与范围 | 通过（根构建限制已记录） | 729 Vitest、8/8 shell、shared/API/Web checks、P02 1/1 + P06-P08 8/8 Chrome、`git diff --check` |
+
+**P08 门禁结论：通过。** P09 仅可在 P08 原子提交、干净工作树和本状态/交接文件共同成立后创建。
 
 ## P07 完成事实
 
