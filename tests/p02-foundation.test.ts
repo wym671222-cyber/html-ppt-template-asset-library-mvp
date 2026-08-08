@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { app } from '../apps/api/src/app.js'
+import { createApp } from '../apps/api/src/app.js'
 import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { requireFixedDatabaseUrl } from '../apps/api/src/db/paths.js'
 import { getOwnerContext } from '../apps/api/src/owner.js'
@@ -24,6 +24,7 @@ function temporaryDatabase(): string {
 
 describe('P02 loopback composition root', () => {
   it('uses one request-independent owner and excludes legacy routes', async () => {
+    const app = createApp()
     const owner = getOwnerContext()
     expect(owner).toEqual({ id: 'local-owner', kind: 'local' })
 

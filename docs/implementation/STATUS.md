@@ -2,13 +2,42 @@
 
 ## 当前状态
 
-- 当前阶段：**P05 已完成并通过门禁**
-- 下一阶段：P06 三栏资产库界面（仅在本文件与 `docs/implementation/handoffs/P05.md` 的可重复命令证明通过后创建）
+- 当前阶段：**P06 已完成并通过门禁**
+- 下一阶段：P07 购物车与汇报持久化（仅在本文件、`docs/implementation/handoffs/P06.md` 和 P06 原子提交证明通过后创建）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P06 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| 三栏 localhost UI | 活动根页改为单 Owner 资产库：左栏有界搜索/分类/多标签筛选，中栏稳定排序资产卡片，右栏仅显示所选资产元数据与 P05 PNG；包含加载、API 错误及恢复、无结果、空库、图片失败、键盘方向键/焦点和 1080/700px 响应式状态 |
+| 最小只读 catalog | `AssetLibraryCatalog` 只查询 `active` 资产、属于该资产的 `current_version_id`、`verified/available` 当前版本及同 source/renderer 的完整 preview+thumbnail PNG 对；搜索/筛选均使用参数绑定，参数名、长度、标签数和结果数有界，标题/id 稳定排序 |
+| PNG 回读边界 | 客户端只提交受限 asset id 和固定 `preview|thumbnail`，没有 digest/路径/URL 参数；服务端从当前版本的 P05 登记行取得 digest，经 `LocalContentStore.read()` 重新 SHA-256，复核 CAS 相对路径、字节数、`image/png`、PNG 签名和 1280×720/320×180 尺寸后返回 `no-store` PNG |
+| Web 执行边界 | Web 同源代理只转发固定 loopback API 的 JSON/PNG，代理地址必须是无凭据/路径/query 的 loopback HTTP origin；UI 只使用文本绑定与 `<img>`，没有 `{@html}`、iframe/srcdoc/blob/data URL、原始 HTML、外链、表单提交或宿主 cookie，CSP 固定 `frame/object/form-action none` 和同源 image/connect |
+| Composition root | catalog 只在生产 `index.ts` 完成安全迁移后实例化并传给 P02 `createApp`；测试导入不打开实际目标库。固定 `OwnerContext`、API/Web loopback Host/Origin、GET-only CORS 和旧 auth/admin/sharing/provider/preview/export/search 路由 404 均回归通过 |
+| 测试数据 | unit/API 使用仓库内唯一 P03 fixture 与隔离临时 SQLite/CAS；P06 E2E 也只登记该 fixture，并经真实 P05 `SecurePreviewRenderer`/Chrome 生成受控 PNG。没有读取、扫描、复制或改写 sibling 真实 `02_HTML_PPT_组件与模板` |
+| Schema/实际库 | P06 没有 schema、migration 或实际业务数据变更。实际库仅以 `mode=ro&immutable=1` 回读：SHA-256 仍为 `a501811f7b328fd36799049a5b2596b84d385f45b036ff6f9b77720aaab1bba9`，`quick_check=ok`、`foreign_keys=1`、`foreign_key_check=0`、3 条 migration、4 个 P05 触发器，asset/version/content/job/derivative/presentation/item 均为 0 |
+| 视觉验收 | Image Gen 概念基准与 1536×1024/680×900 实现截图经 `view_image` 对照；三栏容器、真白/冷灰/深墨蓝/蓝色/琥珀体系、开放式面板、选中态和详情层级一致。应用内浏览器验证 0 iframe、仅同源 favicon/PNG 资源、0 console error、无横向溢出；单卡/朴素预览是严格使用唯一 P03 fixture 的有意差异 |
+| 禁区 | 未实现 P07 Presentation/购物车/排序/复制/修订、P08 export、P09/P10；未挂载旧在线能力，未引入身份/RBAC/approval、Postgres/S3/Redis/外部 Worker，未改 remote、push、发布、部署、依赖审批或凭据 |
+
+## P06 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| 搜索/筛选/选择/安全预览三栏旅程 | 通过 | `e2e/p06-asset-library.spec.ts`：真实 Chrome 3/3，覆盖加载、搜索、分类、标签、无结果、选择/PNG、方向键焦点、API 错误恢复、680px 响应式 |
+| catalog 正/负向与稳定查询 | 通过 | `tests/p06-asset-library.test.ts`：有界参数、未知/重复/空标签/超限拒绝，active/current/verified 与同 renderer/source PNG pair，稳定 facets/items 且 JSON 不泄露 digest/路径/URL |
+| PNG CAS/媒体安全 | 通过 | 同一测试覆盖 preview/thumbnail 原字节、任意 digest、`file:`、外部 URL query、HTML kind、missing、tampered CAS；P05 全回归继续以真实 Chrome 验证网络/cookie/DOM 隔离 |
+| Owner/loopback/旧能力回归 | 通过 | P02 unit 4/4、P02 Playwright 1/1、P06 Playwright 3/3；伪造 Host 421、外部 Origin 403，旧 auth/admin/sharing/provider/preview/export/search 404 |
+| DB/schema/migration 不变量 | 通过 | P06 unit 覆盖空库及已有目标库重复迁移；实际库只读 immutable 检查通过且哈希/3 migrations/schema 不变，未运行 P06 实际迁移 |
+| 全量 unit/shell/type/Web | 通过 | Vitest 25 files/719 tests；shell 8/8；shared/API TypeScript；Web `svelte-check` 0 errors（9 个上游既有 warnings）与 Vite build 通过 |
+| 根构建环境限制 | 已记录 | `pnpm build` 仍由 Codex pnpm 10 的 ignored lifecycle approval 阻断；未批准依赖，命令生成的 `allowBuilds` 提示占位已精确移除，工作区配置恢复 |
+| 差异、真实素材与远程 | 通过 | `git diff --check`、schema/migration unchanged、实际 DB hash、固定 `upstream` remote；变更仅为 P06 catalog/UI/proxy/tests/config/docs，无真实 `02` 素材操作，无 push/发布/部署 |
+
+**P06 门禁结论：通过。** P07 现在可按 P06 handoff 创建；P08-P10 仍不得提前实现。
 
 ## P05 完成事实
 
