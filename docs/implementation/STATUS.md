@@ -2,13 +2,57 @@
 
 ## 当前状态
 
-- 当前阶段：**P09 已完成并通过门禁**
-- 下一阶段：P10 MVP 验收与交付（仅在本文件、`docs/implementation/handoffs/P09.md` 和 P09 原子提交证明通过后去重创建；P10 通过后停止，不创建 P11）
+- 当前阶段：**P10 MVP 验收与本地交付已完成并通过门禁**
+- 下一阶段：**无（按计划停止；不得创建 P11）**
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P10 MVP 验收与本地交付
+
+### 证据分层
+
+| 层级 | 当前结论 | 不可外推的边界 |
+|---|---|---|
+| 规范 | `MASTER_PLAN.md` 的六项全局不变量、P03 v1 契约和 P01 ADR 仍是验收准绳。 | 规范不是运行证明。 |
+| 当前 fixture-only 验证 | 仓库内唯一 `fixtures/p03-simulated-template/` 经 P04 CAS、P05 Chrome PNG、P06 catalog、P07 固定版本 Presentation、P08 离线 HTML/ZIP、P09 隔离恢复的完整旅程当前重跑通过。 | 它不证明 sibling `02_HTML_PPT_组件与模板` 的任何真实 HTML 或素材。 |
+| 当前实际目标只读验证 | `apps/api/data/asset-library.db` 以 `mode=ro&immutable=1`、`query_only=ON` 回读：`quick_check=ok`、`foreign_keys=1`、`foreign_key_check=0`、5 条 migration，content/asset/version/derivative/presentation/item/export/job 均为 0；CAS 根不存在。 | 只证明空业务目标的完整性和非破坏恢复，不证明实际素材或全对象恢复。 |
+| 当前实际备份/恢复只读验证 | P09 backup/restore 的 manifest、snapshot DB、restore report 及目标 DB/WAL/SHM 前后 SHA-256 一致；备份和恢复库同样 `quick_check=ok`、FK 开启、5 条 migration。对象、派生物、Presentation、export 计数都为 0。 | P04-P08 的有对象恢复证明仍只来自 fixture-only 隔离测试。 |
+
+### 当前可重复验收
+
+| 范围 | 命令/实测结果 |
+|---|---|
+| P02-P09 unit/API/fixture 旅程 | `P05_CHROMIUM_PATH=... P06_CHROMIUM_PATH=... node_modules/.bin/vitest run`：28 files、737 tests 通过；覆盖 CAS、篡改/缺失、路径穿越、符号链接、未声明文件、陈旧 revision/state/manifest、并发/重复、备份/恢复中断、只读/权限、Owner/Host/Origin、旧路由、离线与模板执行边界。 |
+| 既有 shell/shared | `bash tests/run_all.sh`：8/8 suites；`node_modules/.bin/tsc --noEmit -p packages/shared/tsconfig.json` 与 `node_modules/.bin/tsc --noEmit -p apps/api/tsconfig.json --rootDir .`：通过。 |
+| Web | `svelte-kit sync`、`svelte-check --tsconfig ./tsconfig.json`：0 errors、9 条既有上游 warnings；`vite build`：通过（既有 a11y/chunk/adapter warnings）。 |
+| Chrome 回归 | `playwright test --config=playwright.p02.config.ts`：1/1；`playwright test --config=playwright.p06.config.ts`：10/10，使用隔离 loopback DB/CAS 和 P03 fixture，含 P08 断网 ZIP（0 HTTP(S)、0 cookie、0 script/iframe/form）与 P09 隔离恢复。 |
+| 根构建限制 | `pnpm build` 当前仍在 pnpm ignored lifecycle scripts（`better-sqlite3`、`esbuild`）审批前失败；未运行 `pnpm approve-builds`，自动生成的 `allowBuilds` 占位已移除，lockfile/审批策略未变。直接 API/Web build 已通过。 |
+
+### 全局不变量与 P02-P09 门禁结论
+
+| 项目 | 当前结论与证据 |
+|---|---|
+| 1. 固定 TemplateVersion | P07/P08/P09 unit/API/Chrome 当前回归通过：item/export 固定具体 version/source hash，current version 漂移、陈旧 revision 和跨 item 均拒绝。 |
+| 2. 内容哈希追加写 | P04/P05/P08/P09 当前回归通过：CAS/PNG/export 的 SHA-256、冲突、迟到失败、篡改/缺失和恢复后回读均受测。 |
+| 3. fixture-only | 当前 test/E2E 输入只为 P03 fixture；P10 未读取、扫描、导入、复制、移动或改写 sibling 真实资产。 |
+| 4. slot 非执行 | P03 契约、P07 slot 负向测试和 Web/Chrome 回归共同证明仅受控 text/color JSON；活动 Web 不注入模板 HTML，不使用 iframe/srcdoc/blob/可执行字符串。 |
+| 5. 本机/包内预览导出 | P05 Chromium request policy、P08 断网 ZIP 和 P09 重放当前通过；外网、cookie、父目录、外部 iframe/form/script 默认拒绝。 |
+| 6. 阶段记录 | 本状态、`handoffs/P10.md` 与 `LOCAL_DELIVERY.md` 已更新；本阶段无产品代码或 schema/migration 修改。 |
+| P02-P09 | 对应 handoff 的实现、负向安全与环境限制已由上列当前全量 unit/shell/type/Web/Chrome 复测，而不是只引用历史结论。 |
+
+### P10 门禁结论
+
+1. 全局不变量与 P02-P09 有当前可复现证据，且 fixture、实际空目标和规范边界已分层记录：**通过**。
+2. P03 fixture-only 的 P04-P09 正/负向端到端、恢复后 SQLite/ledger/CAS/P05/P07/P08 重验：**通过**。
+3. loopback/Owner、Host/Origin、旧能力 404、无半写/无覆盖和 Web 非执行边界：**通过**。
+4. 实际 SQLite/CAS/export/backup 的 immutable/query-only 检查与前后状态：**通过（实际业务目标为空）**。
+5. 全量验证：**通过，根 `pnpm build` 的外部审批门禁如实保留，未改变策略**。
+6. 本地交付说明：见 `docs/implementation/LOCAL_DELIVERY.md`；无发布、部署、remote 变更或 push：**通过**。
+
+**P10 门禁结论：通过。MVP 在本地验收完成，按 `MASTER_PLAN.md` 停止；不创建 P11 或任何后续阶段。**
 
 ## P09 完成事实
 
