@@ -21,15 +21,20 @@ export type SimulatedTemplateAdapterResult = {
   asset: { id: string; title: string; summary: string; category: string; tags: string[] }
   version: SimulatedTemplateVersion
   package: { root: string; entry: string; files: string[] }
+  source: TemplatePackageSource
 }
 
 function readJson(path: string): TemplatePackageManifest {
   return JSON.parse(readFileSync(path, 'utf8')) as TemplatePackageManifest
 }
 
-function digestPackage(source: TemplatePackageSource): string {
+export function serializeTemplatePackage(source: TemplatePackageSource): Buffer {
   const canonical = JSON.stringify({ manifest: source.manifest, files: Object.fromEntries(Object.entries(source.files).sort(([a], [b]) => a.localeCompare(b))) })
-  return createHash('sha256').update(canonical, 'utf8').digest('hex')
+  return Buffer.from(canonical, 'utf8')
+}
+
+function digestPackage(source: TemplatePackageSource): string {
+  return createHash('sha256').update(serializeTemplatePackage(source)).digest('hex')
 }
 
 export function adaptSimulatedTemplatePackage(rootDir: string): SimulatedTemplateAdapterResult {
@@ -55,5 +60,6 @@ export function adaptSimulatedTemplatePackage(rootDir: string): SimulatedTemplat
       slotSchema: { slots: manifest.slots },
     },
     package: { root, entry: manifest.entry, files: [...manifest.files] },
+    source,
   }
 }

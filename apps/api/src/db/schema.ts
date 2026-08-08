@@ -66,15 +66,18 @@ export const presentationItems = sqliteTable('presentation_items', {
 export const jobs = sqliteTable('jobs', {
   id: text('id').primaryKey(),
   type: text('type').notNull(),
-  status: text('status', { enum: ['queued', 'running', 'succeeded', 'failed'] }).notNull().default('queued'),
+  status: text('status', { enum: ['pending', 'running', 'succeeded', 'failed'] }).notNull().default('pending'),
   inputSnapshot: text('input_snapshot', { mode: 'json' }).notNull(),
   inputRevision: integer('input_revision').notNull(),
   attempt: integer('attempt').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull().default(3),
   diagnostic: text('diagnostic').notNull().default(''),
   outputDigest: text('output_digest').references(() => contentObjects.digest),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   startedAt: integer('started_at', { mode: 'timestamp_ms' }),
   finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  leaseOwner: text('lease_owner'),
+  leaseExpiresAt: integer('lease_expires_at', { mode: 'timestamp_ms' }),
 })
 
 export const auditEvents = sqliteTable('audit_events', {

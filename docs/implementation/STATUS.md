@@ -2,13 +2,39 @@
 
 ## 当前状态
 
-- 当前阶段：**P03 已完成并通过门禁**
-- 下一阶段：P04 资产目录后端（仅在 P03 handoff 与可重复命令证明通过后启动）
+- 当前阶段：**P04 已完成并通过门禁**
+- 下一阶段：P05 安全预览与缩略图（仅在本文件与 `docs/implementation/handoffs/P04.md` 的可重复命令证明通过后创建）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P04 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| 本地 CAS | 新增 `apps/api/src/assets/content-store.ts`：SHA-256 决定对象身份，路径固定为本机 `data/objects/sha256/<prefix>/<digest>`；临时文件先 fsync，再以不可覆盖 hard link 落位；读取及并发遇到既有对象均重新哈希校验 |
+| 模拟包登记 | `AssetCatalogRepository` 只接收 P03 适配结果和其确定性 `sourceDigest`；将同一规范化包字节写入 CAS，确认 digest 一致后，在一个 SQLite 事务内追加 `content_objects`、asset/version/tag 引用并设置已验证 current version |
+| 不可变与幂等 | 已有 version 的重复登记只接受所有不可变字段完全一致；冲突元数据或内容拒绝，已验证 `TemplateVersion` 与 CAS 记录不被改写；登记无 API 路由、无真实素材扫描 |
+| Job/Worker | `0001_p04_catalog_jobs.sql` 将旧 `queued/running` 安全规范化为 `pending`，新增 `max_attempts`、lease owner/expiry 及索引；`LocalJobRepository` 用 SQLite 事务 claim/recover，`LocalJobWorker.runOnce()` 是最小本机生命周期，无外部队列或 Worker |
+| Job 不变量 | pending→running→succeeded/failed、租约失效恢复、重试上限、并发 claim 和成功输出不可被迟到失败覆盖都有单测与 SQL 约束；成功输出必须已有 `content_objects` 引用 |
+| 实际迁移 | 已确认目标库所有表均为 P02 目标表且为空后执行；迁移前备份 SHA-256 为 `b6320848ac4805c8791f7d3805d8f58261bfe70ce31b97b0950509da2d23186d`，迁移后 DB SHA-256 为 `157efd172d700bf5e1782631eba5385b9f2b70f7fd610f8a3f9e337ae39255ad`；应用连接 `foreign_keys=1`、`quick_check=ok` |
+| 禁区 | 仅使用仓库内 P03 fixture；没有读取、扫描、导入、复制、移动或改写 sibling `02_HTML_PPT_组件与模板`，没有新增预览/UI/汇报/导出、远程、push、发布或云服务 |
+
+## P04 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| CAS 确定性、原子性及负向安全 | 通过 | `tests/p04-asset-catalog.test.ts`：相同/不同内容、路径穿越、篡改哈希、写入失败无半对象均覆盖 |
+| 资产/version/CAS 事务与幂等 | 通过 | P04 测试验证 sourceDigest=CAS digest、DB 外键引用、verified current version、重复登记无重复行、冲突回滚 |
+| Job 状态、租约、重试与恢复 | 通过 | P04 测试验证单一 claim、模拟崩溃后租约恢复、上限失败、Worker 成功和迟到失败拒绝 |
+| 空库/已有库迁移与 DB 不变量 | 通过 | P02/P04 Vitest 覆盖空库、重复迁移及未知库停止；实际目标库备份/哈希、`quick_check`、应用连接 `foreign_keys` 通过 |
+| unit/shell/type/Web/E2E | 通过（组件级） | Vitest 23 files/706 tests；shell 8/8；shared/API TypeScript、Web svelte-check/Vite build 通过；P02 Playwright 以本机 Chrome 1/1 通过 |
+| 根构建环境限制 | 已记录 | `pnpm build` 被桌面 pnpm 10 的 ignored lifecycle-script approval 阻断；未为阶段任务批准或改变依赖，直接 API/shared/Web 检查已通过 |
+| 差异与边界 | 通过 | `git diff --check`、固定 `upstream` remote 审计；变更只涉及 P04 CAS/catalog/jobs/migration/test/docs 和 P03 digest 序列化衔接 |
+
+**P04 门禁结论：通过。** P05 现在可按 P04 handoff 创建；P06-P10 仍不得提前实现。
 
 ## P03 完成事实
 
