@@ -15,6 +15,13 @@
       "when": 1786204800000,
       "tag": "0001_p04_catalog_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786291200000,
+      "tag": "0002_p05_preview_derivatives",
+      "breakpoints": true
     }
   ]
 }

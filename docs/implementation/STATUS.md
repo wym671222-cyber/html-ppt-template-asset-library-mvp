@@ -2,13 +2,41 @@
 
 ## 当前状态
 
-- 当前阶段：**P04 已完成并通过门禁**
-- 下一阶段：P05 安全预览与缩略图（仅在本文件与 `docs/implementation/handoffs/P04.md` 的可重复命令证明通过后创建）
+- 当前阶段：**P05 已完成并通过门禁**
+- 下一阶段：P06 三栏资产库界面（仅在本文件与 `docs/implementation/handoffs/P05.md` 的可重复命令证明通过后创建）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P05 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| CAS 信任边界 | `PreviewArtifactRepository` 只按已验证 `TemplateVersion.content_object_digest` 回读 P04 CAS；Job 快照 digest、version source/content digest、包 identity、P03 契约、规范序列化和 CAS 实际哈希全部重验，篡改或不一致均在启动 Chromium 前拒绝 |
+| 受控预览运行时 | `SecurePreviewRenderer` 仅在随机临时目录解包 manifest 明确列出的 HTML/CSS，以随机 token 的 `127.0.0.1` 临时 origin 提供资源；Chromium 使用全新空 storage context、禁用 JavaScript/service worker/download，并由 request allowlist 默认拒绝非当前 origin、非 GET、query 和未声明路径 |
+| 纵深防御 | 静态策略拒绝脚本、外链、未声明资源、CSS fetch、iframe/frame/object/embed、表单、事件属性、`target`/新窗口和父目录；响应附 strict CSP、no-referrer、nosniff，运行后回读 cookie、DOM、popup、CSP 与请求诊断，任一违规即失败 |
+| 可复现派生物 | 同一 P03 fixture 两次真实 Chrome 渲染得到相同 1280×720 preview PNG 与 320×180 thumbnail PNG digest；两者先以 SHA-256 追加写 CAS，再事务登记 `template_preview_derivatives`，同 renderer identity 的冲突输出拒绝且不能覆盖既有成功记录 |
+| Job/Worker | `template-preview` Job 通过 P04 `LocalJobRepository` 的按类型 claim 使用 pending→running→succeeded/failed、lease、retry 与 recover 语义；无效输入/策略错误终止失败，临时 Chromium 故障可重试，成功 Job 的 `output_digest` 固定为 preview digest，thumbnail 由同一事务登记 |
+| 编号迁移 | 新增 `0002_p05_preview_derivatives.sql` 及 journal entry；派生物表以 TemplateVersion/CAS 外键、identity 唯一约束和 4 个触发器保证 verified source、PNG 类型与追加写入 |
+| 实际目标库 | P04 目标库表型且业务记录为空后迁移；迁移前备份 `apps/api/data/backups/asset-library.1786204513675.pre-migration.db` SHA-256 为 `157efd172d700bf5e1782631eba5385b9f2b70f7fd610f8a3f9e337ae39255ad`，迁移后 DB SHA-256 为 `a501811f7b328fd36799049a5b2596b84d385f45b036ff6f9b77720aaab1bba9`；`quick_check=ok`、`foreign_keys=1`、`foreign_key_check=0`、3 条迁移，业务记录仍为空 |
+| 禁区 | 没有读取、扫描、导入、复制、移动或改写 sibling 真实 `02_HTML_PPT_组件与模板`；没有新增 API/UI/Presentation/export 路由或身份/组织/RBAC/approval、Postgres/S3/Redis/外部 Worker；remote、push、发布与部署均未改动 |
+
+## P05 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| 只接受 P03/P04 已验证内容及负向输入 | 通过 | `tests/p05-secure-preview.test.ts` 覆盖 digest/CAS 篡改、路径/未声明资源、脚本、外链、CSS fetch、iframe、表单、新窗口及无效 Job 快照 |
+| Chromium 默认拒绝与隔离 | 通过 | 实际 Google Chrome 覆盖混淆 CSS 外链的 CSP 拒绝；request policy 覆盖外网、`file:`、父目录、未声明路径和 POST；成功诊断证明只请求 2 个 loopback 包内资源且 cookie/DOM/popup/blocked 均为 0 |
+| 稳定 preview/thumbnail 与追加写入 | 通过 | 两次 1280×720/320×180 实际渲染 digest 相同；派生物恒为 2 行；冲突渲染、UPDATE/DELETE 和迟到失败均不能覆盖成功输出 |
+| Job 生命周期、租约、重试、恢复 | 通过 | P05 测试验证按类型 claim、瞬态失败重试、成功/失败输出隔离；P04 回归继续验证 lease 崩溃恢复、重试上限与并发 claim |
+| 空库/已有库迁移与 DB 不变量 | 通过 | P05 测试覆盖空库与已有目标库重复迁移、备份哈希、quick_check/foreign_keys；实际目标库备份、哈希、foreign_key_check 和触发器数量已回读 |
+| unit/shell/type/Web/E2E | 通过（组件级） | Vitest 24 files/712 tests；shell 8/8；shared/API/P05 TypeScript、Web svelte-check/Vite build 通过；P02 Playwright 以本机 Chrome 1/1 通过 |
+| 根构建环境限制 | 已记录 | `pnpm build` 仍被桌面 pnpm 10 的 ignored lifecycle-script approval 阻断；命令产生的 `pnpm-workspace.yaml` 提示占位副作用已精确移除，未批准或改变依赖策略 |
+| 差异与边界 | 通过 | `git diff --check`、固定 `upstream` remote 审计；变更仅为 P05 migration/schema、preview runtime/worker、Job type filter、测试和文档 |
+
+**P05 门禁结论：通过。** P06 现在可按 P05 handoff 创建；P07-P10 仍不得提前实现。
 
 ## P04 完成事实
 

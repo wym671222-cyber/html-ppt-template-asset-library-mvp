@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // P02 target schema only. Legacy CUNY tables intentionally remain outside the
 // active TypeScript program and are not represented by these migrations.
@@ -79,6 +79,19 @@ export const jobs = sqliteTable('jobs', {
   leaseOwner: text('lease_owner'),
   leaseExpiresAt: integer('lease_expires_at', { mode: 'timestamp_ms' }),
 })
+
+export const templatePreviewDerivatives = sqliteTable('template_preview_derivatives', {
+  templateVersionId: text('template_version_id').notNull().references(() => templateVersions.id),
+  kind: text('kind', { enum: ['preview', 'thumbnail'] }).notNull(),
+  sourceDigest: text('source_digest').notNull().references(() => contentObjects.digest),
+  contentDigest: text('content_digest').notNull().references(() => contentObjects.digest),
+  rendererVersion: text('renderer_version').notNull(),
+  securityDiagnostic: text('security_diagnostic', { mode: 'json' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.templateVersionId, table.kind, table.contentDigest] }),
+  uniqueIndex('template_preview_derivatives_identity_unique').on(table.templateVersionId, table.kind, table.sourceDigest, table.rendererVersion),
+])
 
 export const auditEvents = sqliteTable('audit_events', {
   id: text('id').primaryKey(),

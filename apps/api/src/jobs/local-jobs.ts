@@ -27,11 +27,13 @@ export class LocalJobRepository {
     })()
   }
 
-  claim(workerId: string, leaseMs: number): LocalJob | undefined {
+  claim(workerId: string, leaseMs: number, jobTypes?: readonly string[]): LocalJob | undefined {
     if (!workerId || leaseMs < 1) throw new Error('Worker id and positive lease duration are required')
+    if (jobTypes && (jobTypes.length === 0 || jobTypes.some((type) => !type))) throw new Error('Job type filter must contain non-empty values')
     this.recoverExpired()
     return this.database.transaction(() => {
-      const row = this.database.prepare("SELECT id FROM jobs WHERE status = 'pending' ORDER BY created_at, id LIMIT 1").get() as { id: string } | undefined
+      const typeFilter = jobTypes ? ` AND type IN (${jobTypes.map(() => '?').join(', ')})` : ''
+      const row = this.database.prepare(`SELECT id FROM jobs WHERE status = 'pending'${typeFilter} ORDER BY created_at, id LIMIT 1`).get(...(jobTypes ?? [])) as { id: string } | undefined
       if (!row) return undefined
       const now = this.now()
       const result = this.database.prepare("UPDATE jobs SET status = 'running', attempt = attempt + 1, started_at = ?, lease_owner = ?, lease_expires_at = ?, diagnostic = '' WHERE id = ? AND status = 'pending'").run(now, workerId, now + leaseMs, row.id)
