@@ -1,0 +1,16 @@
+{
+  "contractVersion": "html-template/v1",
+  "id": "simulated-quarterly-brief",
+  "version": 1,
+  "title": "Simulated Quarterly Brief",
+  "summary": "A repository-local fixture for validating the v1 HTML template package contract.",
+  "category": "report/quarterly",
+  "tags": ["simulated", "quarterly", "brief"],
+  "entry": "index.html",
+  "files": ["index.html", "styles.css"],
+  "slots": [
+    { "id": "title", "type": "text", "required": true, "maxLength": 120 },
+    { "id": "subtitle", "type": "text", "required": false, "maxLength": 200, "default": "Repository-local simulation" },
+    { "id": "accent-color", "type": "color", "required": false, "default": "#2563eb" }
+  ]
+}

@@ -1,0 +1,5 @@
+:root { color-scheme: light; }
+body { margin: 0; font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+.report { min-height: 100vh; padding: 12rem 10vw; border-top: 1rem solid #2563eb; }
+.eyebrow { letter-spacing: .16em; color: #64748b; }
+.subtitle { color: #475569; font-size: 1.25rem; }

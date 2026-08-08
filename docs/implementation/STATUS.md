@@ -2,13 +2,36 @@
 
 ## 当前状态
 
-- 当前阶段：**P02 已完成并通过门禁**
-- 下一阶段：P03 模拟模板与适配器（只可新建仓库内模拟包；不得读取真实 `02_HTML_PPT_组件与模板`）
+- 当前阶段：**P03 已完成并通过门禁**
+- 下一阶段：P04 资产目录后端（仅在 P03 handoff 与可重复命令证明通过后启动）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P03 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| v1 契约 | 新增 `packages/shared/src/template-package.ts` 与 `docs/implementation/contracts/template-package-v1.md`；manifest、显式 files、包内 entry、text/color slots、绑定规则和拒绝条件已固定 |
+| 模拟包 | 仅新建 `fixtures/p03-simulated-template/`，包含 manifest、index.html、styles.css；未引用、扫描、读取、复制或改写 sibling `02_HTML_PPT_组件与模板` |
+| 适配器 | `apps/api/src/templates/simulated-adapter.ts` 只读取 manifest 声明文件，校验后生成内存中的 asset/version 形状；计算确定性 source SHA-256；`contentObjectDigest` 固定为 null |
+| 阶段边界 | 未写 SQLite、CAS 对象、Job、浏览器预览、UI、Presentation 旅程或导出；未挂载新 API 路由 |
+| 测试 | 新增 `tests/p03-template-adapter.test.ts`，覆盖适配、确定性、无副作用、路径/脚本/外链/未声明 slot 拒绝和纯契约错误；4/4 通过 |
+
+## P03 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| 模拟包与 v1 契约 | 通过 | `node_modules/.bin/vitest run tests/p03-template-adapter.test.ts`：4 tests passed |
+| 全量单测与 shell | 通过 | `node_modules/.bin/vitest run`：22 files/703 tests；`bash tests/run_all.sh`：8/8 suites |
+| 类型/构建回归 | 通过 | shared/API `tsc --noEmit` 通过；Web `svelte-check` 0 errors、9 个既有 warnings；Web build 命令需在 `apps/web` 工作目录执行 |
+| 边界与差异 | 通过 | `git diff --check`；P03 代码/fixture/docs/tests 无 sibling 真实资产路径引用 |
+| 未实现阶段越界能力 | 通过 | 适配器无 DB/CAS/Job/preview/UI/presentation/export 入口；`contentObjectDigest` 未提前登记 |
+| 环境限制 | 已记录 | 根 `pnpm build` 的 pnpm 10 lifecycle-script approval 限制沿用 P02；本阶段已用直接 TypeScript、Vitest、shell 和 Web 检查验证 |
+
+**P03 门禁结论：通过。** P04 可在新 handoff 约束下继续；P05-P08 仍未授权。
 
 ## P02 完成事实
 
