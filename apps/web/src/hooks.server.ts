@@ -1,29 +1,32 @@
 import type { Handle } from '@sveltejs/kit'
 
-const isDev = process.env.NODE_ENV !== 'production'
-const localhost = isDev ? ' http://localhost:*' : ''
+const allowedOrigins = new Set(['http://127.0.0.1:5173', 'http://localhost:5173'])
+
+function isLoopbackHost(host: string): boolean {
+  const hostname = host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.split(':', 1)[0]
+  return hostname === '127.0.0.1' || hostname === 'localhost'
+}
 
 export const handle: Handle = async ({ event, resolve }) => {
-  const response = await resolve(event)
+  if (!isLoopbackHost(event.request.headers.get('host') ?? event.url.host)) {
+    return new Response('Loopback Host required', { status: 421 })
+  }
 
+  const origin = event.request.headers.get('origin')
+  if (origin && !allowedOrigins.has(origin)) {
+    return new Response('Loopback Origin required', { status: 403 })
+  }
+
+  // Only the P02 foundation page is active. Legacy auth/editor/admin routes
+  // remain source history, but are not reachable from the product composition root.
+  if (event.url.pathname !== '/' && !event.url.pathname.startsWith('/_app/')) {
+    return new Response('Not found', { status: 404 })
+  }
+
+  const response = await resolve(event)
   response.headers.set('X-Frame-Options', 'SAMEORIGIN')
   response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  response.headers.set(
-    'Content-Security-Policy',
-    [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://*.qzz.io https://static.cloudflareinsights.com",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
-      `img-src 'self' data: blob: https://*.qzz.io https://*.cuny.edu https://images.pexels.com https://*.pexels.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://server.arcgisonline.com${localhost}`,
-      `connect-src 'self'${localhost} https://*.cuny.edu https://*.qzz.io https://*.cloudflareinsights.com`,
-      "frame-src 'self' blob: https://www.youtube.com https://player.vimeo.com https://www.loom.com",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "frame-ancestors 'self'",
-    ].join('; ')
-  )
-
+  response.headers.set('Referrer-Policy', 'no-referrer')
+  response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
   return response
 }

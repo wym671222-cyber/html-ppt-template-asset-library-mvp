@@ -1,16 +1,7 @@
-<script>
-  import '../app.css';
-  import { editorDarkMode } from '$lib/stores/editor-theme';
+<script lang="ts">
+  import '../app.css'
 
-  let { children } = $props();
-
-  $effect(() => {
-    if ($editorDarkMode) {
-      document.documentElement.setAttribute('data-editor-dark', '')
-    } else {
-      document.documentElement.removeAttribute('data-editor-dark')
-    }
-  })
+  let { children } = $props()
 </script>
 
 {@render children()}

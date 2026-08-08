@@ -82,14 +82,14 @@ check "re-exports artifact-runtime" "grep -q 'artifact-runtime' '$IX'"
 
 echo ""
 echo "── TypeScript Compilation ──"
-if command -v pnpm >/dev/null 2>&1 && [ -d node_modules ]; then
-  if pnpm exec tsc --noEmit -p packages/shared/tsconfig.json 2>&1; then
+if [ -x node_modules/.bin/tsc ]; then
+  if node_modules/.bin/tsc --noEmit -p packages/shared/tsconfig.json 2>&1; then
     pass "shared package compiles clean"
   else
     fail "shared package has type errors"
   fi
 else
-  echo "  (skipping: pnpm or node_modules not available)"
+  echo "  (skipping: local TypeScript binary not available)"
 fi
 
 echo ""

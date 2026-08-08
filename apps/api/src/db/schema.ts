@@ -1,166 +1,88 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
-// ── Auth ──
-
-export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
-  email: text('email').notNull().unique(),
-  name: text('name').notNull(),
-  passwordHash: text('password_hash').notNull(),
-  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
-  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
-  role: text('role', { enum: ['admin', 'editor', 'viewer'] }).notNull().default('editor'),
-  tokenCap: integer('token_cap').notNull().default(1000000), // 1M tokens
-  tokenCapResetDate: integer('token_cap_reset_date', { mode: 'timestamp_ms' }),
+// P02 target schema only. Legacy CUNY tables intentionally remain outside the
+// active TypeScript program and are not represented by these migrations.
+export const contentObjects = sqliteTable('content_objects', {
+  digest: text('digest').primaryKey(),
+  mediaType: text('media_type').notNull(),
+  byteSize: integer('byte_size').notNull(),
+  relativePath: text('relative_path').notNull().unique(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })
 
-export const sessions = sqliteTable('sessions', {
+export const templateAssets = sqliteTable('template_assets', {
   id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: integer('expires_at').notNull(),
-})
-
-export const emailVerifications = sqliteTable('email_verifications', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  token: text('token').notNull().unique(),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-})
-
-export const passwordResets = sqliteTable('password_resets', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  token: text('token').notNull().unique(),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-})
-
-// ── Decks ──
-
-export const decks = sqliteTable('decks', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  themeId: text('theme_id'),
-  metadata: text('metadata', { mode: 'json' }).notNull().default('{}'),
-  createdBy: text('created_by').notNull().references(() => users.id),
+  title: text('title').notNull(),
+  summary: text('summary').notNull().default(''),
+  category: text('category').notNull().default('uncategorized'),
+  status: text('status', { enum: ['active', 'retired'] }).notNull().default('active'),
+  currentVersionId: text('current_version_id'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
 
-export const deckAccess = sqliteTable('deck_access', {
-  deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role', { enum: ['owner', 'editor', 'viewer'] }).notNull(),
+export const templateVersions = sqliteTable('template_versions', {
+  id: text('id').primaryKey(),
+  assetId: text('asset_id').notNull().references(() => templateAssets.id),
+  versionNumber: integer('version_number').notNull(),
+  contractVersion: text('contract_version').notNull(),
+  sourceDigest: text('source_digest').notNull(),
+  contentObjectDigest: text('content_object_digest'),
+  slotSchema: text('slot_schema', { mode: 'json' }).notNull(),
+  status: text('status', { enum: ['draft', 'verified', 'available', 'unavailable'] }).notNull().default('draft'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+}, (table) => [uniqueIndex('template_versions_asset_version_unique').on(table.assetId, table.versionNumber)])
+
+export const tags = sqliteTable('tags', {
+  id: text('id').primaryKey(),
+  label: text('label').notNull().unique(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })
 
-export const slides = sqliteTable('slides', {
+export const templateAssetTags = sqliteTable('template_asset_tags', {
+  assetId: text('asset_id').notNull().references(() => templateAssets.id, { onDelete: 'cascade' }),
+  tagId: text('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (table) => [uniqueIndex('template_asset_tags_unique').on(table.assetId, table.tagId)])
+
+export const presentations = sqliteTable('presentations', {
   id: text('id').primaryKey(),
-  deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
-  layout: text('layout').notNull().default('layout-split'),
-  order: integer('order').notNull(),
-  splitRatio: text('split_ratio').notNull().default('0.45'),
-  notes: text('notes'),
-  title: text('title'),
+  name: text('name').notNull(),
+  status: text('status', { enum: ['draft', 'archived'] }).notNull().default('draft'),
+  revision: integer('revision').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
 
-export const contentBlocks = sqliteTable('content_blocks', {
+export const presentationItems = sqliteTable('presentation_items', {
   id: text('id').primaryKey(),
-  slideId: text('slide_id').notNull().references(() => slides.id, { onDelete: 'cascade' }),
+  presentationId: text('presentation_id').notNull().references(() => presentations.id, { onDelete: 'cascade' }),
+  templateVersionId: text('template_version_id').notNull().references(() => templateVersions.id),
+  position: integer('position').notNull(),
+  slotOverrides: text('slot_overrides', { mode: 'json' }).notNull().default('{}'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+}, (table) => [uniqueIndex('presentation_items_position_unique').on(table.presentationId, table.position)])
+
+export const jobs = sqliteTable('jobs', {
+  id: text('id').primaryKey(),
   type: text('type').notNull(),
-  zone: text('zone').notNull().default('content'),
-  data: text('data', { mode: 'json' }).notNull().default('{}'),
-  order: integer('order').notNull(),
-  stepOrder: integer('step_order'),
-  sourceNodeIds: text('source_node_ids', { mode: 'json' }),
-})
-
-// ── Resources ──
-
-export const templates = sqliteTable('templates', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  layout: text('layout').notNull(),
-  modules: text('modules', { mode: 'json' }).notNull().default('[]'),
-  thumbnail: text('thumbnail'),
-  builtIn: integer('built_in', { mode: 'boolean' }).notNull().default(false),
-  createdBy: text('created_by'),
-})
-
-export const themes = sqliteTable('themes', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  css: text('css').notNull(),
-  fonts: text('fonts', { mode: 'json' }).notNull(),
-  colors: text('colors', { mode: 'json' }).notNull(),
-  builtIn: integer('built_in', { mode: 'boolean' }).notNull().default(false),
-  createdBy: text('created_by'),
-})
-
-export const artifacts = sqliteTable('artifacts', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description').notNull().default(''),
-  type: text('type', { enum: ['chart', 'map', 'diagram', 'visualization'] }).notNull(),
-  source: text('source').notNull(),
-  config: text('config', { mode: 'json' }).notNull().default('{}'),
-  builtIn: integer('built_in', { mode: 'boolean' }).notNull().default(false),
-  createdBy: text('created_by'),
-})
-
-export const uploadedFiles = sqliteTable('uploaded_files', {
-  id: text('id').primaryKey(),
-  deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
-  filename: text('filename').notNull(),
-  mimeType: text('mime_type').notNull(),
-  path: text('path').notNull(),
-  uploadedBy: text('uploaded_by').notNull().references(() => users.id),
+  status: text('status', { enum: ['queued', 'running', 'succeeded', 'failed'] }).notNull().default('queued'),
+  inputSnapshot: text('input_snapshot', { mode: 'json' }).notNull(),
+  inputRevision: integer('input_revision').notNull(),
+  attempt: integer('attempt').notNull().default(0),
+  diagnostic: text('diagnostic').notNull().default(''),
+  outputDigest: text('output_digest').references(() => contentObjects.digest),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  startedAt: integer('started_at', { mode: 'timestamp_ms' }),
+  finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
 })
 
-// ── Chat History ──
-
-export const chatMessages = sqliteTable('chat_messages', {
+export const auditEvents = sqliteTable('audit_events', {
   id: text('id').primaryKey(),
-  deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
-  role: text('role', { enum: ['user', 'assistant'] }).notNull(),
-  content: text('content').notNull(),
-  mutations: text('mutations', { mode: 'json' }),
-  provider: text('provider').notNull().default(''),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-})
-
-// ── Deck Locks (for sharing/locking) ──
-
-export const deckLocks = sqliteTable('deck_locks', {
-  deckId: text('deck_id').primaryKey().references(() => decks.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => users.id),
-  userName: text('user_name').notNull(),
-  lockedAt: integer('locked_at', { mode: 'timestamp_ms' }).notNull(),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-})
-
-// ── Deck Presence (collaborative awareness) ──
-
-export const deckPresence = sqliteTable('deck_presence', {
-  deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  userName: text('user_name').notNull(),
-  activeSlideId: text('active_slide_id'),
-  lastSeen: integer('last_seen', { mode: 'timestamp_ms' }).notNull(),
-})
-
-// ── Token Usage ──
-
-export const tokenUsage = sqliteTable('token_usage', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  deckId: text('deck_id').references(() => decks.id, { onDelete: 'set null' }),
-  provider: text('provider').notNull(),
-  model: text('model').notNull(),
-  inputTokens: integer('input_tokens').notNull().default(0),
-  outputTokens: integer('output_tokens').notNull().default(0),
+  action: text('action').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  result: text('result', { enum: ['success', 'failure'] }).notNull(),
+  diagnostic: text('diagnostic').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })

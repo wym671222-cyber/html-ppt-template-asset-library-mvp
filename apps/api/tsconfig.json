@@ -9,5 +9,14 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": [
+    "src/index.ts",
+    "src/app.ts",
+    "src/owner.ts",
+    "src/env.ts",
+    "src/db/index.ts",
+    "src/db/migrate.ts",
+    "src/db/paths.ts",
+    "src/db/schema.ts"
+  ]
 }

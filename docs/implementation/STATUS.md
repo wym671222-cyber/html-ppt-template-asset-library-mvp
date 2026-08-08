@@ -2,12 +2,47 @@
 
 ## 当前状态
 
-- 当前阶段：**P01 已完成并通过门禁**
-- 下一阶段：P02 单用户基础与 SQLite/Drizzle 数据模型（仅可按下列只读入口启动）
+- 当前阶段：**P02 已完成并通过门禁**
+- 下一阶段：P03 模拟模板与适配器（只可新建仓库内模拟包；不得读取真实 `02_HTML_PPT_组件与模板`）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
+- P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P02 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| 组合根 | API 只挂载 `/`、`/api/health`、`/api/owner`；旧 auth/admin/sharing/deck lock/presence/provider/在线路由均返回 404，未被导入活动组合根 |
+| 单 Owner | `OwnerContext` 固定为 `local-owner`，实现和测试均不读取 cookie、header 或 User 表；目标 schema 没有用户、组织、角色、审批或 RBAC 表 |
+| Loopback | API `serve` 和 Vite dev/preview 显式绑定 `127.0.0.1`；API/Web 运行时均验证本机 200、LAN 地址连接失败，API 伪造 Host/外部 Origin 分别为 421/403 |
+| Web 活动入口 | 根页仅显示 P02 基础状态；hook 拒绝非 loopback Host、外部 Origin 与所有非 `/`、`/_app/` 路径，旧 `/login` 返回 404；旧页面文件只保留为未达的上游历史 |
+| SQLite/迁移 | 固定 `apps/api/data/asset-library.db`，不接受 `DATABASE_URL` 替代路径；提交 `0000_p02_foundation.sql` 和 Drizzle journal；迁移前 quick_check、目标表清单、备份和 SHA-256 均完成 |
+| 数据安全 | 空库、已有目标库重复迁移与未知 `users` 表的“备份后停止”均有单元测试；实际目标库重复迁移已产生备份及 SHA-256，未执行 drop/reset/旧数据转换 |
+| 目标不变量 | SQL 外键、唯一索引与触发器覆盖版本号唯一、current version 归属/已验证、已验证版本不可改删、内容/审计追加写入、revision 单调、固定版本、连续位置、slot schema、成功 Job 输出不可由失败覆盖 |
+| 禁区 | 未读取/修改 sibling `02_HTML_PPT_组件与模板`，未改 remote、push、发布、部署、域名、nginx 或云环境；未实现 P03-P08 行为 |
+
+## P02 修改路径
+
+- `apps/api/{drizzle.config.ts,package.json,tsconfig.json,drizzle/**,src/{app.ts,owner.ts,index.ts,env.ts,db/{index.ts,migrate.ts,paths.ts,schema.ts}}}`
+- `apps/web/{vite.config.ts,src/hooks.server.ts,src/routes/+layout.svelte,src/routes/(app)/{+layout.svelte,+page.svelte}}`
+- `package.json`、`tests/{p02-foundation.test.ts,test_shared_types.sh,test_validation.sh}`
+- `e2e/p02-foundation.spec.ts`、`playwright.p02.config.ts`
+- 本文件与 `docs/implementation/handoffs/P02.md`
+
+## P02 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| loopback 正/负向 | 通过 | 独立 3017/5174 进程分别仅监听 `127.0.0.1`；loopback 200，`192.168.124.29` 连接失败；API Host 421、Origin 403，Web 非 loopback Host/Origin 403 |
+| 固定 Owner 与旧能力不可达 | 通过 | P02 单测、API 404 路由断言、Web `/login` 404、活动端点静态清单 |
+| 编号迁移与 DB 安全 | 通过 | `tests/p02-foundation.test.ts` 空库/重复/未知库覆盖；实际 `tsx src/db/migrate.ts` 对现有目标库预检、备份、SHA-256、quick_check、foreign_keys 通过 |
+| 目标 schema | 通过 | P02 单测验证无 User/Organization/RoleBinding/approval/RBAC 表，以及关键唯一性和不可变触发器 |
+| unit/shell/build/Web/E2E | 通过（组件级） | `vitest run` 21 files/699 tests；`bash tests/run_all.sh` 8/8；API `tsc`、Web Vite build、svelte-check（0 errors）和 P02 Playwright（1 passed）通过 |
+| 环境限制 | 已记录 | 根 `pnpm build`/Turbo 由桌面运行时的 pnpm 10 lifecycle-script approval 阻断，非代码或类型失败；直接执行 API/Web 构建均通过。P02 Playwright 缺少其锁定浏览器，已以本机 Google Chrome 的显式 executablePath 完成同一 Chromium 用例。 |
+
+**P02 门禁结论：通过。** P03 现在获授权创建，但 P03 仅可实施模拟模板 v1 契约/适配器，不得提前实现 CAS、Job、预览、UI、汇报或导出。
 
 ## P01 完成事实
 
@@ -84,10 +119,8 @@ P02 仅实现单用户基础和数据模型：
 
 ## 遗留风险
 
-1. 当前 API 可能因未指定 hostname 而监听非 loopback；P02 未通过负向测试前不得声称 localhost-only。
-2. auth/RBAC 在多数路由内联，切换 composition root 后仍需 `rg` 和运行时路由清单证明旧能力不可达。
-3. 当前 schema、CUNY seed、Deck/Slide editor 与目标域差异大；最小路径是新目标 schema，不允许机械重命名或无证据转换。
-4. 当前预览/导出存在公网字体、图片、地图、视频和 artifact URL；P05 前必须保持隔离状态。
-5. 仓库有 Bedrock/SES/SMTP/AI/搜索依赖，但没有 S3；清理依赖应在活动引用清零后分阶段做，不能在 P02 顺手大改。
-6. localhost:3001 在 P00 时被未知进程占用；P02 启动验证须使用明确空闲端口或只读确认占用者，不得终止未知进程。
-7. 根 `pnpm check` 依赖本机未安装的 bun；仍须使用仓库声明的 pnpm 9.15.0 和可执行的 build/test/Web check 形成证据，除非 P02 明确、最小地修正工具链。
+1. P02 已以独立 3017/5174 端口证明 loopback-only；3001/5173 仍被未知既有进程占用，后续验证必须继续选取空闲端口，绝不终止未知进程。
+2. auth/RBAC/协作旧源码仍保留并使 Svelte build 产生既有 warnings，但其 API/网页路由已不在活动组合根；后续阶段不得重新挂载它们。
+3. 当前 preview/export legacy 路径仍允许公网资源，但 P02 未挂载；P05/P08 前必须继续隔离，不能把它们当作安全能力。
+4. 仓库仍声明 Bedrock/SES/SMTP/AI/搜索依赖；它们不在活动引用图。不要在 P03 顺手清理或重新启用这些依赖。
+5. 根 `pnpm build` 在桌面运行时的 pnpm 10 lifecycle-script approval 处阻断；直接 API/Web build、unit、shell 和 P02 E2E 已通过。应在工具链 owner 授权后再处理 pnpm 9/10 一致性，而不是在产品阶段改变依赖策略。

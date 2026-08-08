@@ -5,23 +5,9 @@ export default defineConfig({
 	plugins: [sveltekit()],
 	envPrefix: ['VITE_', 'PUBLIC_'],
 	server: {
-		proxy: {
-			'/api': {
-				target: 'http://localhost:3001',
-				changeOrigin: true,
-				configure: (proxy) => {
-					// Ensure Origin header is present so Hono CSRF middleware accepts proxied requests.
-					// Browsers may omit Origin on same-origin fetches, but the API expects it.
-					proxy.on('proxyReq', (proxyReq) => {
-						if (!proxyReq.getHeader('origin')) {
-							proxyReq.setHeader('origin', 'http://localhost:5173')
-						}
-					})
-				},
-			},
-		},
+		host: '127.0.0.1',
 	},
 	preview: {
-		allowedHosts: ['tools.cuny.qzz.io'],
+		host: '127.0.0.1',
 	},
 });
