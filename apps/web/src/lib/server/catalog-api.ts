@@ -35,6 +35,20 @@ export async function forwardPresentationJson(request: Request, target: URL): Pr
   })
 }
 
+export async function forwardRecoveryJson(request: Request, target: URL): Promise<Response> {
+  const method = request.method
+  const headers = new Headers()
+  if (method !== 'GET') headers.set('Content-Type', 'application/json')
+  const body = method === 'GET' ? undefined : await request.text()
+  const response = await fetch(target, { method, headers, body, redirect: 'error', credentials: 'omit' })
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.toLowerCase().startsWith('application/json')) return Response.json({ error: 'Recovery API returned an invalid media type' }, { status: 502 })
+  return new Response(await response.arrayBuffer(), {
+    status: response.status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+  })
+}
+
 export async function forwardPresentationArtifact(target: URL, kind: 'html' | 'zip'): Promise<Response> {
   const response = await fetch(target, { method: 'GET', redirect: 'error', credentials: 'omit' })
   const contentType = (response.headers.get('content-type') ?? '').toLowerCase()

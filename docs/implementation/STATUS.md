@@ -2,13 +2,41 @@
 
 ## 当前状态
 
-- 当前阶段：**P08 已完成并通过门禁**
-- 下一阶段：P09 集成加固与恢复演练（仅在本文件、`docs/implementation/handoffs/P08.md` 和 P08 原子提交证明通过后创建）
+- 当前阶段：**P09 已完成并通过门禁**
+- 下一阶段：P10 MVP 验收与交付（仅在本文件、`docs/implementation/handoffs/P09.md` 和 P09 原子提交证明通过后去重创建；P10 通过后停止，不创建 P11）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P09 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| 可审计备份清单 | 新增 `LocalRecoveryService` 与 `asset-library-local-backup/v1` canonical manifest。清单固定 SQLite 一致性快照、当前/快照数据库 SHA-256、5 条 migration ledger 及 SQL SHA-256，并从索引穷举 P04 `content_objects`、P05 preview/thumbnail、P07 Presentation/revision/item 固定 TemplateVersion、P08 manifest/HTML/ZIP；每个受控对象都有明确相对路径、字节、媒体类型、角色与 SHA-256。对象、记录、备份数量均有硬上限。 |
+| 非破坏隔离恢复 | 备份先写隐藏临时目录并完整自校验，再原子 rename；恢复先完整验证备份，只能写全新 `restore-<backup-id>` 隔离目录，数据库、对象与 `restore-report.json` 全部完成重验后才原子 rename。目标存在、任何中断或校验失败均清理临时目录，绝不覆盖原库、原 CAS、原派生物、原 export 或既有恢复。 |
+| SQLite/CAS/P05-P08 重验 | 源、备份和恢复库均验证目标 table allowlist、`quick_check=ok`、`foreign_keys=1`、`foreign_key_check=0`、migration ledger；内容对象从 DB 索引反推并重验 CAS 路径/字节/SHA，P05 重验同 renderer 完整 pair、PNG 签名与 1280×720/320×180、隔离诊断，P07 重验连续 position 和固定版本内容摘要，P08 使用原 repository 重验 canonical manifest、HTML、ZIP、CRC/allowlist 与全文件哈希。 |
+| 路径与故障边界 | API 不接受文件路径，只接受有界 SHA-256/受控 backup id；相对路径必须匹配 digest 派生 allowlist，拒绝绝对路径、父目录、反斜线、协议、符号链接、未声明文件。DB/CAS/manifest/ZIP 缺失或篡改、陈旧 source/manifest、备份/恢复中断、重复恢复、只读/权限失败均被测试拒绝；诊断限 300 字，清理换行、路径和凭据形态。 |
+| API/Web | P02 活动 composition root 只新增 `/api/recovery`、备份、manifest 和恢复端点，沿用固定 Owner、loopback Host/Origin、16KB JSON 与无 query 限制；旧 `/api/auth`、`/api/admin`、`/api/export`、`/api/preview`、`/api/search` 等保持 404。Svelte 只渲染受控 JSON/链接，支持加载、失败、Manifest、备份、隔离恢复、成功焦点与 680px 响应式；无模板 HTML 注入、iframe/srcdoc/blob。 |
+| fixture-only 恢复旅程 | P09 unit 在隔离临时 SQLite/CAS 中只登记仓库内 P03 fixture，经真实 P04/P05/P06/P07/P08 路径生成 PNG、固定版本 Presentation 与离线 export，再备份/恢复并重放 catalog、PNG、Presentation、manifest/HTML/ZIP；Playwright 覆盖键盘焦点、响应式、重复恢复与不安全/旧路由。P08 离线回归继续证明 0 HTTP(S)、0 宿主 cookie、0 active element。 |
+| 实际目标只读预检与演练 | 实际 DB 先以 `mode=ro&immutable=1`、`query_only=ON` 预检：SHA-256 `7c4d335c80cbf99327f2dbde8790222ddf4c35f82358a7824702ab56f4ee7579`、5 migrations、完整性/FK 通过、7 个业务计数全 0，无未知数据。P09 无 schema/migration 变化。实际备份 `backup-1786210962800-392080b2-b4ae-4768-bbf2-5784848fbc3b` manifest SHA-256 `a0062c968109f66a64a14e291fc4aaf0399cece6a88c23419eb64ec203d5e7b9`；备份/恢复 DB 均为 `a753c907d4b1976c73e1ab6b29b453ea831b6c650854b630c217b1d6c90acf5c`，state SHA-256 `3ab83a561486b4f63c665c9af977bd605bdb3e3ba948d9d86285894502d4b573`。原 DB/WAL/SHM 前后哈希和业务状态完全不变。 |
+| 验证 | Vitest 28 files/737 tests；shell 8/8；shared/API TypeScript；Web `svelte-check` 0 errors（9 个上游 warnings）与 Vite build；真实 Google Chrome P02 1/1、P06-P09 10/10。根 `pnpm build` 仍受 pnpm ignored lifecycle approval 阻断，自动占位已精确移除且审批策略未变。 |
+| 禁区 | 没有读取、扫描、导入、复制、移动或改写 sibling `02_HTML_PPT_组件与模板`；没有实施 P10 最终验收、P11、旧在线能力、身份/RBAC/approval、云服务、remote/push/发布/部署。 |
+
+## P09 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| 清单固定 DB/ledger/CAS/P05/P07/P08 与全部 SHA-256 | 通过 | `tests/p09-local-recovery.test.ts` 8/8；canonical manifest 与恢复后 DB 索引逐字段比对 |
+| 全新隔离恢复且原状态不变 | 通过 | fixture-only 全数据恢复、实际空业务库恢复演练；临时目录校验后原子 rename，源 DB/WAL/SHM 哈希前后相同 |
+| 缺失/篡改/路径/中断/重复/陈旧/权限失败安全拒绝 | 通过 | P09 unit 故障注入覆盖 DB/CAS/manifest/ZIP、traversal/absolute/symlink/undeclared、backup/restore interruption、repeat/stale/read-only；无半目录/覆盖/秘密 |
+| 恢复环境核心旅程、离线与旧能力 404 | 通过 | fixture-only P06/P07/P08 重放；P09 E2E 2/2；P08 offline 回归 0 HTTP(S)/cookie/active element；P02/P06-P09 API/E2E 旧路由 404 |
+| Owner/loopback、参数边界、Web 不执行与 P04-P08 回归 | 通过 | 活动 composition root/Host/Origin/JSON/query 测试；全量 Vitest/shell 与 P02/P06-P09 Chrome 回归 |
+| SQLite/migration/实际库 | 通过 | immutable/query-only 前后回读，5 条 ledger/SQL hash、quick/FK/FK-check、空库/已有库重复迁移均通过；P09 无 migration |
+| 全量验证与范围 | 通过（根构建限制已记录） | 737 Vitest、8/8 shell、shared/API/Web checks、P02 1/1 + P06-P09 10/10 Chrome、`git diff --check` |
+
+**P09 门禁结论：通过。** 只有 P09 原子提交、干净工作树和本状态/交接文件共同成立后才可去重创建 P10；P10 只做 MVP 最终验收与本地交付，通过后停止且不得创建 P11。
 
 ## P08 完成事实
 

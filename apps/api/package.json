@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "recovery:drill": "tsx src/recovery/run-drill.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

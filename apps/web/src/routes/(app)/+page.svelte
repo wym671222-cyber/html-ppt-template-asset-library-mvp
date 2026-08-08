@@ -4,6 +4,7 @@
   import FilterRail from '$lib/components/library/FilterRail.svelte'
   import { loadCatalog, type CatalogResponse } from '$lib/asset-library'
   import { addTemplate, copyItem, createPresentation, createPresentationExport, deleteItem, loadPresentationExports, loadPresentations, moveItem, renamePresentation, reviseOverrides, safeExportUrl, type Presentation, type PresentationExport } from '$lib/presentations'
+  import { createLocalBackup, loadRecoveryOverview, runIsolatedRestore, safeBackupManifestUrl, type RecoveryBackup, type RecoveryOverview } from '$lib/recovery'
 
   let search = $state('')
   let category = $state('')
@@ -25,6 +26,11 @@
   let exportError = $state('')
   let exportNotice = $state('')
   let exportStatus: HTMLElement | undefined = $state()
+  let recovery = $state<RecoveryOverview | null>(null)
+  let recoveryLoading = $state(true)
+  let recoveryError = $state('')
+  let recoveryNotice = $state('')
+  let recoveryStatus: HTMLElement | undefined = $state()
 
   const requestKey = $derived(JSON.stringify({ search, category, tags: [...selectedTags].sort(), retry }))
   const selectedItem = $derived(catalog?.items.find((item) => item.id === selectedId) ?? null)
@@ -89,6 +95,16 @@
     return () => { active = false }
   })
 
+  $effect(() => {
+    let active = true
+    void loadRecoveryOverview().then((next) => {
+      if (active) recovery = next
+    }).catch((cause) => {
+      if (active) recoveryError = cause instanceof Error ? cause.message : '恢复状态加载失败'
+    }).finally(() => { if (active) recoveryLoading = false })
+    return () => { active = false }
+  })
+
   function toggleTag(tag: string): void {
     selectedTags = selectedTags.includes(tag) ? selectedTags.filter((value) => value !== tag) : [...selectedTags, tag]
   }
@@ -149,6 +165,45 @@
         } catch { /* Preserve the bounded export error when recovery is unavailable. */ }
       }
     } finally { exportLoading = false }
+  }
+
+  async function refreshRecovery(): Promise<void> {
+    recoveryLoading = true
+    recoveryError = ''
+    try { recovery = await loadRecoveryOverview() }
+    catch (cause) { recoveryError = cause instanceof Error ? cause.message : '恢复状态加载失败' }
+    finally { recoveryLoading = false }
+  }
+
+  async function backupCurrentState(): Promise<void> {
+    if (!recovery || recoveryLoading) return
+    recoveryLoading = true
+    recoveryError = ''
+    recoveryNotice = ''
+    try {
+      const backup = await createLocalBackup(recovery.stateSha256)
+      recovery = { ...recovery, backups: [backup, ...recovery.backups.filter((item) => item.id !== backup.id)] }
+      recoveryNotice = `备份清单已生成并回读：${backup.objectCount} 个受控对象。`
+      requestAnimationFrame(() => recoveryStatus?.focus())
+    } catch (cause) {
+      recoveryError = cause instanceof Error ? cause.message : '本机备份失败'
+      if (/stale|陈旧|重新加载/i.test(recoveryError)) await refreshRecovery()
+    } finally { recoveryLoading = false }
+  }
+
+  async function restoreBackup(backup: RecoveryBackup): Promise<void> {
+    if (recoveryLoading || backup.restored) return
+    recoveryLoading = true
+    recoveryError = ''
+    recoveryNotice = ''
+    try {
+      const result = await runIsolatedRestore(backup)
+      if (recovery) recovery = { ...recovery, backups: recovery.backups.map((item) => item.id === backup.id ? { ...item, restored: true } : item) }
+      recoveryNotice = `隔离恢复演练已通过：${result.objectCount} 个对象、${result.presentationCount} 个汇报。`
+      requestAnimationFrame(() => recoveryStatus?.focus())
+    } catch (cause) {
+      recoveryError = cause instanceof Error ? cause.message : '隔离恢复演练失败'
+    } finally { recoveryLoading = false }
   }
 </script>
 
@@ -265,6 +320,32 @@
             {#if exportNotice}<p class="export-notice" role="status" tabindex="-1" bind:this={exportStatus}>{exportNotice}</p>{/if}
           </section>
         {/if}
+        <section class="recovery-panel" aria-labelledby="recovery-heading" aria-busy={recoveryLoading}>
+          <header>
+            <div><h3 id="recovery-heading">备份与恢复演练</h3><p>显式 SHA-256 清单 · 全新隔离目录 · 不覆盖原状态</p></div>
+            <button type="button" disabled={!recovery || recoveryLoading} onclick={() => { void backupCurrentState() }}>{recoveryLoading ? '正在校验…' : '生成备份清单'}</button>
+          </header>
+          {#if recoveryLoading && !recovery}
+            <p role="status">正在只读检查 SQLite 与 CAS…</p>
+          {:else if recoveryError}
+            <div class="recovery-error" role="alert"><p>{recoveryError}</p><button type="button" onclick={() => { void refreshRecovery() }}>重新检查</button></div>
+          {:else if recovery}
+            <p class="recovery-summary">5 条 migration · {recovery.objectCount} 个对象 · {recovery.derivativeCount} 个派生物 · 状态 <code>{recovery.stateSha256.slice(0, 12)}…</code></p>
+            {#if recovery.backups.length === 0}
+              <p class="recovery-empty">暂无备份清单。恢复只会写入新的本机隔离目录。</p>
+            {:else}
+              <ul class="recovery-list">
+                {#each recovery.backups as backup}
+                  <li>
+                    <span>{backup.objectCount} 对象 · {backup.presentationCount} 汇报 · {backup.exportCount} 导出</span>
+                    <div><a href={safeBackupManifestUrl(backup.manifestUrl)}>Manifest</a><button type="button" disabled={backup.restored || recoveryLoading} onclick={() => { void restoreBackup(backup) }}>{backup.restored ? '恢复已验证' : '隔离恢复演练'}</button></div>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          {/if}
+          {#if recoveryNotice}<p class="recovery-notice" role="status" tabindex="-1" bind:this={recoveryStatus}>{recoveryNotice}</p>{/if}
+        </section>
         {#if presentationNotice}<p class="presentation-notice" role="status">{presentationNotice}</p>{/if}
       </section>
     </section>
@@ -335,6 +416,18 @@
   .export-list a:focus-visible, .export-notice:focus-visible { outline: 3px solid rgba(23, 104, 229, .24); outline-offset: 2px; }
   .export-error { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: #a33b3b; font-size: 12px; }
   .export-notice { color: #1768e5; }
+  .recovery-panel { margin-top: 18px; padding: 14px; border: 1px solid #d7e1ee; border-radius: 8px; background: #fffdf7; }
+  .recovery-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .recovery-panel h3 { font-size: 14px; }
+  .recovery-panel header p, .recovery-empty, .recovery-summary, .recovery-notice { margin-top: 4px; color: #637289; font-size: 12px; }
+  .recovery-summary code { color: #0b356f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .recovery-list { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+  .recovery-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; border: 1px solid #e2d8b8; border-radius: 6px; background: #fff; color: #45556d; font-size: 12px; }
+  .recovery-list li div { display: flex; align-items: center; gap: 8px; }
+  .recovery-list a { color: #155fcf; font-weight: 700; }
+  .recovery-list a:focus-visible, .recovery-notice:focus-visible { outline: 3px solid rgba(23, 104, 229, .24); outline-offset: 2px; }
+  .recovery-error { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: #a33b3b; font-size: 12px; }
+  .recovery-notice { color: #1768e5; }
   @keyframes pulse { 50% { opacity: .5; } }
   @media (max-width: 1320px) {
     .workspace { grid-template-columns: 250px minmax(360px, 1fr) minmax(330px, 400px); }
@@ -351,7 +444,7 @@
     .app-header h1 { font-size: 21px; }
     .app-header p { font-size: 12px; }
     .results-panel { padding: 20px 16px; }
-    .export-panel > header, .export-list li { align-items: flex-start; flex-direction: column; }
+    .export-panel > header, .export-list li, .recovery-panel > header, .recovery-list li { align-items: flex-start; flex-direction: column; }
   }
   @media (prefers-reduced-motion: reduce) { .skeleton div, .skeleton i { animation: none; } }
 </style>

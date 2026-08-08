@@ -5,6 +5,8 @@ import { LocalContentStore } from './assets/content-store.js'
 import { PresentationRepository } from './presentations/presentation-repository.js'
 import { PresentationExportRepository } from './presentation-exports/presentation-export-repository.js'
 import { migrateDatabase } from './db/migrate.js'
+import { LOCAL_CONTENT_STORE_PATH, LOCAL_DATABASE_PATH, LOCAL_RECOVERY_BACKUP_PATH, LOCAL_RECOVERY_DRILL_PATH } from './db/paths.js'
+import { LocalRecoveryService } from './recovery/local-recovery.js'
 import { env } from './env.js'
 
 migrateDatabase()
@@ -14,6 +16,12 @@ const app = createApp({
   catalog: new AssetLibraryCatalog(sqlite, contentStore),
   presentations: new PresentationRepository(sqlite),
   exports: new PresentationExportRepository(sqlite, contentStore),
+  recovery: new LocalRecoveryService({
+    databasePath: LOCAL_DATABASE_PATH,
+    contentRoot: LOCAL_CONTENT_STORE_PATH,
+    backupRoot: LOCAL_RECOVERY_BACKUP_PATH,
+    restoreRoot: LOCAL_RECOVERY_DRILL_PATH,
+  }),
 })
 
 serve({

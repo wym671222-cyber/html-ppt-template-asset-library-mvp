@@ -12,6 +12,7 @@ import { LocalJobRepository } from '../apps/api/src/jobs/local-jobs.js'
 import { TEMPLATE_PREVIEW_JOB_TYPE, TemplatePreviewJobWorker } from '../apps/api/src/previews/preview-jobs.js'
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
 import { PresentationExportRepository } from '../apps/api/src/presentation-exports/presentation-export-repository.js'
+import { LocalRecoveryService } from '../apps/api/src/recovery/local-recovery.js'
 import { SecurePreviewRenderer } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
 
@@ -55,6 +56,12 @@ async function main(): Promise<void> {
     catalog: new AssetLibraryCatalog(database as never, store),
     presentations: new PresentationRepository(database as never),
     exports: new PresentationExportRepository(database as never, store),
+    recovery: new LocalRecoveryService({
+      databasePath,
+      contentRoot: store.root,
+      backupRoot: join(directory, 'recovery-backups'),
+      restoreRoot: join(directory, 'recovery-drills'),
+    }),
   })
   serve({ fetch: app.fetch, hostname: '127.0.0.1', port }, () => {
     console.log(`P06 fixture API ready at http://127.0.0.1:${port}`)

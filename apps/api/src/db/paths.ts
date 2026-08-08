@@ -7,6 +7,8 @@ export const LOCAL_DATABASE_PATH = resolve(dbDirectory, '../../data/asset-librar
 export const LOCAL_DATABASE_URL = `file:${LOCAL_DATABASE_PATH}`
 export const MIGRATIONS_DIRECTORY = resolve(dbDirectory, '../../drizzle')
 export const LOCAL_CONTENT_STORE_PATH = resolve(dbDirectory, '../../data/objects')
+export const LOCAL_RECOVERY_BACKUP_PATH = resolve(dbDirectory, '../../data/recovery-backups')
+export const LOCAL_RECOVERY_DRILL_PATH = resolve(dbDirectory, '../../data/recovery-drills')
 
 export function requireFixedDatabaseUrl(url: string | undefined): string {
   if (url !== undefined && url !== LOCAL_DATABASE_URL) {

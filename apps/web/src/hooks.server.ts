@@ -24,13 +24,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   const catalogRoute = event.url.pathname === '/api/catalog' || event.url.pathname.startsWith('/api/catalog/assets/')
   const presentationRoute = event.url.pathname === '/api/presentations' || event.url.pathname.startsWith('/api/presentations/')
-  // Only the P08 asset-library root and its exact catalog/presentation/export proxies, and
+  const recoveryRoute = event.url.pathname === '/api/recovery' || event.url.pathname.startsWith('/api/recovery/')
+  // Only the P09 asset-library root and its exact catalog/presentation/export/recovery proxies, and
   // generated app assets are active. Legacy routes remain unreachable history.
-  if (event.url.pathname !== '/' && !event.url.pathname.startsWith('/_app/') && !catalogRoute && !presentationRoute) {
+  if (event.url.pathname !== '/' && !event.url.pathname.startsWith('/_app/') && !catalogRoute && !presentationRoute && !recoveryRoute) {
     return new Response('Not found', { status: 404 })
   }
   if (catalogRoute && event.request.method !== 'GET') return new Response('Method not allowed', { status: 405 })
   if (presentationRoute && !['GET', 'POST', 'PATCH', 'DELETE'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
+  if (recoveryRoute && !['GET', 'POST'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
 
   const response = await resolve(event)
   response.headers.set('X-Frame-Options', 'SAMEORIGIN')

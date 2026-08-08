@@ -7,7 +7,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { LOCAL_DATABASE_PATH, MIGRATIONS_DIRECTORY } from './paths.js'
 
-const targetTables = new Set([
+export const TARGET_DATABASE_TABLES = [
   '__drizzle_migrations',
   'content_objects',
   'template_assets',
@@ -20,7 +20,9 @@ const targetTables = new Set([
   'jobs',
   'template_preview_derivatives',
   'audit_events',
-])
+] as const
+
+const targetTables = new Set<string>(TARGET_DATABASE_TABLES)
 
 export type DatabasePreflight = {
   existed: boolean

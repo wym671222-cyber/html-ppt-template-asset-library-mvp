@@ -4,7 +4,7 @@ const chromiumExecutablePath = process.env.P06_CHROMIUM_PATH ?? '/Applications/G
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /p0[678]-(asset-library|presentations|offline-export)\.spec\.ts/,
+  testMatch: /p0[6789]-(asset-library|presentations|offline-export|local-recovery)\.spec\.ts/,
   timeout: 45_000,
   fullyParallel: false,
   workers: 1,
