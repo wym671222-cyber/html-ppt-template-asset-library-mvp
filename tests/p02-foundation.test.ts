@@ -67,12 +67,13 @@ describe('P02 SQL migrations', () => {
       const names = tables.map((table) => table.name)
       expect(names).toEqual(expect.arrayContaining(['template_assets', 'template_versions', 'presentation_items', 'content_objects', 'jobs', 'audit_events']))
       expect(names.join(',')).not.toMatch(/user|organization|role|approval|rbac/i)
+      expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 4 })
 
       const now = Date.now()
       const digest = 'a'.repeat(64)
       sqlite.prepare('INSERT INTO content_objects (digest, media_type, byte_size, relative_path, created_at) VALUES (?, ?, ?, ?, ?)').run(digest, 'text/html', 1, 'objects/a.html', now)
       sqlite.prepare('INSERT INTO template_assets (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('asset-1', 'Asset', now, now)
-      sqlite.prepare("INSERT INTO template_versions (id, asset_id, version_number, contract_version, source_digest, content_object_digest, slot_schema, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)").run('version-1', 'asset-1', 1, 'v1', digest, digest, '{"slots":["title"]}', now)
+      sqlite.prepare("INSERT INTO template_versions (id, asset_id, version_number, contract_version, source_digest, content_object_digest, slot_schema, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?)").run('version-1', 'asset-1', 1, 'v1', digest, digest, '{"slots":[{"id":"title","type":"text"}]}', now)
       expect(() => sqlite.prepare("UPDATE template_assets SET current_version_id = 'version-1' WHERE id = 'asset-1'").run()).toThrow(/current version must be verified/)
       sqlite.prepare("UPDATE template_versions SET status = 'verified' WHERE id = 'version-1'").run()
       sqlite.prepare("UPDATE template_assets SET current_version_id = 'version-1' WHERE id = 'asset-1'").run()
@@ -81,7 +82,7 @@ describe('P02 SQL migrations', () => {
 
       sqlite.prepare('INSERT INTO presentations (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').run('presentation-1', 'Presentation', now, now)
       sqlite.prepare("INSERT INTO presentation_items (id, presentation_id, template_version_id, position, slot_overrides, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run('item-1', 'presentation-1', 'version-1', 0, '{"title":"Allowed"}', now, now)
-      expect(() => sqlite.prepare("INSERT INTO presentation_items (id, presentation_id, template_version_id, position, slot_overrides, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run('item-2', 'presentation-1', 'version-1', 2, '{}', now, now)).toThrow(/contiguous/)
+      expect(() => sqlite.prepare("INSERT INTO presentation_items (id, presentation_id, template_version_id, position, slot_overrides, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run('item-2', 'presentation-1', 'version-1', 0, '{}', now, now)).toThrow(/UNIQUE constraint failed/)
       expect(() => sqlite.prepare("UPDATE presentation_items SET template_version_id = 'other' WHERE id = 'item-1'").run()).toThrow(/fixed/)
       expect(() => sqlite.prepare("UPDATE presentation_items SET slot_overrides = '{\"secret\":\"blocked\"}' WHERE id = 'item-1'").run()).toThrow(/undeclared slot/)
 

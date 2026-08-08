@@ -20,3 +20,17 @@ export async function forwardCatalogJson(target: URL): Promise<Response> {
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
   })
 }
+
+export async function forwardPresentationJson(request: Request, target: URL): Promise<Response> {
+  const method = request.method
+  const headers = new Headers()
+  if (method !== 'GET') headers.set('Content-Type', 'application/json')
+  const body = method === 'GET' ? undefined : await request.text()
+  const response = await fetch(target, { method, headers, body, redirect: 'error' })
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.toLowerCase().startsWith('application/json')) return Response.json({ error: 'Presentation API returned an invalid media type' }, { status: 502 })
+  return new Response(await response.arrayBuffer(), {
+    status: response.status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+  })
+}

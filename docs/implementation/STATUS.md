@@ -2,13 +2,40 @@
 
 ## 当前状态
 
-- 当前阶段：**P06 已完成并通过门禁**
-- 下一阶段：P07 购物车与汇报持久化（仅在本文件、`docs/implementation/handoffs/P06.md` 和 P06 原子提交证明通过后创建）
+- 当前阶段：**P07 已完成并通过门禁**
+- 下一阶段：P08 HTML/ZIP 导出闭环（仅在本文件、`docs/implementation/handoffs/P07.md` 和 P07 原子提交证明通过后创建）
 - 当前分支：`personal/asset-library-mvp`
 - P00 基线提交：`d5f4d3e3586058c560a5c8ae2af97a4e67a639f6`
 - 上游基线：`upstream/main` @ `15b1a2713894bcde36a848d997f51d67760b441c`
 - P01 决策：`docs/implementation/ADR-P01-local-owner-mvp.md`
 - P02 决策与证据：`docs/implementation/handoffs/P02.md`
+
+## P07 完成事实
+
+| 项目 | 已验证事实/决策 |
+|---|---|
+| 本机 Presentation 旅程 | 活动 P02 composition root 新增仅限 localhost 单 Owner 的 Presentation 创建、读取、重命名、加入、复制、删除、排序与 slot revision API；Web 仍以 P06 catalog/安全 PNG 为唯一模板选择与呈现边界，具备加载、空态、错误、冲突重载、键盘焦点和 680px 响应式 E2E 证据。 |
+| 固定版本与 catalog 资格 | 加入项目时服务端重新验证 asset active、其 current version、verified/available、source/CAS 一致和完整同 renderer P05 PNG pair；`PresentationItem.template_version_id` 永久固定，后续 asset current version 改变不会改写既有 item，retired 版本不能新增。 |
+| revision/排序事务 | 每项逻辑写入要求 `expectedRevision`；单一 SQLite transaction 检查 CAS、写 item/name、重建连续 0 起 position、再恰好递增一次 revision/updated_at。陈旧请求、非法 position、跨 Presentation item、未知 item/version 和失败输入均回滚且不产生重复 item 或 revision 漂移。 |
+| slot 覆盖 | 只接受对应 TemplateVersion schema 声明的 text/color JSON string；强制大小/长度上限，拒绝未声明 key、HTML、控制符、JS/data/file/HTTP URL、路径、非字符串和非 hex color。`0003` 还修正 P02 trigger 对 slot schema 对象的 JSON id 比较；Web 只绑定受控文本，从不注入模板 HTML。 |
+| migration/实际库 | `0003_p07_presentation_items.sql` 前向移除 P02 的“不可排序/只能末尾删除”阶段限制，保留 template version 固定与 slot 声明 trigger。实际库迁移前已只读确认目标表、`quick_check=ok`、无未知数据和所有业务表 0；自动备份为 `apps/api/data/backups/asset-library.1786207558184.pre-migration.db`（SHA-256 `a501811f7b328fd36799049a5b2596b84d385f45b036ff6f9b77720aaab1bba9`），迁移后 SHA-256 `ca65c083e5478a0aab4e6b3bb877e78a875b8bdfef71d5958ab2fd2fc55f8dad`、4 migrations、`foreign_keys=1`、`foreign_key_check=0`、业务表仍为 0。 |
+| 验证 | Vitest 26 files/723 tests；shell 8/8；API TypeScript；Web `svelte-check` 0 errors（9 个上游 warnings）与 Vite build；真实 Google Chrome P06+P07 5/5。根 `pnpm build` 仍受 pnpm ignored lifecycle approval 阻断，未改变审批策略。 |
+| 禁区 | 没有读取、扫描、导入、复制、移动或改写 sibling `02_HTML_PPT_组件与模板`；没有 P08 export、P09/P10、旧 auth/admin/sharing/lock/presence/provider/preview/export/search 路由、身份/RBAC/approval、云服务、remote/push/发布/部署。 |
+
+## P07 门禁
+
+| 要求 | 结果 | 证据 |
+|---|---|---|
+| 创建/读取/重命名/加入与清晰 UI 状态 | 通过 | `tests/p07-presentations.test.ts` API，`e2e/p07-presentations.spec.ts` Chrome 2/2 |
+| 固定 verified/available current version | 通过 | P07 unit 覆盖版本固定、retired 拒绝；加入查询重验 P06 catalog 条件 |
+| 连续排序、复制、删除与无半写入 | 通过 | P07 unit 覆盖 add/copy/move/delete 的 0 起连续位置与 transaction 回滚 |
+| revision CAS | 通过 | P07 unit/API 覆盖每次成功递增一次和 stale 409 数据不变；E2E 覆盖冲突重载 |
+| slot 安全与模板不执行 | 通过 | 已声明 title/color 成功，未声明/HTML/JS/URL/path/类型错误拒绝；P06 Web DOM 负向回归继续通过 |
+| loopback/旧路由 | 通过 | P02/P06/P07 API 与 Playwright 回归：固定 Owner、Host 421、Origin 403、旧能力 404 |
+| migration/SQLite/P04-P06 不变量 | 通过 | 空库/重复迁移测试、实际库备份/哈希/`quick_check`/FK 回读；P04/P05/P06 测试均通过 |
+| 全量验证与范围 | 通过（根构建限制已记录） | 723 Vitest、8/8 shell、type/Web build、P06+P07 Chrome 5/5、`git diff --check` |
+
+**P07 门禁结论：通过。** P08 仅可在 P07 原子提交、干净工作树和本状态/交接文件共同成立后创建。
 
 ## P06 完成事实
 

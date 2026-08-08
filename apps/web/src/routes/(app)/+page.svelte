@@ -3,6 +3,7 @@
   import AssetGrid from '$lib/components/library/AssetGrid.svelte'
   import FilterRail from '$lib/components/library/FilterRail.svelte'
   import { loadCatalog, type CatalogResponse } from '$lib/asset-library'
+  import { addTemplate, copyItem, createPresentation, deleteItem, loadPresentations, moveItem, renamePresentation, reviseOverrides, type Presentation } from '$lib/presentations'
 
   let search = $state('')
   let category = $state('')
@@ -12,10 +13,18 @@
   let loading = $state(true)
   let error = $state('')
   let retry = $state(0)
+  let presentations = $state<Presentation[]>([])
+  let selectedPresentationId = $state<string | null>(null)
+  let presentationLoading = $state(true)
+  let presentationError = $state('')
+  let presentationNotice = $state('')
+  let newPresentationName = $state('本机汇报')
+  let renameValue = $state('')
 
   const requestKey = $derived(JSON.stringify({ search, category, tags: [...selectedTags].sort(), retry }))
   const selectedItem = $derived(catalog?.items.find((item) => item.id === selectedId) ?? null)
   const hasFilters = $derived(Boolean(search.trim() || category || selectedTags.length))
+  const selectedPresentation = $derived(presentations.find((presentation) => presentation.id === selectedPresentationId) ?? null)
 
   $effect(() => {
     requestKey
@@ -43,6 +52,19 @@
     }
   })
 
+  $effect(() => {
+    let active = true
+    void loadPresentations().then((next) => {
+      if (!active) return
+      presentations = next
+      selectedPresentationId = next[0]?.id ?? null
+      renameValue = next[0]?.name ?? ''
+    }).catch((cause) => {
+      if (active) presentationError = cause instanceof Error ? cause.message : '汇报加载失败'
+    }).finally(() => { if (active) presentationLoading = false })
+    return () => { active = false }
+  })
+
   function toggleTag(tag: string): void {
     selectedTags = selectedTags.includes(tag) ? selectedTags.filter((value) => value !== tag) : [...selectedTags, tag]
   }
@@ -51,6 +73,31 @@
     search = ''
     category = ''
     selectedTags = []
+  }
+
+  function applyPresentation(next: Presentation): void {
+    presentations = [next, ...presentations.filter((presentation) => presentation.id !== next.id)]
+    selectedPresentationId = next.id
+    renameValue = next.name
+    presentationError = ''
+  }
+
+  async function perform(action: () => Promise<Presentation>, message: string): Promise<void> {
+    presentationNotice = ''
+    try { applyPresentation(await action()); presentationNotice = message }
+    catch (cause) {
+      presentationError = cause instanceof Error ? cause.message : '汇报写入失败'
+      if (/已变更|has changed/i.test(presentationError)) {
+        try {
+          const latest = await loadPresentations()
+          presentations = latest
+          const current = latest.find((item) => item.id === selectedPresentationId) ?? latest[0] ?? null
+          selectedPresentationId = current?.id ?? null
+          renameValue = current?.name ?? ''
+          presentationNotice = '检测到较新版本，已重新加载；请确认后再试。'
+        } catch { /* Preserve the conflict message when recovery is unavailable. */ }
+      }
+    }
   }
 </script>
 
@@ -114,6 +161,44 @@
           {#if hasFilters}<button type="button" onclick={resetFilters}>清除筛选</button>{/if}
         </div>
       {/if}
+
+      <section class="presentation-panel" aria-labelledby="presentation-heading" aria-busy={presentationLoading}>
+        <header>
+          <div><h2 id="presentation-heading">汇报购物车</h2><p>固定模板版本 · 本机持久化</p></div>
+          {#if selectedItem && selectedPresentation}
+            <button type="button" onclick={() => perform(() => addTemplate(selectedPresentation.id, selectedItem.version.id, selectedPresentation.revision), '已加入汇报。')}>加入所选模板</button>
+          {/if}
+        </header>
+        {#if presentationLoading}
+          <p role="status">正在读取本机汇报…</p>
+        {:else if presentationError}
+          <div class="presentation-error" role="alert"><p>{presentationError}</p><button type="button" onclick={() => { presentationLoading = true; loadPresentations().then((next) => { presentations = next; selectedPresentationId = next[0]?.id ?? null; renameValue = next[0]?.name ?? ''; presentationError = '' }).catch((cause) => { presentationError = cause instanceof Error ? cause.message : '汇报加载失败' }).finally(() => { presentationLoading = false }) }}>重新加载</button></div>
+        {:else if !selectedPresentation}
+          <form onsubmit={(event) => { event.preventDefault(); void perform(() => createPresentation(newPresentationName), '已创建本机汇报。') }}>
+            <label>新汇报名称 <input bind:value={newPresentationName} maxlength="120" /></label><button type="submit">创建汇报</button>
+          </form>
+        {:else}
+          <div class="presentation-controls">
+            <label>当前汇报 <select value={selectedPresentation.id} onchange={(event) => { const id = (event.currentTarget as HTMLSelectElement).value; selectedPresentationId = id; renameValue = presentations.find((item) => item.id === id)?.name ?? '' }}>
+              {#each presentations as presentation}<option value={presentation.id}>{presentation.name}</option>{/each}
+            </select></label>
+            <form onsubmit={(event) => { event.preventDefault(); void perform(() => renamePresentation(selectedPresentation.id, renameValue, selectedPresentation.revision), '名称已更新。') }}><label>名称 <input bind:value={renameValue} maxlength="120" /></label><button type="submit">重命名</button></form>
+          </div>
+          {#if selectedPresentation.items.length}
+            <ol class="cart-list">
+              {#each selectedPresentation.items as item}
+                <li>
+                  <strong>{item.position + 1}. {item.template.title} <small>v{item.template.versionNumber}</small></strong>
+                  <div class="item-actions"><button type="button" aria-label={`上移 ${item.template.title}`} disabled={item.position === 0} onclick={() => perform(() => moveItem(selectedPresentation.id, item.id, item.position - 1, selectedPresentation.revision), '排序已更新。')}>↑</button><button type="button" aria-label={`下移 ${item.template.title}`} disabled={item.position === selectedPresentation.items.length - 1} onclick={() => perform(() => moveItem(selectedPresentation.id, item.id, item.position + 1, selectedPresentation.revision), '排序已更新。')}>↓</button><button type="button" onclick={() => perform(() => copyItem(selectedPresentation.id, item.id, selectedPresentation.revision), '已复制项目。')}>复制</button><button type="button" onclick={() => perform(() => deleteItem(selectedPresentation.id, item.id, selectedPresentation.revision), '已删除项目。')}>删除</button></div>
+                  <label class="override">标题覆盖 <input value={item.slotOverrides.title ?? ''} maxlength="120" onblur={(event) => { const title = (event.currentTarget as HTMLInputElement).value; if (title !== (item.slotOverrides.title ?? '')) void perform(() => reviseOverrides(selectedPresentation.id, item.id, title ? { ...item.slotOverrides, title } : Object.fromEntries(Object.entries(item.slotOverrides).filter(([key]) => key !== 'title')), selectedPresentation.revision), '覆盖内容已更新。') }} /></label>
+                </li>
+              {/each}
+            </ol>
+          {:else}<p class="cart-empty">购物车为空。选择上方模板后加入此汇报。</p>{/if}
+          <p class="revision">Revision {selectedPresentation.revision}</p>
+        {/if}
+        {#if presentationNotice}<p class="presentation-notice" role="status">{presentationNotice}</p>{/if}
+      </section>
     </section>
 
     <AssetDetail item={selectedItem} />
@@ -151,6 +236,26 @@
   .state-panel button { margin-top: 18px; border: 1px solid #1768e5; border-radius: 7px; background: #1768e5; color: #fff; padding: 10px 15px; font: 700 13px/1 var(--font-body); cursor: pointer; }
   .state-panel button:focus-visible { outline: 3px solid rgba(23, 104, 229, .24); outline-offset: 2px; }
   .error-state { color: #a33b3b; }
+  .presentation-panel { margin-top: 30px; border-top: 1px solid #dce2ea; padding-top: 24px; }
+  .presentation-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .presentation-panel > header h2 { font-size: 18px; }
+  .presentation-panel > header p, .revision, .cart-empty, .presentation-notice { color: #637289; font-size: 12px; margin-top: 4px; }
+  .presentation-panel button { border: 1px solid #b8c7dc; border-radius: 6px; background: #fff; color: #0b356f; padding: 7px 9px; font: 700 12px/1 var(--font-body); cursor: pointer; }
+  .presentation-panel button:hover:not(:disabled) { border-color: #1768e5; background: #f1f6ff; }
+  .presentation-panel button:focus-visible, .presentation-panel input:focus-visible, .presentation-panel select:focus-visible { outline: 3px solid rgba(23, 104, 229, .24); outline-offset: 1px; }
+  .presentation-panel button:disabled { opacity: .45; cursor: not-allowed; }
+  .presentation-panel form, .presentation-controls { display: flex; align-items: end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .presentation-panel label { display: grid; gap: 5px; color: #536178; font-size: 12px; }
+  .presentation-panel input, .presentation-panel select { min-height: 32px; border: 1px solid #cbd3df; border-radius: 5px; background: #fff; color: #0b1739; padding: 0 8px; font: inherit; }
+  .cart-list { display: grid; gap: 8px; list-style: none; margin: 16px 0 0; padding: 0; }
+  .cart-list li { border: 1px solid #dce2ea; border-radius: 7px; padding: 10px; }
+  .cart-list strong { display: block; color: #0b1739; font-size: 13px; }
+  .cart-list small { color: #637289; font-weight: 400; }
+  .item-actions { display: flex; gap: 5px; margin-top: 9px; }
+  .override { margin-top: 10px; }
+  .override input { width: 100%; }
+  .presentation-error { display: flex; gap: 12px; align-items: center; color: #a33b3b; margin-top: 14px; }
+  .presentation-notice { color: #1768e5; }
   @keyframes pulse { 50% { opacity: .5; } }
   @media (max-width: 1320px) {
     .workspace { grid-template-columns: 250px minmax(360px, 1fr) minmax(330px, 400px); }

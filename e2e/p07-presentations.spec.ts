@@ -1,0 +1,36 @@
+import { expect, test } from '@playwright/test'
+
+test('P07 creates a local report, adds the selected fixed template, and supports keyboard-accessible item actions', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: '汇报购物车' })).toBeVisible()
+  await page.getByLabel('新汇报名称').fill('P07 本机汇报')
+  await page.getByRole('button', { name: '创建汇报' }).click()
+  await expect(page.getByText('已创建本机汇报。')).toBeVisible()
+  const add = page.getByRole('button', { name: '加入所选模板' })
+  await expect(add).toBeVisible()
+  await add.focus()
+  await expect(add).toBeFocused()
+  await add.press('Enter')
+  await expect(page.getByText('1. Simulated Quarterly Brief')).toBeVisible()
+  await page.getByRole('button', { name: '复制' }).click()
+  await expect(page.getByText('2. Simulated Quarterly Brief')).toBeVisible()
+  await page.getByRole('button', { name: '上移 Simulated Quarterly Brief' }).last().click()
+  await expect(page.getByText('排序已更新。')).toBeVisible()
+  await page.getByRole('button', { name: '删除' }).first().click()
+  await expect(page.locator('.cart-list li')).toHaveCount(1)
+  await page.getByLabel('标题覆盖').fill('受控标题')
+  await page.getByLabel('标题覆盖').press('Tab')
+  await expect(page.getByText('Revision 5')).toBeVisible()
+})
+
+test('P07 shows a conflict recovery message and remains responsive on a narrow screen', async ({ page }) => {
+  await page.setViewportSize({ width: 680, height: 900 })
+  await page.goto('/')
+  await page.route('**/api/presentations/*/items', async (route) => {
+    if (route.request().method() === 'POST') return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Presentation has changed; reload and retry' }) })
+    return route.continue()
+  })
+  await page.getByRole('button', { name: '加入所选模板' }).click()
+  await expect(page.getByText('检测到较新版本，已重新加载；请确认后再试。')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
