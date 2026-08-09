@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P11",
-    "activePhaseThreadId": "/root/p11_reproducible_baseline",
+    "currentPhaseId": "P12",
+    "activePhaseThreadId": "/root/p12_auth_core",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -30,27 +30,35 @@
       "id": "P11",
       "title": "可复现构建与故障止险基线",
       "objective": "修复干净构建并交付可审计的临时只读、健康检查和访问日志配置",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "high",
       "estimatedContextPercent": 40,
       "dependsOn": [],
       "successor": "P12",
       "threadId": "/root/p11_reproducible_baseline",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "8d3cc0d91d2e4292967b3fba80f3aff5c7ed5542",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to approval baseline exactly one atomic commit; tracked worktree clean",
+          "parent rerun: P11 Vitest 4/4, shared/API tsc, adapter-node Web build, shell structure 90/90",
+          "worker full regression: Vitest 29 files/741, shell 8/8, root build 2/2 and clean-index export passed",
+          "Node 22 and Caddy runtime validation are recorded environment limits; no server or remote writes"
+        ]
+      }
     },
     {
       "id": "P12",
       "title": "身份数据与固定会话核心",
       "objective": "建立无邮箱用户、密码、持久化限流和可立即撤销的七天数据库会话",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P11"],
       "successor": "P13",
-      "threadId": null,
+      "threadId": "/root/p12_auth_core",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -126,5 +134,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-09T23:50:11+08:00"
+  "updatedAt": "2026-08-10T00:13:57+08:00"
 }

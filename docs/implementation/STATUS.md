@@ -5,23 +5,23 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11 `in_progress`（worker 已交付，等待父监督者独立验收）；P12–P17 pending
+- 当前实现阶段：P11 `passed`；P12 `in_progress`；P13–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p11_reproducible_baseline`
-- 下一安全动作：父监督者独立验证 P11 原子提交与门禁；不得由 worker 创建 P12，不得越过 G1/G2 写服务器或 push。
+- 当前任务：`/root/p12_auth_core`
+- 下一安全动作：P12 仅在测试/隔离 DB 实现身份数据、密码、固定会话与持久化限流；不得越界实现 P13 API，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
-| P11 | in_progress（worker complete） | 本 handoff 所在原子提交 | `/root/p11_reproducible_baseline` | supervisor pending | adapter-node 干净构建、只读/健康、CI、临时 Caddy/日志/回滚和旧部署停用均有当前证据 |
-| P12 | pending | — | — | pending | 账号/会话 schema 仅为批准候选设计 |
+| P11 | passed | `8d3cc0d91d2e4292967b3fba80f3aff5c7ed5542` | `/root/p11_reproducible_baseline` | passed | 父级复跑 P11 4/4、shared/API tsc、adapter-node Web build、shell 90/90；边界和原子提交已核验 |
+| P12 | in_progress | — | `/root/p12_auth_core` | pending | 账号/会话 schema、密码、固定会话与持久化限流实施中 |
 | P13 | pending | — | — | pending | 注册审批 API 仅为批准候选设计 |
 | P14 | pending | — | — | pending | 线上 Presentation/Item/Export 当前只读计数均为 0 |
 | P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
 
-### P11 worker 交付与当前证据
+### P11 通过事实与当前证据
 
 | 范围 | 已验证结果 |
 |---|---|
@@ -33,7 +33,7 @@
 | 定向与全量回归 | P11 Vitest 4/4；全量 Vitest 29 files/741 tests；shell 8/8；shared/API TypeScript；Web check 0 errors/9 条既有 warnings；Web/root build 通过；`git diff --check`、`git diff --cached --check` 通过。 |
 | 当前环境限制 | 本机没有 Node 22/corepack，Docker CLI 存在但 daemon socket `/Users/rosswang/.docker/run/docker.sock` 不存在，因此未伪称 Node 22 本机执行或 Caddy 容器 validate。两次 npm Node22 临时探测卡在其架构包安装器，已只终止 worker 自己启动的精确进程树；未触碰用户进程。 |
 
-P11 未修改 schema/migration、用户/登录/Owner、实际 DB/CAS、remote 或服务器，也未读取/扫描 sibling 真实 `02_HTML_PPT_组件与模板`。`.workbuddy/` 保持用户自有未跟踪状态。机器状态仍由父监督者保持 `in_progress`，只有独立验收后才可标记通过。
+P11 未修改 schema/migration、用户/登录/Owner、实际 DB/CAS、remote 或服务器，也未读取/扫描 sibling 真实 `02_HTML_PPT_组件与模板`。`.workbuddy/` 保持用户自有未跟踪状态。父监督者已于 2026-08-10 独立核对提交数、差异边界、定向测试、类型检查、Web 生产构建和 shell 结构回归，结论为 `passed`。
 
 ### 当前事实与不确定性
 
