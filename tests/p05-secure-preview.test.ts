@@ -132,8 +132,9 @@ describe('P05 preview Job lifecycle and append-only derivatives', () => {
     expect(migrateDatabase(path)).toMatchObject({ existed: false })
     const repeated = migrateDatabase(path)
     expect(repeated).toMatchObject({ existed: true })
-    expect(repeated.backupSha256).toMatch(/^[0-9a-f]{64}$/)
-    expect(repeated.backupPath && existsSync(repeated.backupPath)).toBe(true)
+    expect(repeated.pendingMigrationCount).toBe(0)
+    expect(repeated.backupSha256).toBeUndefined()
+    expect(repeated.backupPath).toBeUndefined()
     const database = new Database(path)
     try {
       database.pragma('foreign_keys = ON')

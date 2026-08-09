@@ -39,5 +39,19 @@ jobs:
       - name: Build workspaces
         run: pnpm build
 
+      - name: Type-check shared and API contracts
+        run: |
+          pnpm exec tsc --noEmit -p packages/shared/tsconfig.json
+          pnpm exec tsc --noEmit -p apps/api/tsconfig.json --rootDir .
+
       - name: Run tests
         run: pnpm test
+
+      - name: Rehearse local atomic release
+        run: bash tests/p16-release-rehearsal.sh
+
+      - name: Install Google Chrome for the authenticated journey
+        run: pnpm exec playwright install --with-deps chrome
+
+      - name: Run authenticated Chrome E2E
+        run: P06_CHROMIUM_PATH="$(command -v google-chrome)" pnpm exec playwright test --config=playwright.p15.config.ts

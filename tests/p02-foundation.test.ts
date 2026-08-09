@@ -1,4 +1,4 @@
-import { mkdtempSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -55,8 +55,9 @@ describe('P02 SQL migrations', () => {
     expect(migrateDatabase(path).existed).toBe(false)
     const repeated = migrateDatabase(path)
     expect(repeated.existed).toBe(true)
-    expect(repeated.backupPath && existsSync(repeated.backupPath)).toBe(true)
-    expect(repeated.backupSha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(repeated.pendingMigrationCount).toBe(0)
+    expect(repeated.backupPath).toBeUndefined()
+    expect(repeated.backupSha256).toBeUndefined()
 
     const sqlite = new Database(path)
     try {

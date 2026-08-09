@@ -20,7 +20,7 @@ import {
 import { hashSessionToken, SESSION_DURATION_MS, SessionRepository } from '../apps/api/src/auth/sessions.js'
 import { hashThrottleKey, PersistentAuthThrottle } from '../apps/api/src/auth/throttle.js'
 import { normalizeUsername, UserRepository } from '../apps/api/src/auth/users.js'
-import { migrateDatabase, TARGET_DATABASE_TABLES, TARGET_DATABASE_TRIGGERS } from '../apps/api/src/db/migrate.js'
+import { migrateDatabase, preflightDatabase, TARGET_DATABASE_TABLES, TARGET_DATABASE_TRIGGER_SETS, TARGET_DATABASE_TRIGGERS } from '../apps/api/src/db/migrate.js'
 import { MIGRATIONS_DIRECTORY } from '../apps/api/src/db/paths.js'
 import { LocalRecoveryService } from '../apps/api/src/recovery/local-recovery.js'
 
@@ -80,20 +80,24 @@ function businessCounts(database: SQLite): Record<string, number> {
   return Object.fromEntries(tables.map((table) => [table, scalar(database, `SELECT count(*) AS count FROM ${table}`)]))
 }
 
-function createFiveMigrationDatabase(path: string): void {
-  const migrations = join(temporaryRoot('p12-five-migrations'), 'drizzle')
+function createMigrationDatabase(path: string, migrationCount: 5 | 6): void {
+  const migrations = join(temporaryRoot(`p12-${migrationCount}-migrations`), 'drizzle')
   mkdirSync(join(migrations, 'meta'), { recursive: true })
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < migrationCount; index += 1) {
     const prefix = String(index).padStart(4, '0')
     const source = readdirSync(MIGRATIONS_DIRECTORY).find((name) => name.startsWith(`${prefix}_`) && name.endsWith('.sql'))
     if (!source) throw new Error(`Missing migration fixture ${prefix}`)
     cpSync(join(MIGRATIONS_DIRECTORY, source), join(migrations, source))
   }
   const journal = JSON.parse(readFileSync(join(MIGRATIONS_DIRECTORY, 'meta/_journal.json'), 'utf8')) as { entries: unknown[] }
-  writeFileSync(join(migrations, 'meta/_journal.json'), `${JSON.stringify({ ...journal, entries: journal.entries.slice(0, 5) }, null, 2)}\n`)
+  writeFileSync(join(migrations, 'meta/_journal.json'), `${JSON.stringify({ ...journal, entries: journal.entries.slice(0, migrationCount) }, null, 2)}\n`)
   mkdirSync(dirname(path), { recursive: true })
   const database = openDatabase(path)
   try { drizzleMigrate(drizzle(database), { migrationsFolder: migrations }) } finally { database.close() }
+}
+
+function createFiveMigrationDatabase(path: string): void {
+  createMigrationDatabase(path, 5)
 }
 
 function databaseSha256(path: string): string {
@@ -165,6 +169,43 @@ describe('P12 numbered migration and recovery boundaries', () => {
     } finally { repeated.close() }
   })
 
+  it('binds each supported ledger count to its trigger set and rejects a downgraded full-ledger schema without a no-op backup', () => {
+    const sixPath = databasePath('p12-existing-six')
+    createMigrationDatabase(sixPath, 6)
+    const sixBefore = openDatabase(sixPath)
+    try {
+      expect(schemaNames(sixBefore, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['6'])
+    } finally { sixBefore.close() }
+    const sixUpgrade = migrateDatabase(sixPath)
+    expect(sixUpgrade).toMatchObject({ existed: true, pendingMigrationCount: 1 })
+    expect(sixUpgrade.backupPath && existsSync(sixUpgrade.backupPath)).toBe(true)
+    const sixAfter = openDatabase(sixPath)
+    try {
+      expect(scalar(sixAfter, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(schemaNames(sixAfter, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['7'])
+    } finally { sixAfter.close() }
+
+    const mismatchedPath = databasePath('p12-full-ledger-six-triggers')
+    migrateDatabase(mismatchedPath)
+    expect(preflightDatabase(mismatchedPath)).toMatchObject({ pendingMigrationCount: 0, backupPath: undefined })
+    const mismatched = openDatabase(mismatchedPath)
+    try {
+      for (const trigger of TARGET_DATABASE_TRIGGER_SETS['7'].filter((name) => !TARGET_DATABASE_TRIGGER_SETS['6'].includes(name))) {
+        mismatched.exec(`DROP TRIGGER "${trigger}"`)
+      }
+      expect(scalar(mismatched, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(schemaNames(mismatched, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['6'])
+    } finally { mismatched.close() }
+
+    expect(() => migrateDatabase(mismatchedPath)).toThrow(/trigger set does not match the migration ledger/)
+    expect(existsSync(join(dirname(mismatchedPath), 'backups'))).toBe(false)
+    const unchanged = openDatabase(mismatchedPath)
+    try {
+      expect(scalar(unchanged, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(schemaNames(unchanged, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['6'])
+    } finally { unchanged.close() }
+  })
+
   it('backs up and rejects unknown tables plus unknown or missing legacy triggers', () => {
     const unknownTablePath = databasePath('p12-unknown-table')
     const unknownTable = openDatabase(unknownTablePath)
@@ -180,7 +221,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
       if (fault === 'unknown') database.exec('CREATE TRIGGER unexpected_trigger BEFORE INSERT ON content_objects BEGIN SELECT RAISE(ABORT, \'blocked\'); END')
       else database.exec('DROP TRIGGER audit_events_append_only_delete')
       database.close()
-      expect(() => migrateDatabase(path)).toThrow(fault === 'unknown' ? /unknown database triggers: unexpected_trigger/ : /trigger set is incomplete/)
+      expect(() => migrateDatabase(path)).toThrow(fault === 'unknown' ? /unknown database triggers: unexpected_trigger/ : /trigger set does not match the migration ledger/)
       expect(readdirSync(join(dirname(path), 'backups'))).toHaveLength(1)
     }
   })

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -190,7 +190,8 @@ describe('P06 schema and Web execution boundary', () => {
     const path = join(directory, 'asset-library.db')
     migrateDatabase(path)
     const repeated = migrateDatabase(path)
-    expect(repeated.backupPath && existsSync(repeated.backupPath)).toBe(true)
+    expect(repeated.pendingMigrationCount).toBe(0)
+    expect(repeated.backupPath).toBeUndefined()
     const database = new Database(path)
     try {
       database.pragma('foreign_keys = ON')

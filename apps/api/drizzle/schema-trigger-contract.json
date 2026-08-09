@@ -1,0 +1,37 @@
+{
+  "triggersThroughMigration5": [
+    "audit_events_append_only_delete",
+    "audit_events_append_only_update",
+    "content_objects_append_only_delete",
+    "content_objects_append_only_update",
+    "jobs_succeeded_output_immutable",
+    "jobs_succeeded_requires_output",
+    "jobs_succeeded_update_requires_output",
+    "presentation_exports_append_only_delete",
+    "presentation_exports_append_only_update",
+    "presentation_exports_content_types_insert",
+    "presentation_exports_current_revision_insert",
+    "presentation_items_slot_schema_insert",
+    "presentation_items_slot_schema_update",
+    "presentation_items_template_version_fixed",
+    "presentations_revision_monotonic",
+    "template_assets_current_version_insert",
+    "template_assets_current_version_update",
+    "template_preview_derivatives_append_only_delete",
+    "template_preview_derivatives_append_only_update",
+    "template_preview_derivatives_png_insert",
+    "template_preview_derivatives_verified_source_insert",
+    "template_versions_current_version_status",
+    "template_versions_verified_content_immutable",
+    "template_versions_verified_delete_forbidden"
+  ],
+  "migration6TriggerAdditions": [
+    "sessions_fixed_update",
+    "users_disable_revokes_sessions",
+    "users_password_change_revokes_sessions"
+  ],
+  "migration7TriggerAdditions": [
+    "presentations_owner_immutable",
+    "presentations_owner_required_insert"
+  ]
+}

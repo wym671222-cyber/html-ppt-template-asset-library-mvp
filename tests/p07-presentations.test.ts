@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,7 +38,8 @@ describe('P07 presentation persistence and revision CAS', () => {
     const path = join(directory, 'asset-library.db')
     migrateDatabase(path)
     const repeated = migrateDatabase(path)
-    expect(repeated.backupPath && existsSync(repeated.backupPath)).toBe(true)
+    expect(repeated.pendingMigrationCount).toBe(0)
+    expect(repeated.backupPath).toBeUndefined()
     const database = new Database(path)
     try {
       expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })

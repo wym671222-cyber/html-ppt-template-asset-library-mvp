@@ -5,11 +5,11 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P15 `passed`；P16 `in_progress`；P17 pending
+- 当前实现阶段：P11–P15 `passed`；P16 交付候选已完成但门禁因生产依赖高危项阻断；P17 blocked 且未创建
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`/root/p16_atomic_release`
-- 下一安全动作：仅实施并隔离演练 P16 非 root systemd、Caddy 候选与 WorkBuddy 原子发布工程；不得越过 G1/G2 写服务器、reload Caddy、迁移生产库或 push。
+- 下一安全动作：父监督者只读复核 P16 候选并保持 P16 blocked；依赖安全修复须经新的计划版本审批，当前不得创建或实施 P17，不得越过 G1/G2 写服务器、reload Caddy、迁移生产库或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -18,8 +18,23 @@
 | P13 | passed | `9851afc0737564413bc543e8f2756106346ba353` | `/root/p13_auth_approval_api` | passed | 父级复跑 P13 10/10、P12+P13 21/21、shared/API tsc、API build、shell 8/8；强制改密和 IP 信任缺口修正后验收 |
 | P14 | passed | `5c2d13f5e15cda9840a459a6c46e6a041bb0beed` | `/root/p14_user_ownership_retry` | passed | 父级复跑 P14+P09 13/13、shared/API tsc、shell 8/8、root build 2/2；迁移阻断、A/B 隔离、恢复撤销与 fixed owner 修正已核验 |
 | P15 | passed | `45898624eb4f8935a7112210f5cb103ab21610fc` | `/root/p15_auth_frontend` | passed | 父级 HTTPS Chrome 2/2、P06–P09 10/10、全量 Vitest 771/771、shell 8/8、类型/构建与边界扫描通过；hydration/用例依赖修正后验收 |
-| P16 | in_progress | — | `/root/p16_atomic_release` | pending | 仅允许本地发布工程与隔离演练；无 G1/G2 生产写权限 |
-| P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
+| P16 | blocked candidate | — | `/root/p16_atomic_release` | blocked | 发布工程与隔离演练完成；`pnpm audit --prod --audit-level high` 为 0 critical/21 high，不能形成 P17 可部署候选 |
+| P17 | blocked | — | — | blocked | 未创建；依赖安全门关闭且无 G2，禁止 push/迁移/部署 |
+
+### P16 交付候选与阻断事实
+
+| 范围 | 当前已验证结果 |
+|---|---|
+| 运行身份与路径 | systemd 候选固定非 root `htmlppt` 与 `/usr/bin/node`；API `127.0.0.1:3001` 并默认 `APP_READ_ONLY=true`，Web `172.18.0.1:4173`，生产 Origin `https://ppt.ajjy-ai.site`；代码 `/opt/html-ppt/releases/<commit>` + 原子 `current`，数据只在 `/var/lib/html-ppt`。生产模式拒绝其他 data root。可选 API override 必须由 preflight 核验为非 symlink、`root:root 0600` 且只含 read-only flag。 |
+| 代理信任边界 | 仅在已证明的“浏览器 → 单层受控 Caddy → Web”拓扑启用 `ADDRESS_HEADER=x-forwarded-for`、`XFF_DEPTH=1`。候选 Caddy 删除浏览器入站转发头并以直连 `{remote_host}` 重建单值 XFF；隔离负向测试证明伪造 XFF 未进入 API 限流键。拓扑、bridge 或直达性无法证明时服务保持停止。 |
+| Caddy 与缓存 | 生产候选包含自动 TLS、安全头、0600 JSON 日志、主动 `/api/health/ready`、HTML `no-cache` 与 `_app/immutable` 一年 immutable；原子发布累积保留旧 hash 资源。P16 未安装、validate 或 reload 生产配置。 |
+| 迁移与发布 | 迁移器只在检测到 pending migration 且 DB 已存在时创建 pre-migration 备份；已完全迁移的重复运行不新增备份。Migrator/preflight 共用 5/6/7 ledger 的 trigger 合同，并都把实际 ledger count 严格绑定到唯一集合。WorkBuddy deploy/rollback 无默认 production target，deploy 另要求 approved SHA 与 commit 相等；脚本只切换 release symlink，不启动服务、不迁移、不删除旧 release/备份。 |
+| 验证 | 全量 Vitest 34 files/777 tests、shell 8/8、shared/API TypeScript、Web check 0 errors/9 条既有 warnings、根 adapter-node build、P15 Chrome 2/2、P06–P09 Chrome 10/10、P16 合同 5/5、暂存索引隔离导出 frozen install 与完整发布演练均通过；P16/P12 负向覆盖无 target/批准 SHA、默认只读、精确 Node、unknown/wrong-ledger trigger，以及 ledger 7/trigger set 6 在 pending=0 时无备份拒绝。 |
+| 当前环境限制 | 宿主是 Node 24 而非生产 Node 22；没有 Caddy、`systemd-analyze`，Docker daemon 不可用。因此没有伪称本机 Caddy runtime validate、systemd runtime verify、Node 22 执行或生产桥接可达性证据。 |
+| 依赖门禁 | `npx -y pnpm@9.15.0 audit --prod --audit-level high` 检出 81 项：8 low、52 moderate、21 high、0 critical（442 个生产依赖）；high 包含直接生产依赖 `drizzle-orm` 与 `hono`，其余 high 也在生产依赖图。升级/替换会改变 P16 已批准范围与验收，未在 v2.0 内擅自处理或豁免。 |
+| 阶段结论 | P16 工程实现完成但安全完成门未通过；本提交不是 P17 可部署候选，不报告/申请 G2，不创建 P17。依赖修复须先批准新的计划版本。 |
+
+P16 只使用仓库 P03 fixture、工具创建的临时目录、备用端口与隔离 SQLite；未读取 sibling 真实资产，未访问或修改实际/生产 DB/CAS、服务器、Caddy、systemd、PM2、remote、`.workbuddy/`、CHAIN_STATE 或 DECISION_LOG，且无 push。
 
 ### P13 通过事实与当前证据
 
