@@ -140,6 +140,7 @@ describe('P09 auditable local backup manifest', () => {
       })
       expect(manifest.database.migrationLedger.map((entry) => entry.tag)).toEqual([
         '0000_p02_foundation', '0001_p04_catalog_jobs', '0002_p05_preview_derivatives', '0003_p07_presentation_items', '0004_p08_presentation_exports',
+        '0005_p12_auth_core',
       ])
       expect(manifest.database.migrationLedger.every((entry) => /^[0-9a-f]{64}$/.test(entry.sha256))).toBe(true)
       expect(new Set(manifest.objects.flatMap((object) => object.roles))).toEqual(expect.objectContaining(new Set(['template-package', 'preview', 'thumbnail', 'export-manifest', 'export-html', 'export-zip'])))
@@ -171,7 +172,7 @@ describe('P09 isolated restore and fixture-only replay', () => {
         expect(database.pragma('quick_check', { simple: true })).toBe('ok')
         expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
         expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-        expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 5 })
+        expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 })
         const store = new LocalContentStore(restoredContentRoot)
         const owner = getOwnerContext()
         const catalog = new AssetLibraryCatalog(database as never, store)

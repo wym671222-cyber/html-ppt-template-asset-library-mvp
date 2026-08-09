@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import type { Session, User } from 'lucia'
+import type { AuthSession as Session, User } from '@slide-maker/shared'
 import { authMiddleware } from '../middleware/auth.js'
 import { adminMiddleware } from '../middleware/admin.js'
 import { debugBus } from '../debug/event-bus.js'
@@ -72,4 +72,3 @@ debug.delete('/transcripts', async (c) => {
 })
 
 export default debug
-

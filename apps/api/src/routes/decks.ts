@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { createId } from '@paralleldrive/cuid2'
-import type { Session, User } from 'lucia'
+import type { AuthSession as Session, User } from '@slide-maker/shared'
 import {
   buildArtifactBlockData,
   generateSlug,

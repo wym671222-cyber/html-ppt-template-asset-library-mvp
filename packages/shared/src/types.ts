@@ -69,16 +69,24 @@ export interface Theme {
 
 export interface User {
   id: string
-  email: string
-  name: string
+  username: string
   status: UserStatus
   role: UserRole
-  emailVerified: boolean
+  mustChangePassword: boolean
+  approvedAt: number | null
   createdAt: number
+  updatedAt: number
 }
 
-export type UserStatus = 'pending' | 'approved' | 'rejected'
-export type UserRole = 'admin' | 'editor' | 'viewer'
+export type UserStatus = 'pending' | 'active' | 'disabled'
+export type UserRole = 'admin' | 'member'
+
+export interface AuthSession {
+  id: string
+  userId: string
+  expiresAt: number
+  createdAt: number
+}
 
 export interface ChatMessage {
   id: string

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and, inArray } from 'drizzle-orm'
-import type { Session, User } from 'lucia'
+import type { AuthSession as Session, User } from '@slide-maker/shared'
 import { db } from '../db/index.js'
 import { decks, deckAccess, slides, contentBlocks, themes } from '../db/schema.js'
 import { authMiddleware } from '../middleware/auth.js'

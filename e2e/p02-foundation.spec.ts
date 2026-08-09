@@ -11,4 +11,7 @@ test('P02 loopback and fixed Owner defenses remain active in the P06 product roo
 
   const legacyRoute = await request.get(`${apiUrl}/api/auth/login`)
   expect(legacyRoute.status()).toBe(404)
+
+  const registrationPage = await page.goto('/register')
+  expect(registrationPage?.status()).toBe(404)
 })

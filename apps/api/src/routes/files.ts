@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { eq, and } from 'drizzle-orm'
 import { createId } from '@paralleldrive/cuid2'
-import type { Session, User } from 'lucia'
+import type { AuthSession as Session, User } from '@slide-maker/shared'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

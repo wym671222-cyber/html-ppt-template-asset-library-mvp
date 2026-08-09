@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, and } from 'drizzle-orm'
-import type { Session, User } from 'lucia'
+import type { AuthSession as Session, User } from '@slide-maker/shared'
 import { authMiddleware } from '../middleware/auth.js'
 import { searchRateLimit } from '../middleware/rate-limit.js'
 import { env } from '../env.js'

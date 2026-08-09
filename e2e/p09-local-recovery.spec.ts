@@ -24,7 +24,7 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
   expect(manifestResponse.ok()).toBeTruthy()
   const manifestPayload = await manifestResponse.json() as { manifestSha256: string; manifest: { contractVersion: string; database: { migrationLedger: unknown[] }; objects: Array<{ relativePath: string; digest: string }> } }
   expect(manifestPayload.manifest.contractVersion).toBe('asset-library-local-backup/v1')
-  expect(manifestPayload.manifest.database.migrationLedger).toHaveLength(5)
+  expect(manifestPayload.manifest.database.migrationLedger).toHaveLength(6)
   expect(manifestPayload.manifest.objects.every((object) => object.relativePath === `objects/sha256/${object.digest.slice(0, 2)}/${object.digest}`)).toBe(true)
   expect(JSON.stringify(manifestPayload)).not.toMatch(/\/Users\/|password|credential|api[_-]?key/i)
 

@@ -5,21 +5,36 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11 `passed`；P12 `in_progress`；P13–P17 pending
+- 当前实现阶段：P11 `passed`；P12 `in_progress`（worker 已交付，等待父监督者独立验收）；P13–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`/root/p12_auth_core`
-- 下一安全动作：P12 仅在测试/隔离 DB 实现身份数据、密码、固定会话与持久化限流；不得越界实现 P13 API，不得越过 G1/G2 写服务器或 push。
+- 下一安全动作：父监督者独立核对 P12 原子提交、隔离迁移、密码/会话/限流负向和全量回归；通过前不得创建 P13，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
 | P11 | passed | `8d3cc0d91d2e4292967b3fba80f3aff5c7ed5542` | `/root/p11_reproducible_baseline` | passed | 父级复跑 P11 4/4、shared/API tsc、adapter-node Web build、shell 90/90；边界和原子提交已核验 |
-| P12 | in_progress | — | `/root/p12_auth_core` | pending | 账号/会话 schema、密码、固定会话与持久化限流实施中 |
+| P12 | in_progress（worker complete） | 本 handoff 所在原子提交 | `/root/p12_auth_core` | supervisor pending | `0005` 无邮箱账号、Argon2id、七天固定 DB session、严格 Cookie、持久限流和 Lucia 退役均有当前证据 |
 | P13 | pending | — | — | pending | 注册审批 API 仅为批准候选设计 |
 | P14 | pending | — | — | pending | 线上 Presentation/Item/Export 当前只读计数均为 0 |
 | P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
+
+### P12 worker 交付与当前证据
+
+| 范围 | 已验证结果 |
+|---|---|
+| 无邮箱身份 schema | `0005_p12_auth_core.sql` 新增 `users/sessions/auth_throttle`；username 应用层 trim/lowercase 且 SQL 层锁定 3–32 位规则与 NOCASE 唯一，`role=admin\|member`、`status=pending\|active\|disabled`，部分唯一索引保证最多一名 admin。 |
+| 密码与类型 | 共享 User 类型已移除 email/name/旧状态；密码限 10–128 字符，固定 Argon2id `m=19456,t=2,p=1`，存储和校验均拒绝低于策略的 hash。 |
+| 固定会话/Cookie | 每次生成 32-byte 加密随机 token，DB 仅存 SHA-256；`expires_at=created_at+604800000`，验证不滚动、session UPDATE 被 trigger 禁止，删除/改密/禁用立即失效。Cookie 固定 `__Host-ppt_session; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax`，无 Domain，严格拒绝重复、引号、编码、控制字符和超长头。 |
+| 持久限流 | `PersistentAuthThrottle` 只存加域 SHA-256 key，SQLite immediate transaction 更新固定窗口/阻断时间；关闭并重开 DB 后阻断状态仍有效。 |
+| Lucia/旧链 | API manifest、lockfile、安装树和保留源码无 Lucia/适配器；旧 auth/admin 模块改为不挂载的 fail-closed 404 占位，旧 middleware 同样 fail closed；未开放注册页或 P13 API。 |
+| 迁移/恢复 | journal、目标表/trigger allowlist 与 P09 recovery 的表集合/六条 ledger 已对齐。P12 隔离测试覆盖空库、既有五迁移库、重复迁移、未知表/trigger/缺失 trigger 先备份后拒绝，旧 trigger SQL 不变，业务表计数不变，quick/FK/ledger/隔离恢复通过。 |
+| 定向与全量 | P12 Vitest 11/11；全量 Vitest 30 files/752 tests；shell 8/8；shared/API TypeScript；Web check 0 errors/9 条既有 warnings；Web/root build；P02 Chrome 1/1 与 P06–P09 Chrome 10/10 通过。 |
+| 边界 | 未迁移实际/生产 DB，未访问 sibling 真实 `02` 资产，未实现 P13/P14/P15，未修改 CHAIN_STATE/DECISION_LOG、remote/服务器/Caddy/PM2，无 push。 |
+
+P12 当前仅是 worker 交付，机器状态仍为 `in_progress`；父监督者独立验收通过前不得标记 passed 或创建 P13。
 
 ### P11 通过事实与当前证据
 

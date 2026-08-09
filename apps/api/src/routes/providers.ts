@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { Session, User } from 'lucia'
+import type { AuthSession as Session, User } from '@slide-maker/shared'
 import { env } from '../env.js'
 import { ANTHROPIC_MODELS } from '../providers/anthropic.js'
 import { OPENROUTER_MODELS } from '../providers/openrouter.js'

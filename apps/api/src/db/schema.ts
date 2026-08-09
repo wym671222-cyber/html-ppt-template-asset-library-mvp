@@ -1,4 +1,5 @@
-import { integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
+import { integer, primaryKey, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 // P02 target schema only. Legacy CUNY tables intentionally remain outside the
 // active TypeScript program and are not represented by these migrations.
@@ -111,4 +112,36 @@ export const auditEvents = sqliteTable('audit_events', {
   result: text('result', { enum: ['success', 'failure'] }).notNull(),
   diagnostic: text('diagnostic').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  username: text('username').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role', { enum: ['admin', 'member'] }).notNull().default('member'),
+  status: text('status', { enum: ['pending', 'active', 'disabled'] }).notNull().default('pending'),
+  mustChangePassword: integer('must_change_password', { mode: 'boolean' }).notNull().default(false),
+  approvedBy: text('approved_by').references((): AnySQLiteColumn => users.id),
+  approvedAt: integer('approved_at', { mode: 'timestamp_ms' }),
+  passwordChangedAt: integer('password_changed_at', { mode: 'timestamp_ms' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+}, (table) => [
+  uniqueIndex('users_username_nocase_unique').on(sql`${table.username} COLLATE NOCASE`),
+  uniqueIndex('users_single_admin_unique').on(table.role).where(sql`${table.role} = 'admin'`),
+])
+
+export const sessions = sqliteTable('sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+export const authThrottle = sqliteTable('auth_throttle', {
+  keyHash: text('key_hash').primaryKey(),
+  windowStartedAt: integer('window_started_at', { mode: 'timestamp_ms' }).notNull(),
+  count: integer('count').notNull(),
+  blockedUntil: integer('blocked_until', { mode: 'timestamp_ms' }),
 })

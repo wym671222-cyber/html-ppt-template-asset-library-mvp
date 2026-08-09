@@ -65,9 +65,9 @@ describe('P02 SQL migrations', () => {
       expect(sqlite.pragma('foreign_keys', { simple: true })).toBe(1)
       const tables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]
       const names = tables.map((table) => table.name)
-      expect(names).toEqual(expect.arrayContaining(['template_assets', 'template_versions', 'presentation_items', 'content_objects', 'jobs', 'audit_events']))
-      expect(names.join(',')).not.toMatch(/user|organization|role|approval|rbac/i)
-      expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 5 })
+      expect(names).toEqual(expect.arrayContaining(['template_assets', 'template_versions', 'presentation_items', 'content_objects', 'jobs', 'audit_events', 'users', 'sessions', 'auth_throttle']))
+      expect(names.join(',')).not.toMatch(/organization|role_binding|approval|rbac/i)
+      expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 })
 
       const now = Date.now()
       const digest = 'a'.repeat(64)
@@ -98,10 +98,10 @@ describe('P02 SQL migrations', () => {
   it('backs up and stops when a non-target database is found', () => {
     const path = temporaryDatabase()
     const sqlite = new Database(path)
-    sqlite.exec('CREATE TABLE users (id text PRIMARY KEY)')
+    sqlite.exec('CREATE TABLE legacy_unknown (id text PRIMARY KEY)')
     sqlite.close()
 
-    expect(() => migrateDatabase(path)).toThrow(/unknown database tables: users/)
+    expect(() => migrateDatabase(path)).toThrow(/unknown database tables: legacy_unknown/)
     const backups = readdirSync(join(dirname(path), 'backups'))
     expect(backups).toHaveLength(1)
   })
