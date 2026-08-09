@@ -121,8 +121,8 @@ echo "  (found $TEMPLATE_COUNT template files)"
 echo ""
 echo "── Deployment ──"
 check "nginx config" '[ -f nginx/slide-maker.conf ]'
-check "deploy script" '[ -f deploy-staging.sh ]'
-check "GitHub Actions workflow" '[ -f .github/workflows/deploy.yml ]'
+check "legacy deploy script retired" '[ ! -e deploy-staging.sh ]'
+check "deployment guard workflow" '[ -f .github/workflows/deploy.yml ] && grep -q "Deployment guard" .github/workflows/deploy.yml'
 
 echo ""
 echo "═══════════════════════════════════════════��═══"

@@ -1,0 +1,47 @@
+{
+	admin off
+}
+
+{$P11_SITE_ADDRESS:http://localhost} {
+	log {
+		output file {$P11_LOG_PATH:/var/log/caddy/html-ppt-access.json} {
+			mode 0600
+			roll_size 10MiB
+			roll_keep 10
+			roll_keep_for 720h
+		}
+		format json
+	}
+
+	@health {
+		method GET HEAD
+		path /api/health/live /api/health/ready
+	}
+	handle @health {
+		reverse_proxy {$P11_API_UPSTREAM:127.0.0.1:3001} {
+			header_up Host 127.0.0.1:3001
+		}
+	}
+
+	@catalog {
+		method GET HEAD
+		path /api/catalog /api/catalog/assets/*
+	}
+	handle @catalog {
+		reverse_proxy {$P11_WEB_UPSTREAM:127.0.0.1:4173}
+	}
+
+	@other_api path /api/*
+	handle @other_api {
+		header {
+			Content-Type application/json
+			Cache-Control "no-store"
+			X-Content-Type-Options nosniff
+		}
+		respond `{"error":"APP_READ_ONLY"}` 503
+	}
+
+	handle {
+		reverse_proxy {$P11_WEB_UPSTREAM:127.0.0.1:4173}
+	}
+}

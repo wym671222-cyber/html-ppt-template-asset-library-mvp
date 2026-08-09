@@ -22,6 +22,10 @@ const app = createApp({
     backupRoot: LOCAL_RECOVERY_BACKUP_PATH,
     restoreRoot: LOCAL_RECOVERY_DRILL_PATH,
   }),
+  readOnly: env.appReadOnly,
+  readiness: () => {
+    sqlite.prepare('SELECT 1').get()
+  },
 })
 
 serve({
@@ -29,7 +33,12 @@ serve({
   hostname: LOOPBACK_HOST,
   port: env.port,
 }, () => {
-  console.log(`API server running on http://${LOOPBACK_HOST}:${env.port}`)
+  console.log(JSON.stringify({
+    event: 'api_started',
+    host: LOOPBACK_HOST,
+    port: env.port,
+    readOnly: env.appReadOnly,
+  }))
 })
 
 export default app

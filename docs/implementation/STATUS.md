@@ -5,21 +5,35 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11 `in_progress`；P12–P17 pending
+- 当前实现阶段：P11 `in_progress`（worker 已交付，等待父监督者独立验收）；P12–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`/root/p11_reproducible_baseline`
-- 下一安全动作：父监督者等待并独立验证 P11；不得越过 G1/G2 写服务器或 push。
+- 下一安全动作：父监督者独立验证 P11 原子提交与门禁；不得由 worker 创建 P12，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
-| P11 | in_progress | — | `/root/p11_reproducible_baseline` | pending | 已确认 adapter-node 未入库、线上手工构建、无访问日志和匿名写入风险 |
+| P11 | in_progress（worker complete） | 本 handoff 所在原子提交 | `/root/p11_reproducible_baseline` | supervisor pending | adapter-node 干净构建、只读/健康、CI、临时 Caddy/日志/回滚和旧部署停用均有当前证据 |
 | P12 | pending | — | — | pending | 账号/会话 schema 仅为批准候选设计 |
 | P13 | pending | — | — | pending | 注册审批 API 仅为批准候选设计 |
 | P14 | pending | — | — | pending | 线上 Presentation/Item/Export 当前只读计数均为 0 |
 | P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
+
+### P11 worker 交付与当前证据
+
+| 范围 | 已验证结果 |
+|---|---|
+| 可复现依赖与构建 | 根 `package.json` 固定 Node `22.x`、pnpm `9.15.0`，`.node-version` 为 `22`；Web manifest/lockfile 正式声明 `@sveltejs/adapter-node@^5.5.7` 并移除未使用 adapter。`CI=true npx -y pnpm@9.15.0 install --frozen-lockfile` 成功；根 `pnpm build` 的 API/Web 两个 Turbo build 均成功，Web 明确输出 `Using @sveltejs/adapter-node`。 |
+| 干净树复现 | 从精确 staged index 导出到 `/tmp/p11-clean.jFXsIF`（无既有 `node_modules`/build 输出），frozen install 复用 514 packages 后，根 build 与 P11 定向测试成功。宿主只有 Node `24.18.0`，所以出现预期 Node 22 engine warning；Node 22 由 manifest、`.node-version` 与 all-branch CI 固定。 |
+| 健康与只读 | API 新增 `GET /api/health/live|ready`，ready 执行 SQLite `SELECT 1`，失败只返回 `503 APP_NOT_READY`；Web 增加受控同源 health BFF。`APP_READ_ONLY=true` 时所有 API `POST|PATCH|PUT|DELETE` 在服务层统一返回 `503 {"error":"APP_READ_ONLY"}`，catalog/PNG 与其他读取不被该开关拦截；API 启动日志改为不含秘密的 JSON。 |
+| CI 与旧部署 | CI 已改为所有 push/PR、Node 22.x、pnpm 9.15.0 frozen install。旧 CUNY/Tailscale SSH workflow 被无远程动作的 `Deployment guard` 替代，主动 `git push`/SSH 的 `deploy-staging.sh` 已退役；当前 `.github` 无旧主机、密码 secret 或 ssh-action 引用。 |
+| 临时运维资产 | `ops/caddy/Caddyfile.p11-read-only` 只允许 health 与 catalog/PNG 的 GET/HEAD API，其他 `/api/*` 返回稳定只读 503；JSON 日志 10 MiB/10 files/30 天/0600。README 固定 G1 前不得应用，并给出备份路径、两次 validate、reload 与只恢复 Caddy 配置的回滚模板。P11 没有执行服务器、Caddy 或 PM2 写操作。 |
+| 定向与全量回归 | P11 Vitest 4/4；全量 Vitest 29 files/741 tests；shell 8/8；shared/API TypeScript；Web check 0 errors/9 条既有 warnings；Web/root build 通过；`git diff --check`、`git diff --cached --check` 通过。 |
+| 当前环境限制 | 本机没有 Node 22/corepack，Docker CLI 存在但 daemon socket `/Users/rosswang/.docker/run/docker.sock` 不存在，因此未伪称 Node 22 本机执行或 Caddy 容器 validate。两次 npm Node22 临时探测卡在其架构包安装器，已只终止 worker 自己启动的精确进程树；未触碰用户进程。 |
+
+P11 未修改 schema/migration、用户/登录/Owner、实际 DB/CAS、remote 或服务器，也未读取/扫描 sibling 真实 `02_HTML_PPT_组件与模板`。`.workbuddy/` 保持用户自有未跟踪状态。机器状态仍由父监督者保持 `in_progress`，只有独立验收后才可标记通过。
 
 ### 当前事实与不确定性
 

@@ -5,14 +5,16 @@ import type { Handle } from '@sveltejs/kit'
 // can be served from a real hostname; CSP and route whitelist remain.
 export const handle: Handle = async ({ event, resolve }) => {
   const catalogRoute = event.url.pathname === '/api/catalog' || event.url.pathname.startsWith('/api/catalog/assets/')
+  const healthRoute = event.url.pathname === '/api/health/live' || event.url.pathname === '/api/health/ready'
   const presentationRoute = event.url.pathname === '/api/presentations' || event.url.pathname.startsWith('/api/presentations/')
   const recoveryRoute = event.url.pathname === '/api/recovery' || event.url.pathname.startsWith('/api/recovery/')
   // Only the P09 asset-library root and its exact catalog/presentation/export/recovery proxies, and
   // generated app assets are active. Legacy routes remain unreachable history.
-  if (event.url.pathname !== '/' && !event.url.pathname.startsWith('/_app/') && !catalogRoute && !presentationRoute && !recoveryRoute) {
+  if (event.url.pathname !== '/' && !event.url.pathname.startsWith('/_app/') && !catalogRoute && !healthRoute && !presentationRoute && !recoveryRoute) {
     return new Response('Not found', { status: 404 })
   }
   if (catalogRoute && event.request.method !== 'GET') return new Response('Method not allowed', { status: 405 })
+  if (healthRoute && event.request.method !== 'GET' && event.request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 })
   if (presentationRoute && !['GET', 'POST', 'PATCH', 'DELETE'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
   if (recoveryRoute && !['GET', 'POST'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
 

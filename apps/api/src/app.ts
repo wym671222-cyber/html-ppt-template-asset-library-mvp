@@ -22,6 +22,9 @@ function isAllowedOrigin(origin: string): boolean {
 }
 
 const MAX_JSON_BYTES = 16_384
+const WRITE_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
+
+type ReadinessCheck = () => void | Promise<void>
 
 async function jsonBody(context: { req: { text(): Promise<string> } }): Promise<Record<string, unknown>> {
   const text = await context.req.text()
@@ -60,12 +63,21 @@ function assertOnlyRecoveryKeys(body: Record<string, unknown>, keys: readonly st
   if (Object.keys(body).sort().join(',') !== [...keys].sort().join(',')) throw new RecoveryRequestError(`JSON request body must contain only ${keys.join(' and ')}`, 400)
 }
 
-export function createApp(options: { catalog?: AssetLibraryCatalog; presentations?: PresentationRepository; exports?: PresentationExportRepository; recovery?: LocalRecoveryService } = {}): Hono {
+export function createApp(options: {
+  catalog?: AssetLibraryCatalog
+  presentations?: PresentationRepository
+  exports?: PresentationExportRepository
+  recovery?: LocalRecoveryService
+  readOnly?: boolean
+  readiness?: ReadinessCheck
+} = {}): Hono {
   const app = new Hono()
   const catalog = options.catalog
   const presentations = options.presentations
   const exports = options.exports
   const recovery = options.recovery
+  const readOnly = options.readOnly ?? false
+  const readiness = options.readiness ?? (() => undefined)
 
   app.use('*', async (context, next) => {
     const host = context.req.header('host') ?? new URL(context.req.url).host
@@ -83,6 +95,11 @@ export function createApp(options: { catalog?: AssetLibraryCatalog; presentation
       return context.body(null, 204)
     }
 
+    if (readOnly && context.req.path.startsWith('/api/') && WRITE_METHODS.has(context.req.method)) {
+      context.header('Cache-Control', 'no-store')
+      return context.json({ error: 'APP_READ_ONLY' }, 503)
+    }
+
     await next()
     if (origin) {
       context.header('Access-Control-Allow-Origin', origin)
@@ -92,6 +109,16 @@ export function createApp(options: { catalog?: AssetLibraryCatalog; presentation
 
   app.get('/', (context) => context.json({ name: 'html-report-asset-library', status: 'p09-local-recovery' }))
   app.get('/api/health', (context) => context.json({ status: 'ok', scope: 'loopback-only' }))
+  app.get('/api/health/live', (context) => context.json({ status: 'live' }))
+  app.get('/api/health/ready', async (context) => {
+    try {
+      await readiness()
+      return context.json({ status: 'ready' })
+    } catch {
+      context.header('Cache-Control', 'no-store')
+      return context.json({ error: 'APP_NOT_READY' }, 503)
+    }
+  })
   app.get('/api/owner', (context) => context.json({ owner: getOwnerContext() }))
   app.get('/api/catalog', (context) => {
     if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)

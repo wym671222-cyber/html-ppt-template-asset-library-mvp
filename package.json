@@ -1,6 +1,10 @@
 {
   "name": "slide-maker",
   "private": true,
+  "engines": {
+    "node": "22.x",
+    "pnpm": "9.15.0"
+  },
   "scripts": {
     "dev": "turbo dev",
     "dev:bedrock": "AI_PROVIDER=bedrock turbo dev",
