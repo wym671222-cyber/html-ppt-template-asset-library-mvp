@@ -5,23 +5,23 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11 `passed`；P12 `in_progress`（worker 已交付，等待父监督者独立验收）；P13–P17 pending
+- 当前实现阶段：P11–P12 `passed`；P13 `in_progress`；P14–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p12_auth_core`
-- 下一安全动作：父监督者独立核对 P12 原子提交、隔离迁移、密码/会话/限流负向和全量回归；通过前不得创建 P13，不得越过 G1/G2 写服务器或 push。
+- 当前任务：`/root/p13_auth_approval_api`
+- 下一安全动作：P13 实现注册/审批/登录/禁用/重置/改密 API 和离线管理员 bootstrap；不得越界实现 P14 Owner 迁移，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
 | P11 | passed | `8d3cc0d91d2e4292967b3fba80f3aff5c7ed5542` | `/root/p11_reproducible_baseline` | passed | 父级复跑 P11 4/4、shared/API tsc、adapter-node Web build、shell 90/90；边界和原子提交已核验 |
-| P12 | in_progress（worker complete） | 本 handoff 所在原子提交 | `/root/p12_auth_core` | supervisor pending | `0005` 无邮箱账号、Argon2id、七天固定 DB session、严格 Cookie、持久限流和 Lucia 退役均有当前证据 |
-| P13 | pending | — | — | pending | 注册审批 API 仅为批准候选设计 |
+| P12 | passed | `7a0bfa457541a76c26b70a8d3613a0870339be98` | `/root/p12_auth_core` | passed | 父级复跑 P12 11/11、shared/API tsc、shell 8/8；迁移、令牌/Cookie/限流和退役边界已核验 |
+| P13 | in_progress | — | `/root/p13_auth_approval_api` | pending | 注册审批、登录会话、管理员密码管理与审计 API 实施中 |
 | P14 | pending | — | — | pending | 线上 Presentation/Item/Export 当前只读计数均为 0 |
 | P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
 
-### P12 worker 交付与当前证据
+### P12 通过事实与当前证据
 
 | 范围 | 已验证结果 |
 |---|---|
@@ -34,7 +34,7 @@
 | 定向与全量 | P12 Vitest 11/11；全量 Vitest 30 files/752 tests；shell 8/8；shared/API TypeScript；Web check 0 errors/9 条既有 warnings；Web/root build；P02 Chrome 1/1 与 P06–P09 Chrome 10/10 通过。 |
 | 边界 | 未迁移实际/生产 DB，未访问 sibling 真实 `02` 资产，未实现 P13/P14/P15，未修改 CHAIN_STATE/DECISION_LOG、remote/服务器/Caddy/PM2，无 push。 |
 
-P12 当前仅是 worker 交付，机器状态仍为 `in_progress`；父监督者独立验收通过前不得标记 passed 或创建 P13。
+P12 未迁移实际/生产 DB，未访问 sibling 真实 `02` 资产，未实现 P13/P14/P15，且无 remote/服务器/push 操作。父监督者已于 2026-08-10 独立核对提交边界、迁移与身份负向、定向测试、类型检查和 shell 全回归，结论为 `passed`。
 
 ### P11 通过事实与当前证据
 

@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P12",
-    "activePhaseThreadId": "/root/p12_auth_core",
+    "currentPhaseId": "P13",
+    "activePhaseThreadId": "/root/p13_auth_approval_api",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -52,27 +52,35 @@
       "id": "P12",
       "title": "身份数据与固定会话核心",
       "objective": "建立无邮箱用户、密码、持久化限流和可立即撤销的七天数据库会话",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P11"],
       "successor": "P13",
       "threadId": "/root/p12_auth_core",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "7a0bfa457541a76c26b70a8d3613a0870339be98",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to supervisor baseline 8290430 exactly one atomic commit; tracked worktree clean",
+          "parent rerun: P12 Vitest 11/11, shared/API tsc and shell 8/8 passed",
+          "worker full regression: Vitest 30 files/752, Web/root build and Chrome 11/11 passed",
+          "migration, hashed-token session, fixed expiry, strict cookie, persistent throttle and retired-route boundaries verified"
+        ]
+      }
     },
     {
       "id": "P13",
       "title": "注册审批与密码管理 API",
       "objective": "完成注册待审批、唯一管理员、登录、禁用、重置和改密的服务端闭环",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P12"],
       "successor": "P14",
-      "threadId": null,
+      "threadId": "/root/p13_auth_approval_api",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -134,5 +142,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-10T00:13:57+08:00"
+  "updatedAt": "2026-08-10T00:44:30+08:00"
 }
