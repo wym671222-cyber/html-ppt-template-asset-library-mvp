@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P15",
-    "activePhaseThreadId": "/root/p15_auth_frontend",
+    "currentPhaseId": "P16",
+    "activePhaseThreadId": "/root/p16_atomic_release",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -118,27 +118,35 @@
       "id": "P15",
       "title": "登录审批与个人资产前端",
       "objective": "交付中文注册登录、待审批、强制改密、管理员审批及个人 Presentation 旅程",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-terra",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P14"],
       "successor": "P16",
       "threadId": "/root/p15_auth_frontend",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "45898624eb4f8935a7112210f5cb103ab21610fc",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to supervisor baseline 81edc04 exactly one amended atomic commit; tracked worktree clean",
+          "parent rerun: P15/P13/P14 19/19, full Vitest 33 files/771, shell 8/8, shared/API tsc and adapter-node builds passed",
+          "parent HTTPS Chrome 2/2 and P06-P09 Chrome 10/10 passed; hydration race and dependent-test finding fixed before acceptance",
+          "same-origin BFF Origin/body/header/Cookie boundary, auth route gates, A/B isolation and secret/path scans verified"
+        ]
+      }
     },
     {
       "id": "P16",
       "title": "systemd 与原子发布工程",
       "objective": "完成非 root 服务、数据分离、Caddy、CI 和 WorkBuddy 可回滚发布包并演练",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P15"],
       "successor": "P17",
-      "threadId": null,
+      "threadId": "/root/p16_atomic_release",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -158,5 +166,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-10T01:52:58+08:00"
+  "updatedAt": "2026-08-10T02:54:25+08:00"
 }
