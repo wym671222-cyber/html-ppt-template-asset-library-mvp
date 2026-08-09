@@ -1,23 +1,23 @@
 # 实施状态
 
-## 生产化修复链 v2.0 当前状态（2026-08-09）
+## 生产化修复链 v2.0 当前状态（2026-08-10）
 
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P13 `passed`；P14 `in_progress`；P15–P17 pending
+- 当前实现阶段：P11–P14 `passed`；P15 `in_progress`；P16–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p14_user_ownership_retry`
-- 下一安全动作：父监督者独立复核 P14 的用户隔离、空库迁移/非空阻断、全局 admin-only recovery 与会话撤销；通过前不得实现 P15 UI，不得越过 G1/G2 写服务器或 push。
+- 当前任务：`/root/p15_auth_frontend`
+- 下一安全动作：P15 只实现同源 BFF、中文身份/审批 UI、路由门和个人 Presentation E2E；P15 通过父监督门禁前不得实施 P16 发布工程，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
 | P11 | passed | `8d3cc0d91d2e4292967b3fba80f3aff5c7ed5542` | `/root/p11_reproducible_baseline` | passed | 父级复跑 P11 4/4、shared/API tsc、adapter-node Web build、shell 90/90；边界和原子提交已核验 |
 | P12 | passed | `7a0bfa457541a76c26b70a8d3613a0870339be98` | `/root/p12_auth_core` | passed | 父级复跑 P12 11/11、shared/API tsc、shell 8/8；迁移、令牌/Cookie/限流和退役边界已核验 |
 | P13 | passed | `9851afc0737564413bc543e8f2756106346ba353` | `/root/p13_auth_approval_api` | passed | 父级复跑 P13 10/10、P12+P13 21/21、shared/API tsc、API build、shell 8/8；强制改密和 IP 信任缺口修正后验收 |
-| P14 | in_progress | 待本次原子提交 | `/root/p14_user_ownership_retry` | pending | worker 已交付 owner FK/隔离、manifest v2、共享 catalog、admin-only recovery 与全会话撤销；待父监督独立复核 |
-| P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
+| P14 | passed | `5c2d13f5e15cda9840a459a6c46e6a041bb0beed` | `/root/p14_user_ownership_retry` | passed | 父级复跑 P14+P09 13/13、shared/API tsc、shell 8/8、root build 2/2；迁移阻断、A/B 隔离、恢复撤销与 fixed owner 修正已核验 |
+| P15 | in_progress | — | `/root/p15_auth_frontend` | pending | 同源 BFF、中文身份/审批 UI 与端到端个人资产旅程正在实施 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
 
@@ -39,7 +39,7 @@ P13 未修改 Presentation Owner/Export/recovery 权限，未实现 P14/P15，�
 
 P14 首个 worker `/root/p14_user_ownership` 在只读阶段误执行会遍历父目录的 `find ..`，触发 sibling 目录扫描硬边界后立即停止。该命令只返回本仓库 AGENTS 路径，未读取 sibling 文件内容、未写入或提交。父监督者已废弃该 worker 并以显式仓库路径规则重启 `/root/p14_user_ownership_retry`。
 
-### P14 worker 交付事实（待父监督验收）
+### P14 通过事实与当前证据
 
 | 范围 | 当前已验证结果 |
 |---|---|
@@ -51,7 +51,7 @@ P14 首个 worker `/root/p14_user_ownership` 在只读阶段误执行会遍历�
 | 验证 | P14+P09 13/13；P06/P09/P11/P14 定向 24/24；全量 Vitest 32 files/767 tests；shell 8/8；shared/API TypeScript；Web check 0 errors/9 条既有 warnings；Web/API/root build 通过；真实 Chrome P02 1/1 与 P06–P09 10/10（含 P08 断网 ZIP 与 P09 隔离恢复）。 |
 | 边界 | 只使用仓库 P03 fixture 和隔离 DB/CAS；未迁移实际/生产 DB，未读取 sibling 真实 `02` 资产，未实施 P15，未修改 CHAIN_STATE/DECISION_LOG、`.workbuddy/`、remote/服务器/Caddy，无 push。 |
 
-P14 worker 交付仍保持 `in_progress`；只有父监督者独立复核提交数、差异边界与门禁后才可标记 `passed`，不得由 P14 worker 创建 P15。
+P14 产品提交相对监督基线恰好一个原子 commit，tracked 工作树干净且只保留用户自有 `.workbuddy/`。父监督者独立复跑 P14+P09 13/13、shared/API TypeScript、shell 8/8 和 root build 2/2，并核对迁移三类非空阻断、A/B CRUD/Export 隔离、admin 无内容绕过、恢复全会话撤销以及凭据/路径边界。初审发现的 catalog/recovery fixed `local-owner` 响应遗漏已在提交前修正，结论为 `passed`。
 
 ### P12 通过事实与当前证据
 

@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P14",
-    "activePhaseThreadId": "/root/p14_user_ownership_retry",
+    "currentPhaseId": "P15",
+    "activePhaseThreadId": "/root/p15_auth_frontend",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -96,27 +96,35 @@
       "id": "P14",
       "title": "用户数据归属与恢复边界迁移",
       "objective": "将 Presentation 和导出绑定用户并保持模板共享、恢复可审计和跨用户不可见",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P13"],
       "successor": "P15",
       "threadId": "/root/p14_user_ownership_retry",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "5c2d13f5e15cda9840a459a6c46e6a041bb0beed",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to supervisor baseline 3715fda exactly one atomic commit; tracked worktree clean",
+          "parent rerun: P14+P09 13/13, shared/API tsc, shell 8/8 and root build 2/2 passed",
+          "empty ownership migration, three populated-table blockers, A/B CRUD/export isolation and admin no-bypass verified",
+          "fixed local-owner response finding closed; recovery revokes all sessions and credential/boundary scans passed"
+        ]
+      }
     },
     {
       "id": "P15",
       "title": "登录审批与个人资产前端",
       "objective": "交付中文注册登录、待审批、强制改密、管理员审批及个人 Presentation 旅程",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-terra",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P14"],
       "successor": "P16",
-      "threadId": null,
+      "threadId": "/root/p15_auth_frontend",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -150,5 +158,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-10T01:20:30+08:00"
+  "updatedAt": "2026-08-10T01:52:58+08:00"
 }
