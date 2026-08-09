@@ -15,6 +15,7 @@
     "check": "bun run --cwd apps/web check && bun run test && bun run build",
     "db:migrate": "pnpm --filter @slide-maker/api db:migrate",
     "recovery:drill": "pnpm --filter @slide-maker/api recovery:drill",
+    "seed:admin": "pnpm --filter @slide-maker/api seed:admin",
     "audit:a11y": "node scripts/a11y-theme-audit.mjs",
     "start": "tsx apps/api/src/index.ts",
     "api:dev": "pnpm --filter @slide-maker/api dev",

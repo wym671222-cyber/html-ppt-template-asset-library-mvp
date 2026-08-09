@@ -43,13 +43,13 @@ describe('P11 health and read-only behavior', () => {
       ['DELETE', '/api/presentations/presentation-1/items/item-1'],
       ['POST', '/api/recovery/backups'],
     ] as const) {
-      const response = await app.request(`http://127.0.0.1:3001${path}`, { method })
+      const response = await app.request(`http://127.0.0.1:3001${path}`, { method, headers: { origin: 'http://127.0.0.1:5173' } })
       expect(response.status, `${method} ${path}`).toBe(503)
       expect(response.headers.get('cache-control')).toBe('no-store')
       await expect(response.json()).resolves.toEqual({ error: 'APP_READ_ONLY' })
     }
 
-    const normal = await createApp().request('http://127.0.0.1:3001/api/presentations', { method: 'POST' })
+    const normal = await createApp().request('http://127.0.0.1:3001/api/presentations', { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } })
     await expect(normal.json()).resolves.toEqual({ error: 'Presentation service unavailable' })
     expect(parseReadOnlyMode(undefined)).toBe(false)
     expect(parseReadOnlyMode('false')).toBe(false)

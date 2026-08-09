@@ -4,18 +4,23 @@ import { getOwnerContext } from './owner.js'
 import { PresentationRepository, PresentationRequestError } from './presentations/presentation-repository.js'
 import { ExportRequestError, PresentationExportRepository } from './presentation-exports/presentation-export-repository.js'
 import { LocalRecoveryService, RecoveryRequestError } from './recovery/local-recovery.js'
+import { AuthApplicationService } from './auth/service.js'
+import { createAuthRouter } from './routes/auth.js'
+import { createAdminRouter } from './routes/admin.js'
 
 export const LOOPBACK_HOST = '127.0.0.1'
-const allowedOriginSet = new Set(['http://127.0.0.1:5173', 'http://localhost:5173'])
+export const PRODUCTION_APP_ORIGIN = 'https://ppt.ajjy-ai.site'
+export const TEST_APP_ORIGINS = Object.freeze(['http://127.0.0.1:5173', 'http://localhost:5173'])
 
 function isLoopbackHostname(value: string): boolean {
   return value === '127.0.0.1' || value === 'localhost'
 }
 
-function isAllowedOrigin(origin: string): boolean {
+function isPermittedConfiguredOrigin(origin: string): boolean {
   try {
     const parsed = new URL(origin)
-    return parsed.protocol === 'http:' && allowedOriginSet.has(parsed.origin) && isLoopbackHostname(parsed.hostname)
+    if (parsed.origin !== origin || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) return false
+    return parsed.origin === PRODUCTION_APP_ORIGIN || (parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname))
   } catch {
     return false
   }
@@ -68,6 +73,8 @@ export function createApp(options: {
   presentations?: PresentationRepository
   exports?: PresentationExportRepository
   recovery?: LocalRecoveryService
+  auth?: AuthApplicationService
+  allowedOrigins?: readonly string[]
   readOnly?: boolean
   readiness?: ReadinessCheck
 } = {}): Hono {
@@ -76,6 +83,10 @@ export function createApp(options: {
   const presentations = options.presentations
   const exports = options.exports
   const recovery = options.recovery
+  const auth = options.auth
+  const allowedOrigins = options.allowedOrigins ?? TEST_APP_ORIGINS
+  if (allowedOrigins.length === 0 || allowedOrigins.some((origin) => !isPermittedConfiguredOrigin(origin))) throw new Error('Allowed application Origin is invalid')
+  const allowedOriginSet = new Set(allowedOrigins)
   const readOnly = options.readOnly ?? false
   const readiness = options.readiness ?? (() => undefined)
 
@@ -85,7 +96,11 @@ export function createApp(options: {
     if (!isLoopbackHostname(hostname)) return context.json({ error: 'Loopback Host required' }, 421)
 
     const origin = context.req.header('origin')
-    if (origin && !isAllowedOrigin(origin)) return context.json({ error: 'Loopback Origin required' }, 403)
+    const writeRequest = WRITE_METHODS.has(context.req.method)
+    if ((origin && !allowedOriginSet.has(origin)) || (writeRequest && !origin)) {
+      if (auth) auth.recordFailure('security.origin', 'request', 'ORIGIN_REJECTED')
+      return context.json({ error: 'Exact Origin required' }, 403)
+    }
 
     if (context.req.method === 'OPTIONS') {
       if (!origin) return context.json({ error: 'Origin required for preflight' }, 403)
@@ -120,6 +135,10 @@ export function createApp(options: {
     }
   })
   app.get('/api/owner', (context) => context.json({ owner: getOwnerContext() }))
+  if (auth) {
+    app.route('/api/auth', createAuthRouter(auth))
+    app.route('/api/admin', createAdminRouter(auth))
+  }
   app.get('/api/catalog', (context) => {
     if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)
     try {

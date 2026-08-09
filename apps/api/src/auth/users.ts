@@ -117,12 +117,35 @@ export class UserRepository {
     return row ? toStoredUser(row) : null
   }
 
-  replacePasswordAndRevokeSessions(id: string, passwordHash: unknown, now = Date.now()): void {
+  list(status?: UserStatus): StoredUser[] {
+    if (status !== undefined && status !== 'pending' && status !== 'active' && status !== 'disabled') throw new AuthDataError()
+    const rows = (status === undefined
+      ? this.database.prepare('SELECT * FROM users ORDER BY created_at, id').all()
+      : this.database.prepare('SELECT * FROM users WHERE status = ? ORDER BY created_at, id').all(status)) as UserRow[]
+    return rows.map(toStoredUser)
+  }
+
+  countAdmins(): number {
+    return (this.database.prepare("SELECT count(*) AS count FROM users WHERE role = 'admin'").get() as { count: number }).count
+  }
+
+  approve(id: string, approvedBy: string, now = Date.now()): StoredUser {
+    if (!USER_ID.test(id) || !USER_ID.test(approvedBy)) throw new AuthDataError('User id is invalid')
+    assertTimestamp(now)
+    const changed = this.database.prepare(`
+      UPDATE users SET status = 'active', approved_by = ?, approved_at = ?, updated_at = ?
+      WHERE id = ? AND role = 'member' AND status = 'pending'
+    `).run(approvedBy, now, now, id).changes
+    if (changed !== 1) throw new AuthDataError('User state is invalid')
+    return this.read(id)
+  }
+
+  replacePasswordAndRevokeSessions(id: string, passwordHash: unknown, now = Date.now(), mustChangePassword = false): StoredUser {
     if (!USER_ID.test(id) || !passwordHashMeetsPolicy(passwordHash)) throw new AuthDataError()
     assertTimestamp(now)
     try {
       this.database.transaction(() => {
-        const changed = this.database.prepare('UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ? WHERE id = ?').run(passwordHash, now, now, id).changes
+        const changed = this.database.prepare('UPDATE users SET password_hash = ?, must_change_password = ?, password_changed_at = ?, updated_at = ? WHERE id = ?').run(passwordHash, mustChangePassword ? 1 : 0, now, now, id).changes
         if (changed !== 1) throw new AuthDataError('User not found')
         this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
       })()
@@ -130,9 +153,10 @@ export class UserRepository {
       if (error instanceof AuthDataError) throw error
       throw new AuthDataError()
     }
+    return this.read(id)
   }
 
-  disableAndRevokeSessions(id: string, now = Date.now()): void {
+  disableAndRevokeSessions(id: string, now = Date.now()): StoredUser {
     if (!USER_ID.test(id)) throw new AuthDataError('User id is invalid')
     assertTimestamp(now)
     try {
@@ -145,5 +169,6 @@ export class UserRepository {
       if (error instanceof AuthDataError) throw error
       throw new AuthDataError()
     }
+    return this.read(id)
   }
 }

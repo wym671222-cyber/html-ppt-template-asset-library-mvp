@@ -92,17 +92,18 @@ describe('P07 presentation persistence and revision CAS', () => {
     const state = fixture()
     try {
       const app = createApp({ presentations: state.repository })
-      const create = await app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', body: JSON.stringify({ name: 'API 汇报' }) })
+      const origin = { origin: 'http://127.0.0.1:5173' }
+      const create = await app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', headers: origin, body: JSON.stringify({ name: 'API 汇报' }) })
       expect(create.status).toBe(201)
       const presentation = (await create.json() as { presentation: { id: string; revision: number } }).presentation
-      const add = await app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/items`, { method: 'POST', body: JSON.stringify({ templateVersionId: state.templateVersionId, expectedRevision: 0 }) })
+      const add = await app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/items`, { method: 'POST', headers: origin, body: JSON.stringify({ templateVersionId: state.templateVersionId, expectedRevision: 0 }) })
       expect(add.status).toBe(201)
       const item = (await add.json() as { presentation: { items: Array<{ id: string }> } }).presentation.items[0]
-      expect((await app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/items/${item.id}`, { method: 'PATCH', body: JSON.stringify({ expectedRevision: 0, position: 0 }) })).status).toBe(409)
+      expect((await app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/items/${item.id}`, { method: 'PATCH', headers: origin, body: JSON.stringify({ expectedRevision: 0, position: 0 }) })).status).toBe(409)
       for (const request of [
-        app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', body: '{' }),
-        app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/items/${item.id}`, { method: 'PATCH', body: JSON.stringify({ expectedRevision: 1, position: 0, slotOverrides: {} }) }),
-        app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', body: JSON.stringify({ name: 'x'.repeat(121) }) }),
+        app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', headers: origin, body: '{' }),
+        app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/items/${item.id}`, { method: 'PATCH', headers: origin, body: JSON.stringify({ expectedRevision: 1, position: 0, slotOverrides: {} }) }),
+        app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', headers: origin, body: JSON.stringify({ name: 'x'.repeat(121) }) }),
       ]) expect((await request).status).toBe(400)
       expect((await app.request('http://example.test/api/presentations')).status).toBe(421)
       expect((await app.request('http://127.0.0.1:3001/api/presentations', { headers: { origin: 'https://example.test' } })).status).toBe(403)

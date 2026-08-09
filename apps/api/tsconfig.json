@@ -15,6 +15,7 @@
     "src/owner.ts",
     "src/env.ts",
     "src/auth/cookie.ts",
+    "src/auth/bootstrap-admin.ts",
     "src/auth/password.ts",
     "src/auth/sessions.ts",
     "src/auth/throttle.ts",

@@ -11,6 +11,14 @@ export function catalogApiBaseUrl(): string {
   return parsed.origin
 }
 
+function apiWriteOrigin(): string {
+  const value = env.ORIGIN ?? 'http://127.0.0.1:5173'
+  if (value !== 'https://ppt.ajjy-ai.site' && value !== 'http://127.0.0.1:5173' && value !== 'http://localhost:5173') {
+    throw new Error('ORIGIN must be the production Origin or an explicit loopback test Origin')
+  }
+  return value
+}
+
 export async function forwardCatalogJson(target: URL): Promise<Response> {
   const response = await fetch(target, { method: 'GET', redirect: 'error' })
   const contentType = response.headers.get('content-type') ?? ''
@@ -24,7 +32,10 @@ export async function forwardCatalogJson(target: URL): Promise<Response> {
 export async function forwardPresentationJson(request: Request, target: URL): Promise<Response> {
   const method = request.method
   const headers = new Headers()
-  if (method !== 'GET') headers.set('Content-Type', 'application/json')
+  if (method !== 'GET') {
+    headers.set('Content-Type', 'application/json')
+    headers.set('Origin', apiWriteOrigin())
+  }
   const body = method === 'GET' ? undefined : await request.text()
   const response = await fetch(target, { method, headers, body, redirect: 'error' })
   const contentType = response.headers.get('content-type') ?? ''
@@ -38,7 +49,10 @@ export async function forwardPresentationJson(request: Request, target: URL): Pr
 export async function forwardRecoveryJson(request: Request, target: URL): Promise<Response> {
   const method = request.method
   const headers = new Headers()
-  if (method !== 'GET') headers.set('Content-Type', 'application/json')
+  if (method !== 'GET') {
+    headers.set('Content-Type', 'application/json')
+    headers.set('Origin', apiWriteOrigin())
+  }
   const body = method === 'GET' ? undefined : await request.text()
   const response = await fetch(target, { method, headers, body, redirect: 'error', credentials: 'omit' })
   const contentType = response.headers.get('content-type') ?? ''

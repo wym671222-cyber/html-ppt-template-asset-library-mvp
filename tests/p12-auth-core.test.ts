@@ -353,7 +353,7 @@ describe('P12 persistent throttle and unopened route boundary', () => {
   it('keeps registration/admin/auth APIs at 404 and rejects hostile Origin before route lookup', async () => {
     const app = createApp()
     for (const path of ['/api/auth/register', '/api/auth/login', '/api/auth/session', '/api/admin/users']) {
-      expect((await app.request(`http://127.0.0.1:3001${path}`, { method: 'POST' })).status).toBe(404)
+      expect((await app.request(`http://127.0.0.1:3001${path}`, { method: 'POST' })).status).toBe(403)
       expect((await app.request(`http://127.0.0.1:3001${path}`, { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } })).status).toBe(404)
       expect((await app.request(`http://127.0.0.1:3001${path}`, { method: 'POST', headers: { origin: 'https://attacker.example' } })).status).toBe(403)
     }

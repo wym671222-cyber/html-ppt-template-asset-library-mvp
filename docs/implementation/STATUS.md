@@ -5,21 +5,37 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P12 `passed`；P13 `in_progress`；P14–P17 pending
+- 当前实现阶段：P11–P12 `passed`；P13 `in_progress`（worker 已交付，等待父监督者独立验收）；P14–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`/root/p13_auth_approval_api`
-- 下一安全动作：P13 实现注册/审批/登录/禁用/重置/改密 API 和离线管理员 bootstrap；不得越界实现 P14 Owner 迁移，不得越过 G1/G2 写服务器或 push。
+- 下一安全动作：父监督者独立核对 P13 原子提交、身份状态机、Origin/限流/审计负向与全量回归；通过前不得创建 P14，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
 | P11 | passed | `8d3cc0d91d2e4292967b3fba80f3aff5c7ed5542` | `/root/p11_reproducible_baseline` | passed | 父级复跑 P11 4/4、shared/API tsc、adapter-node Web build、shell 90/90；边界和原子提交已核验 |
 | P12 | passed | `7a0bfa457541a76c26b70a8d3613a0870339be98` | `/root/p12_auth_core` | passed | 父级复跑 P12 11/11、shared/API tsc、shell 8/8；迁移、令牌/Cookie/限流和退役边界已核验 |
-| P13 | in_progress | — | `/root/p13_auth_approval_api` | pending | 注册审批、登录会话、管理员密码管理与审计 API 实施中 |
+| P13 | in_progress（worker complete） | 本 handoff 所在原子提交 | `/root/p13_auth_approval_api` | supervisor pending | 注册待审批、登录/退出/改密、管理员审批/禁用/重置、持久限流、审计与离线 bootstrap 已有当前证据 |
 | P14 | pending | — | — | pending | 线上 Presentation/Item/Export 当前只读计数均为 0 |
 | P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
+
+### P13 worker 交付与当前证据
+
+| 范围 | 已验证结果 |
+|---|---|
+| 注册与登录 | 活动 Hono composition root 挂载 `POST /api/auth/register\|login\|logout\|change-password` 和 `GET /api/auth/session`。注册仅接收 username/password，trim/lowercase 后创建 pending member 且不建 session；错误密码与未知用户统一 `INVALID_CREDENTIALS`，只有密码正确后才区分 pending/disabled。 |
+| 审批状态机 | `GET /api/admin/users?status=` 以及 approve/disable/reset-password 仅对有效 active admin 且 `must_change_password=false` 的 session 可达；middleware/service 双层稳定拒绝强制改密管理员为 403 `PASSWORD_CHANGE_REQUIRED`。审批只允许 pending member→active，禁止管理员禁用自己，未增加任何角色提升面。数据库部分唯一索引与 bootstrap 事务共同保证最多一名 admin。 |
+| 密码与会话撤销 | 管理员重置生成 24 字符加密随机临时密码，只在该次 `no-store` 响应显示，设 `must_change_password=true` 并撤销全部 session；临时登录只保留 session/logout/change-password，所有 admin API 失败关闭。改密验证当前密码，成功后设 false、撤销全部 session 并清除严格 `__Host-ppt_session` Cookie，新密码重登后恢复管理权限。 |
+| Origin 与 BFF | 所有 API 写请求现在必须带精确 Origin；生产只接受 `https://ppt.ajjy-ai.site`，测试/本地只接受明确 loopback Origin。现有 Presentation/Recovery BFF 只向 loopback API 转发受控 Origin，旧旅程的 Chrome 回归保持通过。 |
+| 持久限流与 IP 信任 | 注册固定 3/IP/小时；登录同时消耗 5/(IP+username)/15 分钟与 20/IP/15 分钟桶。全部复用 P12 `auth_throttle`，仅持久化加域 SHA-256 key，关闭/重开隔离 SQLite 后阻断仍生效。loopback API 忽略浏览器可控 `Forwarded`/`X-Forwarded-For`/`X-Real-IP`，只接受内部单值合法 `X-PPT-Client-IP`；P15 BFF 必须删除入站副本并从可信连接元数据覆盖，缺失/非法值统一按 loopback 桶。 |
+| 追加审计与无秘密诊断 | 成功/失败注册、登录、退出、改密、管理操作、bootstrap 和 Origin 拒绝写入 append-only `audit_events`；只保存固定 action/entity id/诊断码。测试回读证明 raw password、session token、Cookie 和临时密码不进入 audit/diagnostic。认证失败前后 users/sessions 逐字段不变，仅 throttle/audit 允许追加。 |
+| 离线 bootstrap | `pnpm seed:admin -- <username>` 仅接受用户名参数，密码与确认值必须在 TTY 中隐藏输入；非交互终端失败关闭，不存在 `--password` 通道，输出仅含公开 User。仅当 admin 计数为 0 时事务创建唯一 active admin；CLI 已显式进入 API `tsconfig`，标准 API/root build 类型检查并产出 `dist/auth/bootstrap-admin.js`。 |
+| 验证 | P13 定向 10/10，P12+P13 21/21，全量 Vitest 31 files/762 tests，shell 8/8，shared/API TypeScript，API/root build 通过，真实 Chrome P02 1/1 与 P06–P09 10/10 通过。 |
+| 边界 | 未修改 Presentation Owner/Export/recovery 权限模型，未实现 P15 UI，未迁移实际/生产 DB，未访问 sibling 真实 `02` 资产，未修改 CHAIN_STATE/DECISION_LOG、remote/服务器/Caddy/PM2，无 push。 |
+
+P13 当前仅是 worker 交付，机器状态仍为 `in_progress`；父监督者独立验收通过前不得标记 passed 或创建 P14。
 
 ### P12 通过事实与当前证据
 

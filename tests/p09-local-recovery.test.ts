@@ -297,24 +297,25 @@ describe('P09 recovery negative and security boundaries', () => {
       const overview = state.service.inspectCurrent()
       const app = createApp({ recovery: state.service })
       const root = 'http://127.0.0.1:3001/api/recovery'
+      const origin = { origin: 'http://127.0.0.1:5173' }
       expect((await app.request(root)).status).toBe(200)
       expect((await app.request(`${root}?path=../outside`)).status).toBe(400)
       expect((await app.request('http://example.test/api/recovery')).status).toBe(421)
       expect((await app.request(root, { headers: { origin: 'https://example.test' } })).status).toBe(403)
 
-      const stale = await app.request(`${root}/backups`, { method: 'POST', body: JSON.stringify({ expectedStateSha256: '0'.repeat(64) }) })
+      const stale = await app.request(`${root}/backups`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedStateSha256: '0'.repeat(64) }) })
       expect(stale.status).toBe(409)
       expect(await stale.json()).toEqual({ error: 'Recovery source state is stale; reload and retry' })
-      const extra = await app.request(`${root}/backups`, { method: 'POST', body: JSON.stringify({ expectedStateSha256: overview.stateSha256, path: '../outside' }) })
+      const extra = await app.request(`${root}/backups`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedStateSha256: overview.stateSha256, path: '../outside' }) })
       expect(extra.status).toBe(400)
 
-      const created = await app.request(`${root}/backups`, { method: 'POST', body: JSON.stringify({ expectedStateSha256: overview.stateSha256 }) })
+      const created = await app.request(`${root}/backups`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedStateSha256: overview.stateSha256 }) })
       expect(created.status).toBe(201)
       const backup = (await created.json() as { backup: { id: string; manifestSha256: string } }).backup
       expect((await app.request(`${root}/backups/${backup.id}/manifest`)).status).toBe(200)
-      expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', body: JSON.stringify({ expectedManifestSha256: '0'.repeat(64) }) })).status).toBe(409)
-      expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(201)
-      expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(409)
+      expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: '0'.repeat(64) }) })).status).toBe(409)
+      expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(201)
+      expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(409)
       for (const path of ['/api/auth/login', '/api/admin/users', '/api/preview', '/api/export', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
     } finally { rmSync(state.directory, { recursive: true, force: true }) }
   })

@@ -8,6 +8,7 @@ import { migrateDatabase } from './db/migrate.js'
 import { LOCAL_CONTENT_STORE_PATH, LOCAL_DATABASE_PATH, LOCAL_RECOVERY_BACKUP_PATH, LOCAL_RECOVERY_DRILL_PATH } from './db/paths.js'
 import { LocalRecoveryService } from './recovery/local-recovery.js'
 import { env } from './env.js'
+import { AuthApplicationService } from './auth/service.js'
 
 migrateDatabase()
 const { sqlite } = await import('./db/index.js')
@@ -22,6 +23,8 @@ const app = createApp({
     backupRoot: LOCAL_RECOVERY_BACKUP_PATH,
     restoreRoot: LOCAL_RECOVERY_DRILL_PATH,
   }),
+  auth: new AuthApplicationService(sqlite),
+  allowedOrigins: [env.appOrigin],
   readOnly: env.appReadOnly,
   readiness: () => {
     sqlite.prepare('SELECT 1').get()

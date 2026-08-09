@@ -207,7 +207,8 @@ describe('P08 API and migration boundary', () => {
       const presentation = preparedPresentation(state)
       const app = createApp({ presentations: state.presentations, exports: state.exports })
       const url = `http://127.0.0.1:3001/api/presentations/${presentation.id}/exports`
-      const create = await app.request(url, { method: 'POST', body: JSON.stringify({ expectedRevision: presentation.revision, itemIds: presentation.items.map((item) => item.id) }) })
+      const origin = { origin: 'http://127.0.0.1:5173' }
+      const create = await app.request(url, { method: 'POST', headers: origin, body: JSON.stringify({ expectedRevision: presentation.revision, itemIds: presentation.items.map((item) => item.id) }) })
       expect(create.status).toBe(201)
       const payload = await create.json() as { export: { id: string } }
       expect((await app.request(url)).status).toBe(200)
@@ -216,10 +217,10 @@ describe('P08 API and migration boundary', () => {
       expect((await app.request(`${url}/${payload.export.id}/zip`)).headers.get('content-type')).toBe('application/zip')
 
       for (const request of [
-        app.request(url, { method: 'POST', body: '{' }),
-        app.request(url, { method: 'POST', body: JSON.stringify({ expectedRevision: presentation.revision, itemIds: [presentation.items[0].id], extra: true }) }),
-        app.request(url, { method: 'POST', body: JSON.stringify({ expectedRevision: presentation.revision - 1, itemIds: [presentation.items[0].id] }) }),
-        app.request(`${url}?file=../outside`, { method: 'POST', body: JSON.stringify({ expectedRevision: presentation.revision, itemIds: [presentation.items[0].id] }) }),
+        app.request(url, { method: 'POST', headers: origin, body: '{' }),
+        app.request(url, { method: 'POST', headers: origin, body: JSON.stringify({ expectedRevision: presentation.revision, itemIds: [presentation.items[0].id], extra: true }) }),
+        app.request(url, { method: 'POST', headers: origin, body: JSON.stringify({ expectedRevision: presentation.revision - 1, itemIds: [presentation.items[0].id] }) }),
+        app.request(`${url}?file=../outside`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedRevision: presentation.revision, itemIds: [presentation.items[0].id] }) }),
       ]) expect([400, 409]).toContain((await request).status)
       expect((await app.request(`http://example.test/api/presentations/${presentation.id}/exports`)).status).toBe(421)
       expect((await app.request(url, { headers: { origin: 'https://example.test' } })).status).toBe(403)
