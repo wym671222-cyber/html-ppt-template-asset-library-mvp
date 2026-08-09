@@ -1,5 +1,41 @@
 # 实施状态
 
+## 生产化修复链 v2.0 当前状态（2026-08-09）
+
+- Workflow phase：`executing`
+- Plan version：`2.0`
+- User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
+- 当前实现阶段：P11 `in_progress`；P12–P17 pending
+- 实现分支：`feat/production-auth-hardening`
+- 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
+- 当前任务：`/root/p11_reproducible_baseline`
+- 下一安全动作：父监督者等待并独立验证 P11；不得越过 G1/G2 写服务器或 push。
+
+| 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
+|---|---|---|---|---|---|
+| P11 | in_progress | — | `/root/p11_reproducible_baseline` | pending | 已确认 adapter-node 未入库、线上手工构建、无访问日志和匿名写入风险 |
+| P12 | pending | — | — | pending | 账号/会话 schema 仅为批准候选设计 |
+| P13 | pending | — | — | pending | 注册审批 API 仅为批准候选设计 |
+| P14 | pending | — | — | pending | 线上 Presentation/Item/Export 当前只读计数均为 0 |
+| P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
+| P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
+| P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
+
+### 当前事实与不确定性
+
+- 当前网站可正常访问；已捕获的故障是 CSS/JS 网络加载失败后的无样式页面，不是 UTF-8 编码错误。
+- 因事故时没有 Caddy access log，不能把单一网络/代理原因写成已确认根因；计划通过日志、健康检查和可复现发布补齐证据。
+- 线上 DB `quick_check=ok`、foreign key check 0、5 migrations；1 asset、0 presentation/item/export。P17 必须现场重查，结果漂移即阻断。
+- 本地工作树在计划文件修改前仅有用户自有 `.workbuddy/` 未跟踪目录；不得 stage 或修改它。
+
+### 范围与外部状态
+
+- 本轮只新增/修订 implementation 计划文档和机器状态；未修改产品源码、依赖、数据库、服务器、Git remote 或 GitHub。
+- 用户明确豁免同类项目研究；`RESEARCH_REPORT.md` 只记录该决定，不把候选项目作为基线。
+- 三层审批门见 `DECISION_LOG.md`；旧 P01–P10 完成证据继续保留在本文件后续历史部分。
+
+## 历史 P01–P10 状态与证据（保持不变）
+
 ## 当前状态
 
 - 当前阶段：**P10 MVP 验收与本地交付已完成并通过门禁**

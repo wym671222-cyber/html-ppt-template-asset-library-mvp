@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "HTML PPT 模板资产库生产化修复与账号审批",
+    "workspacePath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "repositoryPath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "implementationBranch": "feat/production-auth-hardening",
+    "baselineCommit": "9c88b48aafd3bf2529cc31c5db9e346a915bf3aa"
+  },
+  "workflowPhase": "executing",
+  "plan": {
+    "version": "2.0",
+    "approved": true,
+    "approvedVersion": "2.0",
+    "approvedAt": "2026-08-09T23:50:11+08:00"
+  },
+  "contextPolicy": {
+    "targetPercent": 50,
+    "hardLimitPercent": 70
+  },
+  "orchestration": {
+    "mode": "parent-supervisor",
+    "workspaceStrategy": "single-implementation-branch",
+    "currentPhaseId": "P11",
+    "activePhaseThreadId": "/root/p11_reproducible_baseline",
+    "terminalPhaseId": "P17"
+  },
+  "phases": [
+    {
+      "id": "P11",
+      "title": "可复现构建与故障止险基线",
+      "objective": "修复干净构建并交付可审计的临时只读、健康检查和访问日志配置",
+      "status": "in_progress",
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "estimatedContextPercent": 40,
+      "dependsOn": [],
+      "successor": "P12",
+      "threadId": "/root/p11_reproducible_baseline",
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    },
+    {
+      "id": "P12",
+      "title": "身份数据与固定会话核心",
+      "objective": "建立无邮箱用户、密码、持久化限流和可立即撤销的七天数据库会话",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P11"],
+      "successor": "P13",
+      "threadId": null,
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    },
+    {
+      "id": "P13",
+      "title": "注册审批与密码管理 API",
+      "objective": "完成注册待审批、唯一管理员、登录、禁用、重置和改密的服务端闭环",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P12"],
+      "successor": "P14",
+      "threadId": null,
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    },
+    {
+      "id": "P14",
+      "title": "用户数据归属与恢复边界迁移",
+      "objective": "将 Presentation 和导出绑定用户并保持模板共享、恢复可审计和跨用户不可见",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P13"],
+      "successor": "P15",
+      "threadId": null,
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    },
+    {
+      "id": "P15",
+      "title": "登录审批与个人资产前端",
+      "objective": "交付中文注册登录、待审批、强制改密、管理员审批及个人 Presentation 旅程",
+      "status": "pending",
+      "model": "gpt-5.6-terra",
+      "reasoning": "high",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P14"],
+      "successor": "P16",
+      "threadId": null,
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    },
+    {
+      "id": "P16",
+      "title": "systemd 与原子发布工程",
+      "objective": "完成非 root 服务、数据分离、Caddy、CI 和 WorkBuddy 可回滚发布包并演练",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P15"],
+      "successor": "P17",
+      "threadId": null,
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    },
+    {
+      "id": "P17",
+      "title": "生产迁移切换与终局验收",
+      "objective": "经独立生产审批后推送精确提交、迁移腾讯服务器并验证可靠性和权限终局",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P16"],
+      "successor": null,
+      "threadId": null,
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    }
+  ],
+  "blockedReason": null,
+  "updatedAt": "2026-08-09T23:50:11+08:00"
+}
