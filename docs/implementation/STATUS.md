@@ -1,15 +1,15 @@
 # 实施状态
 
-## 生产化修复链 v2.0 当前状态（2026-08-10）
+## 生产化修复链 v2.1 提案状态（2026-08-10）
 
-- Workflow phase：`executing`
-- Plan version：`2.0`
-- User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P15 `passed`；P16 交付候选已完成但门禁因生产依赖高危项阻断；P17 blocked 且未创建
+- Workflow phase：`awaiting_approval`
+- Plan version：`2.1`（未批准）
+- 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00，已授权并完成至 P16 工程交付）
+- 当前实现阶段：P11–P15 `passed`；P16 工程提交已完成但 gate `blocked`；P16S 待 v2.1 审批；P17 pending 且未创建
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p16_atomic_release`
-- 下一安全动作：父监督者只读复核 P16 候选并保持 P16 blocked；依赖安全修复须经新的计划版本审批，当前不得创建或实施 P17，不得越过 G1/G2 写服务器、reload Caddy、迁移生产库或 push。
+- 当前任务：无 active task
+- 下一安全动作：等待用户明确回复“批准计划 v2.1（新增 P16S 依赖安全修复阶段）”。批准仅授权本地 dependency remediation、测试与原子提交；不授权 G1/G2、push、服务器或生产数据操作。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -18,8 +18,9 @@
 | P13 | passed | `9851afc0737564413bc543e8f2756106346ba353` | `/root/p13_auth_approval_api` | passed | 父级复跑 P13 10/10、P12+P13 21/21、shared/API tsc、API build、shell 8/8；强制改密和 IP 信任缺口修正后验收 |
 | P14 | passed | `5c2d13f5e15cda9840a459a6c46e6a041bb0beed` | `/root/p14_user_ownership_retry` | passed | 父级复跑 P14+P09 13/13、shared/API tsc、shell 8/8、root build 2/2；迁移阻断、A/B 隔离、恢复撤销与 fixed owner 修正已核验 |
 | P15 | passed | `45898624eb4f8935a7112210f5cb103ab21610fc` | `/root/p15_auth_frontend` | passed | 父级 HTTPS Chrome 2/2、P06–P09 10/10、全量 Vitest 771/771、shell 8/8、类型/构建与边界扫描通过；hydration/用例依赖修正后验收 |
-| P16 | blocked candidate | — | `/root/p16_atomic_release` | blocked | 发布工程与隔离演练完成；`pnpm audit --prod --audit-level high` 为 0 critical/21 high，不能形成 P17 可部署候选 |
-| P17 | blocked | — | — | blocked | 未创建；依赖安全门关闭且无 G2，禁止 push/迁移/部署 |
+| P16 | blocked | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | blocked | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；prod audit 0 critical/21 high，不能形成 P17 候选 |
+| P16S | pending approval | — | — | pending | v2.1 新增：只修复生产依赖并要求 audit high=0、critical=0；未授权实施 |
+| P17 | pending | — | — | pending | 未创建；P16S 未通过且无 G2，禁止 push/迁移/部署 |
 
 ### P16 交付候选与阻断事实
 

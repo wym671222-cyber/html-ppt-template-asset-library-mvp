@@ -1,11 +1,11 @@
 # HTML 模板平台实施总计划
 
-## 生产化修复扩展 v2.0（已批准执行）
+## 生产化修复扩展 v2.1（待批准）
 
-P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。2026-08-09 用户针对已经公网部署后的稳定性、身份和运维问题，明确要求制定新的生产化修复链并批准计划 v2.0；P11–P15 已通过父监督者门禁，P16 正在执行，P17 仍须按串行门禁推进。
+P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。用户已批准并执行计划 v2.0，P11–P15 已通过父监督者门禁；P16 发布工程已实现并通过功能演练，但生产依赖审计发现 21 个 high，原范围不能安全形成 P17 候选。v2.1 仅基于该明确证据新增 P16S 依赖安全阶段，不做同类项目研究；这是 material plan change，批准前不得实施。
 
-- 状态：`executing`（P16）
-- 计划版本：`2.0`
+- 状态：`awaiting_approval`（P16 安全门阻断；P16S 未授权）
+- 计划版本：`2.1`（未批准；历史批准版本为 `2.0`）
 - 仓库：`/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台`
 - 实现分支：`feat/production-auth-hardening`（批准后从基线创建）
 - 基线提交：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
@@ -35,8 +35,9 @@ P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。20
 | P13 | 注册审批与密码管理 API | 注册、审批、登录、禁用、重置、改密闭环 | `gpt-5.6-sol` | high | 45% | P12 | P14 |
 | P14 | 用户数据归属与恢复边界迁移 | Presentation/Export 私有化与恢复更新 | `gpt-5.6-sol` | xhigh | 50% | P13 | P15 |
 | P15 | 登录审批与个人资产前端 | 中文身份 UI、路由门、管理员页与 E2E | `gpt-5.6-terra` | high | 45% | P14 | P16 |
-| P16 | systemd 与原子发布工程 | 非 root 服务、数据分离、CI/WorkBuddy 发布演练 | `gpt-5.6-sol` | xhigh | 50% | P15 | P17 |
-| P17 | 生产迁移切换与终局验收 | 精确提交推送、生产迁移、切换和最终验收 | `gpt-5.6-sol` | xhigh | 45% | P16 | 无 |
+| P16 | systemd 与原子发布工程 | 非 root 服务、数据分离、CI/WorkBuddy 发布演练 | `gpt-5.6-sol` | xhigh | 50% | P15 | P16S |
+| P16S | 生产依赖安全修复 | 关闭 prod high/critical 并重建可部署候选 | `gpt-5.6-sol` | xhigh | 50% | P16 | P17 |
+| P17 | 生产迁移切换与终局验收 | 精确提交推送、生产迁移、切换和最终验收 | `gpt-5.6-sol` | xhigh | 45% | P16S | 无 |
 
 ### P11 — 可复现构建与故障止险基线
 
@@ -103,12 +104,24 @@ P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。20
 - 运行：API `127.0.0.1:3001`；Web 使用当前已验证 Docker bridge 地址 `172.18.0.1:4173`，若执行前该地址漂移则 P17 阻断而非改为公网 bind；设置 `ORIGIN=https://ppt.ajjy-ai.site`。
 - CI：all-branch frozen install、typecheck、unit/shell、Web build、Chrome E2E；不含生产密钥和自动部署。
 - 演练：在临时目录/备用端口启动非 root 服务，迁移隔离 DB，验证权限、日志脱敏、Caddy validate、健康检查、静态 hash 兼容和回滚；不得 reload 生产 Caddy。
-- 完成门：干净 clone build、服务/迁移/rollback 演练、依赖和凭据扫描、原子 commit、clean status、`handoffs/P16.md`；报告 P17 精确候选提交。
+- 工程门：干净 clone build、服务/迁移/rollback 演练、依赖和凭据扫描、原子 commit、clean status、`handoffs/P16.md`。P16 产品提交 `81ed30c067138a2f9225a7e5da0e90a06717f573` 已满足工程门，但依赖扫描为 0 critical/21 high，因此安全门阻断且不得报告 P17 候选。
 - 回滚：删除临时演练目录仅限工具创建且已验证的路径；仓库 revert；不清理生产旧发布。
+
+### P16S — 生产依赖安全修复（v2.1 新增，待批准）
+
+- 目标：不改变账号、Owner、导出、恢复或部署架构，只修复已确认的生产依赖 high/critical 风险，形成新的唯一候选 SHA。
+- 允许范围：根/Web/API manifests、`pnpm-lock.yaml`、与依赖升级直接相关的 import/type/build 适配、已退役且未挂载依赖入口的最小删除或 fail-closed 占位、依赖审计/回归测试、STATUS 与 `handoffs/P16S.md`。
+- 修复原则：优先移除无活动调用链的生产依赖；必须保留的直接依赖升级到 audit 给出的 patched 范围；传递依赖通过升级直接父依赖解决。禁止 `auditConfig`/CVE ignore、降低 audit 阈值、`--force`、无证据 override 或恢复旧邮件/云端/在线能力。
+- 已知必审链：直接 `drizzle-orm`、`hono`；以及当前生产图中的 Nodemailer、XML、归档、富文本/CSS 与 AWS 传递链。是否移除或升级只由活动 composition root、编译图和测试证据决定，不把“未观察到利用”当作豁免。
+- 不变量：migration SQL、journal/ledger、5/6/7 trigger 合同、SQLite/CAS 数据格式、API/BFF 行为、中文身份旅程、A/B 404、systemd/Caddy/WorkBuddy 失败关闭均不得漂移。
+- 验证：干净导出 `pnpm@9.15.0 install --frozen-lockfile`；`pnpm audit --prod --audit-level high` 必须 exit 0 且 high=0、critical=0；direct/transitive 生产树回读；全量 Vitest/shell/type/Web/root build；P15 2/2、P06–P09 10/10 Chrome；P16 release rehearsal/local preflight；迁移 5→7、6→7、7 no-op 和 wrong-ledger 负向。
+- 完成门：一个原子 P16S commit、tracked clean、无凭据/禁止路径、`handoffs/P16S.md`；父监督者独立复现 zero high/critical 后，才报告该新完整 SHA 为 P17 候选并另行请求 G2。
+- 禁止：生产/实际 DB/CAS、服务器、Caddy/systemd/PM2、remote/push、G1/G2、真实 sibling 资产、功能扩张或审计豁免。
+- 回滚：revert P16S commit 并恢复其 lock/manifests；不触碰任何生产状态。
 
 ### P17 — 生产迁移切换与终局验收
 
-- 前置审批：必须获得 G2，批准语句包含 P16 候选完整 SHA；没有精确 SHA 不执行任何 push 或生产写操作。
+- 前置审批：P16S 必须通过并由父监督者报告新的候选完整 SHA；随后必须获得 G2，批准语句包含该完整 SHA。没有精确 SHA 不执行任何 push 或生产写操作。
 - 发布顺序：push `feat/production-auth-hardening` → 等待该 SHA CI 全绿 → 无 force 地将远端 `personal/asset-library-mvp` 快进到同一 SHA → WorkBuddy 只读 preflight → 开启维护/只读 → 备份并记录 DB/CAS/Caddy/systemd/commit 哈希 → 部署 release → 迁移 → 交互式创建唯一管理员 → 启动 systemd → Caddy validate/reload → 公网 smoke → 移除临时匿名 allowlist但保留应用只读开关可回退。
 - preflight：DNS/TLS、磁盘、端口、Docker bridge、Caddy 配置、线上 commit、DB quick/FK/5 migrations、业务计数、现有备份、无未知表；Presentation/Item/Export 非零立即阻断。
 - 验收：20 次冷启动 CSS/JS/API 全 200 且 MIME 正确；注册/审批/登录/强制改密；A/B 隔离；admin-only recovery；401/403/404/Origin 负向；systemd/主机重启恢复；无 `EADDRINUSE`；进程非 root；DB 权限正确；Caddy 日志可定位失败且无凭据。
@@ -127,11 +140,12 @@ P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。20
 | P14 | Presentation/Export repositories、owner、P08 contract、P09 recovery、旧 triggers | owner/repositories/export/recovery、`0006` migration、shared types、P14 tests/docs | `node_modules/.bin/vitest run tests/p14-user-ownership.test.ts tests/p09-local-recovery.test.ts`; API tsc; quick/FK/ledger/count scan; P04–P10 full regression |
 | P15 | Web hooks/layout/BFF、现有旧 auth pages、P14 interfaces、Playwright configs | Web auth routes/components/stores/hooks、P15 E2E/tests/docs | `pnpm --filter @slide-maker/web check`; `pnpm --filter @slide-maker/web build`; `node_modules/.bin/playwright test --config=playwright.p15.config.ts` |
 | P16 | env/data paths、migrator startup、adapter-node build、现有 Caddy/PM2 read-only snapshot | ops/systemd/caddy/workbuddy、CI、runtime paths/cache、P16 tests/docs | `bash tests/p16-release-rehearsal.sh`; `bash ops/workbuddy/preflight.sh --target local`; clean-clone frozen build; secret scan; Caddy validate |
-| P17 | P16 handoff/approved SHA、线上只读 preflight、G2 approval record | 仅发布记录、STATUS/CHAIN_STATE/P17 handoff；产品源码冻结 | `bash ops/workbuddy/preflight.sh --target 119.29.241.146`; `bash ops/workbuddy/deploy.sh --commit <approved-sha>`; `bash ops/workbuddy/smoke.sh --origin https://ppt.ajjy-ai.site`; rollback drill/readback |
+| P16S | manifests/lock、prod audit dependency paths、active composition root、P16 handoff | manifests/lock、依赖直接适配、退役入口最小清理、P16S tests/docs | frozen install；`pnpm audit --prod --audit-level high`；全量门；P15/P06 Chrome；P16 rehearsal/preflight |
+| P17 | P16S handoff/approved SHA、线上只读 preflight、G2 approval record | 仅发布记录、STATUS/CHAIN_STATE/P17 handoff；产品源码冻结 | `bash ops/workbuddy/preflight.sh --target 119.29.241.146`; `bash ops/workbuddy/deploy.sh --target production --commit <approved-sha> --approved-commit <approved-sha>`; `bash ops/workbuddy/smoke.sh --origin https://ppt.ajjy-ai.site`; rollback drill/readback |
 
 公共全量门：`node_modules/.bin/vitest run`、`bash tests/run_all.sh`、shared/API TypeScript、Web check/build、适用的真实 Chrome E2E、`git diff --check`。每次 commit 前必须 `git diff --cached --check` 并确认 staged paths 不含 `.workbuddy/`、生产数据、凭据或 sibling 真实资产。
 
-模型理由：P12/P14/P16/P17 涉及身份安全、复杂迁移和生产切换，固定 `gpt-5.6-sol/xhigh`；P11/P13 为边界明确的多文件后端工作，使用 `gpt-5.6-sol/high`；P15 以 UI/交互和 E2E 为主，使用 `gpt-5.6-terra/high`。
+模型理由：P12/P14/P16/P16S/P17 涉及身份安全、复杂迁移、依赖兼容或生产切换，固定 `gpt-5.6-sol/xhigh`；P11/P13 为边界明确的多文件后端工作，使用 `gpt-5.6-sol/high`；P15 以 UI/交互和 E2E 为主，使用 `gpt-5.6-terra/high`。
 
 
 ### 公共接口与迁移汇总
@@ -147,11 +161,12 @@ P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。20
 - 所有阶段 context 估算 ≤50%，每阶段恰好一个模型/思考级别、一个后继和一个原子 commit。
 - 所有 migration 在隔离 DB 和生产副本门禁上验证，未知数据/表/旧 trigger 失败即停止。
 - 账号安全、跨用户 404、会话撤销、Origin、日志脱敏、只读模式、干净构建、systemd/Caddy/WorkBuddy 回滚均有负向证据。
+- P16S 后生产审计 high=0、critical=0，且不使用忽略、降阈值或无证据 override。
 - P01–P10 fixture/CAS/Chromium/export/recovery 不变量继续全量通过；真实 sibling 资产保持未访问。
 
 ### 明确未授权
 
-- 计划未批准前：禁止创建实现分支、修改产品代码、commit、push 或服务器写操作。
+- v2.1 未批准前：禁止实施 P16S、修改 manifest/lock、创建其执行任务或推进 P17；历史 v2.0 产品提交保持不变。
 - 仅 G0：禁止 push、Caddy reload、服务变更、生产 DB/CAS 写入和管理员初始化。
 - 未有 G1：禁止临时 Caddy 只读/日志变更。
 - 未有 G2：禁止 push、生产迁移、systemd/Caddy 切换和部署。
