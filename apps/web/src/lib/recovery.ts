@@ -37,7 +37,7 @@ export type RecoveryRestore = Readonly<{
 type RecoveryPayload = { error?: string; recovery?: RecoveryOverview; backup?: RecoveryBackup; restore?: RecoveryRestore }
 
 async function request(path: string, method = 'GET', body?: Record<string, unknown>): Promise<RecoveryPayload> {
-  const response = await fetch(path, { method, credentials: 'omit', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+  const response = await fetch(path, { method, credentials: 'include', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
   const payload = await response.json().catch(() => ({ error: '恢复服务返回了无效响应' })) as RecoveryPayload
   if (!response.ok) throw new Error(payload.error ?? `恢复请求失败（${response.status}）`)
   return payload

@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>Sign In - CUNY AI Lab Slide Wiz</title>
+  <title>登录 · 模板资产库</title>
 </svelte:head>
 
 <div class="auth-page">

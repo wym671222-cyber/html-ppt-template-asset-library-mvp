@@ -5,11 +5,11 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P14 `passed`；P15 `in_progress`；P16–P17 pending
+- 当前实现阶段：P11–P14 `passed`；P15 已交付、待父监督者独立 gate；P16–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`/root/p15_auth_frontend`
-- 下一安全动作：P15 只实现同源 BFF、中文身份/审批 UI、路由门和个人 Presentation E2E；P15 通过父监督门禁前不得实施 P16 发布工程，不得越过 G1/G2 写服务器或 push。
+- 下一安全动作：父监督者独立复核 P15 原子提交、同源 BFF/认证门和隔离 Chrome 证据；通过前不得实施 P16 发布工程，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -17,7 +17,7 @@
 | P12 | passed | `7a0bfa457541a76c26b70a8d3613a0870339be98` | `/root/p12_auth_core` | passed | 父级复跑 P12 11/11、shared/API tsc、shell 8/8；迁移、令牌/Cookie/限流和退役边界已核验 |
 | P13 | passed | `9851afc0737564413bc543e8f2756106346ba353` | `/root/p13_auth_approval_api` | passed | 父级复跑 P13 10/10、P12+P13 21/21、shared/API tsc、API build、shell 8/8；强制改密和 IP 信任缺口修正后验收 |
 | P14 | passed | `5c2d13f5e15cda9840a459a6c46e6a041bb0beed` | `/root/p14_user_ownership_retry` | passed | 父级复跑 P14+P09 13/13、shared/API tsc、shell 8/8、root build 2/2；迁移阻断、A/B 隔离、恢复撤销与 fixed owner 修正已核验 |
-| P15 | in_progress | — | `/root/p15_auth_frontend` | pending | 同源 BFF、中文身份/审批 UI 与端到端个人资产旅程正在实施 |
+| P15 | delivered | 本提交（待父监督者记录 SHA） | `/root/p15_auth_frontend` | pending | 同源 BFF、中文身份/审批 UI、强制改密；隔离 Chrome 2/2 和 P06–P09 Chrome 10/10 已完成；待独立复核 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
 

@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types'
-import { catalogApiBaseUrl, forwardRecoveryJson } from '$lib/server/catalog-api'
+import { forwardJson } from '$lib/server/bff'
 
 const BACKUP_ID = /^backup-[a-z0-9-]+$/
 
@@ -12,13 +12,13 @@ function controlledPath(path: string, method: string): string | null {
   return null
 }
 
-async function forward(request: Request, path: string, url: URL): Promise<Response> {
+async function forward(event: Parameters<RequestHandler>[0], path: string, url: URL): Promise<Response> {
   if (url.search) return Response.json({ error: '恢复请求不接受查询参数' }, { status: 400 })
-  const targetPath = controlledPath(path, request.method)
+  const targetPath = controlledPath(path, event.request.method)
   if (!targetPath) return Response.json({ error: '无效的恢复请求路径' }, { status: 400 })
-  try { return await forwardRecoveryJson(request, new URL(targetPath, catalogApiBaseUrl())) }
+  try { return await forwardJson(event, targetPath) }
   catch { return Response.json({ error: '无法连接本机恢复服务' }, { status: 502 }) }
 }
 
-export const GET: RequestHandler = async ({ request, params, url }) => forward(request, params.path, url)
-export const POST: RequestHandler = async ({ request, params, url }) => forward(request, params.path, url)
+export const GET: RequestHandler = async (event) => forward(event, event.params.path, event.url)
+export const POST: RequestHandler = async (event) => forward(event, event.params.path, event.url)

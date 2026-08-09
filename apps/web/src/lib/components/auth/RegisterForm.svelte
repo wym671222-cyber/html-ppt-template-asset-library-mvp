@@ -1,56 +1,61 @@
 <script lang="ts">
   import { base } from '$app/paths';
+  import { goto } from '$app/navigation';
   import { api } from '$lib/api';
+  import { authMessage } from '$lib/auth';
+  import { onMount } from 'svelte';
 
-  let name = $state('');
-  let email = $state('');
+  let username = $state('');
   let password = $state('');
   let confirmPassword = $state('');
   let error = $state('');
   let success = $state('');
+  let errorBox: HTMLElement | undefined = $state()
   let loading = $state(false);
+  let ready = $state(false);
+
+  onMount(() => { ready = true });
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     error = '';
     success = '';
 
-    if (password.length < 8) {
-      error = 'Password must be at least 8 characters';
+    if (password.length < 10) {
+      error = '密码须为 10–128 个字符。';
+      requestAnimationFrame(() => errorBox?.focus());
       return;
     }
 
     if (password !== confirmPassword) {
-      error = 'Passwords do not match';
+      error = '两次输入的密码不一致。';
+      requestAnimationFrame(() => errorBox?.focus());
       return;
     }
 
     loading = true;
 
     try {
-      await api.register({ name, email, password });
-      success = 'Account created! Check your email to verify.';
-      name = '';
-      email = '';
-      password = '';
-      confirmPassword = '';
+      await api.registerAccount({ username, password });
+      await goto(`${base}/pending`)
     } catch (err: any) {
-      error = err.message || 'Registration failed';
+      error = authMessage(err?.message);
+      requestAnimationFrame(() => errorBox?.focus());
     } finally {
       loading = false;
     }
   }
 </script>
 
-<form onsubmit={handleSubmit} class="auth-form">
+<form onsubmit={handleSubmit} class="auth-form" aria-busy={!ready || loading} data-auth-ready={ready ? 'true' : undefined}>
   <div class="form-header">
-    <h1>CUNY AI Lab</h1>
-    <p>Create your account</p>
+    <h1>模板资产库</h1>
+    <p>注册账号后由管理员审批</p>
   </div>
 
   <div class="form-body">
     {#if error}
-      <div class="error-message" role="alert">{error}</div>
+      <div class="error-message" role="alert" tabindex="-1" bind:this={errorBox}>{error}</div>
     {/if}
 
     {#if success}
@@ -58,53 +63,45 @@
     {/if}
 
     <label class="field">
-      <span>Full Name</span>
+      <span>用户名</span>
       <input
         type="text"
-        bind:value={name}
-        placeholder="Your full name"
+        autocomplete="username"
+        bind:value={username}
+        placeholder="3–32 位：字母、数字、._-"
         required
       />
     </label>
 
     <label class="field">
-      <span>Email</span>
-      <input
-        type="email"
-        bind:value={email}
-        placeholder="you@cuny.edu"
-        required
-      />
-      <small class="hint">Must be a *.cuny.edu address</small>
-    </label>
-
-    <label class="field">
-      <span>Password</span>
+      <span>密码</span>
       <input
         type="password"
         bind:value={password}
-        placeholder="Minimum 8 characters"
+        autocomplete="new-password"
+        placeholder="10–128 个字符"
         required
-        minlength="8"
+        minlength="10"
       />
     </label>
 
     <label class="field">
-      <span>Confirm Password</span>
+      <span>确认密码</span>
       <input
         type="password"
         bind:value={confirmPassword}
-        placeholder="Re-enter your password"
+        autocomplete="new-password"
+        placeholder="再次输入密码"
         required
       />
     </label>
 
-    <button type="submit" class="btn-primary" disabled={loading}>
-      {loading ? 'Creating account...' : 'Register'}
+    <button type="submit" class="btn-primary" disabled={!ready || loading}>
+      {loading ? '正在提交…' : '提交注册'}
     </button>
 
     <p class="form-footer">
-      Already have an account? <a href="{base}/login">Sign in</a>
+      已有账号？<a href="{base}/login">登录</a>
     </p>
   </div>
 </form>
@@ -190,10 +187,6 @@
     box-shadow: 0 0 0 3px rgba(59, 115, 230, 0.15);
   }
 
-  .hint {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-  }
 
   .btn-primary {
     padding: 0.75rem;

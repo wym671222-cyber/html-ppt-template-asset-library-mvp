@@ -5,6 +5,10 @@
   import { loadCatalog, type CatalogResponse } from '$lib/asset-library'
   import { addTemplate, copyItem, createPresentation, createPresentationExport, deleteItem, loadPresentationExports, loadPresentations, moveItem, renamePresentation, reviseOverrides, safeExportUrl, type Presentation, type PresentationExport } from '$lib/presentations'
   import { createLocalBackup, loadRecoveryOverview, runIsolatedRestore, safeBackupManifestUrl, type RecoveryBackup, type RecoveryOverview } from '$lib/recovery'
+  import { api } from '$lib/api'
+  import { goto } from '$app/navigation'
+
+  let { data }: { data: { user: import('$lib/auth').SessionUser } } = $props()
 
   let search = $state('')
   let category = $state('')
@@ -95,7 +99,15 @@
     return () => { active = false }
   })
 
+  async function logout(): Promise<void> {
+    try { await api.p15Logout() } finally { await goto('/login') }
+  }
+
   $effect(() => {
+    if (data.user.role !== 'admin') {
+      recoveryLoading = false
+      return
+    }
     let active = true
     void loadRecoveryOverview().then((next) => {
       if (active) recovery = next
@@ -209,13 +221,13 @@
 
 <svelte:head>
   <title>模板资产库</title>
-  <meta name="description" content="本机单 Owner HTML 汇报模板资产库" />
+  <meta name="description" content="个人 HTML 汇报模板资产库" />
 </svelte:head>
 
 <div class="library-shell">
   <header class="app-header">
-    <h1>模板资产库</h1>
-    <p>本机 <span aria-hidden="true">·</span> 单 Owner</p>
+    <div><h1>模板资产库</h1><p>个人汇报 <span aria-hidden="true">·</span> 固定版本导出</p></div>
+    <nav aria-label="账号操作"><span>你好，{data.user.username}</span>{#if data.user.role === 'admin'}<a href="/admin">账号审批</a>{/if}<button type="button" onclick={() => void logout()}>退出</button></nav>
   </header>
 
   <main class="workspace">
@@ -320,7 +332,7 @@
             {#if exportNotice}<p class="export-notice" role="status" tabindex="-1" bind:this={exportStatus}>{exportNotice}</p>{/if}
           </section>
         {/if}
-        <section class="recovery-panel" aria-labelledby="recovery-heading" aria-busy={recoveryLoading}>
+        {#if data.user.role === 'admin'}<section class="recovery-panel" aria-labelledby="recovery-heading" aria-busy={recoveryLoading}>
           <header>
             <div><h3 id="recovery-heading">备份与恢复演练</h3><p>显式 SHA-256 清单 · 全新隔离目录 · 不覆盖原状态</p></div>
             <button type="button" disabled={!recovery || recoveryLoading} onclick={() => { void backupCurrentState() }}>{recoveryLoading ? '正在校验…' : '生成备份清单'}</button>
@@ -330,7 +342,7 @@
           {:else if recoveryError}
             <div class="recovery-error" role="alert"><p>{recoveryError}</p><button type="button" onclick={() => { void refreshRecovery() }}>重新检查</button></div>
           {:else if recovery}
-            <p class="recovery-summary">5 条 migration · {recovery.objectCount} 个对象 · {recovery.derivativeCount} 个派生物 · 状态 <code>{recovery.stateSha256.slice(0, 12)}…</code></p>
+            <p class="recovery-summary">{recovery.migrationCount} 条 migration · {recovery.objectCount} 个对象 · {recovery.derivativeCount} 个派生物 · 状态 <code>{recovery.stateSha256.slice(0, 12)}…</code></p>
             {#if recovery.backups.length === 0}
               <p class="recovery-empty">暂无备份清单。恢复只会写入新的本机隔离目录。</p>
             {:else}
@@ -345,7 +357,7 @@
             {/if}
           {/if}
           {#if recoveryNotice}<p class="recovery-notice" role="status" tabindex="-1" bind:this={recoveryStatus}>{recoveryNotice}</p>{/if}
-        </section>
+        </section>{/if}
         {#if presentationNotice}<p class="presentation-notice" role="status">{presentationNotice}</p>{/if}
       </section>
     </section>
@@ -358,10 +370,13 @@
   :global(html) { background: #fff; }
   :global(body) { min-width: 320px; min-height: 100vh; overflow: hidden; }
   .library-shell { min-height: 100vh; display: grid; grid-template-rows: 72px minmax(0, 1fr); background: #fff; color: #0b1739; }
-  .app-header { display: flex; align-items: center; gap: 44px; padding: 0 30px; border-bottom: 1px solid #dce2ea; background: #fff; }
+  .app-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 30px; border-bottom: 1px solid #dce2ea; background: #fff; }
   .app-header h1 { font-size: 25px; line-height: 1; letter-spacing: -.02em; }
   .app-header p { color: #536178; font-size: 14px; }
   .app-header p span { margin: 0 8px; color: #9aa7b8; }
+  .app-header nav { display: flex; align-items: center; gap: 12px; color: #536178; font-size: 14px; }
+  .app-header nav a, .app-header nav button { color: #1768e5; background: transparent; border: 0; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
+  .app-header nav button:focus-visible, .app-header nav a:focus-visible { outline: 3px solid rgba(23, 104, 229, .24); outline-offset: 2px; }
   .workspace { min-height: 0; display: grid; grid-template-columns: 280px minmax(420px, 1fr) minmax(380px, 470px); }
   .results-panel { min-width: 0; padding: 28px; overflow-y: auto; }
   .results-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; min-height: 76px; }

@@ -1,13 +1,18 @@
 <script lang="ts">
   import { api } from '$lib/api';
-  import { currentUser } from '$lib/stores/auth';
-  import { goto } from '$app/navigation';
+  import { authMessage } from '$lib/auth';
+  import { goto, invalidateAll } from '$app/navigation';
   import { base } from '$app/paths';
+  import { onMount } from 'svelte';
 
-  let email = $state('');
+  let username = $state('');
   let password = $state('');
   let error = $state('');
+  let errorBox: HTMLElement | undefined = $state()
   let loading = $state(false);
+  let ready = $state(false);
+
+  onMount(() => { ready = true });
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -15,57 +20,56 @@
     loading = true;
 
     try {
-      const { user } = await api.login({ email, password });
-      currentUser.set(user);
-      goto(`${base}/`);
+      const { user } = await api.loginAccount({ username, password });
+      await invalidateAll();
+      await goto(user.mustChangePassword ? `${base}/change-password` : `${base}/`);
     } catch (err: any) {
-      error = err.message || 'Login failed';
+      error = authMessage(err?.message);
+      requestAnimationFrame(() => errorBox?.focus());
     } finally {
       loading = false;
     }
   }
 </script>
 
-<form onsubmit={handleSubmit} class="auth-form">
+<form onsubmit={handleSubmit} class="auth-form" aria-busy={!ready || loading} data-auth-ready={ready ? 'true' : undefined}>
   <div class="form-header">
-    <h1>CUNY AI Lab</h1>
-    <p>Sign in to <span class="brand-slide">Slide</span> <span class="brand-wiz">Wiz</span></p>
+    <h1>模板资产库</h1>
+    <p>登录后管理个人汇报与导出</p>
   </div>
 
   <div class="form-body">
     {#if error}
-      <div class="error-message" role="alert">{error}</div>
+      <div class="error-message" role="alert" tabindex="-1" bind:this={errorBox}>{error}</div>
     {/if}
 
     <label class="field">
-      <span>Email</span>
+      <span>用户名</span>
       <input
-        type="email"
-        bind:value={email}
-        placeholder="you@cuny.edu"
+        autocomplete="username"
+        bind:value={username}
+        placeholder="3–32 位：字母、数字、._-"
         required
       />
     </label>
 
     <label class="field">
-      <span>Password</span>
+      <span>密码</span>
       <input
         type="password"
         bind:value={password}
-        placeholder="Enter your password"
+        autocomplete="current-password"
+        placeholder="请输入密码"
         required
       />
     </label>
 
-    <button type="submit" class="btn-primary" disabled={loading}>
-      {loading ? 'Signing in...' : 'Sign In'}
+    <button type="submit" class="btn-primary" disabled={!ready || loading}>
+      {loading ? '正在登录…' : '登录'}
     </button>
 
     <p class="form-footer">
-      <a href="{base}/forgot-password">Forgot your password?</a>
-    </p>
-    <p class="form-footer">
-      Don't have an account? <a href="{base}/register">Register</a>
+      还没有账号？<a href="{base}/register">注册</a>
     </p>
   </div>
 </form>
@@ -99,14 +103,6 @@
     opacity: 0.85;
   }
 
-  .brand-slide {
-    color: #60a5fa;
-    font-weight: 700;
-  }
-  .brand-wiz {
-    color: #93c5fd;
-    font-weight: 700;
-  }
 
   .form-body {
     padding: 2rem;

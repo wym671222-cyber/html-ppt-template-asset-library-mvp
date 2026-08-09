@@ -1,10 +1,10 @@
 import type { RequestHandler } from './$types'
-import { catalogApiBaseUrl, forwardPresentationJson } from '$lib/server/catalog-api'
+import { forwardJson } from '$lib/server/bff'
 
-export const GET: RequestHandler = async ({ request, url }) => url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(request, '/api/presentations')
-export const POST: RequestHandler = async ({ request, url }) => url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(request, '/api/presentations')
+export const GET: RequestHandler = async (event) => event.url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(event, '/api/presentations')
+export const POST: RequestHandler = async (event) => event.url.search ? Response.json({ error: '汇报请求不接受查询参数' }, { status: 400 }) : forward(event, '/api/presentations')
 
-async function forward(request: Request, path: string): Promise<Response> {
-  try { return await forwardPresentationJson(request, new URL(path, catalogApiBaseUrl())) }
+async function forward(event: Parameters<RequestHandler>[0], path: string): Promise<Response> {
+  try { return await forwardJson(event, path) }
   catch { return Response.json({ error: '无法连接本机汇报服务' }, { status: 502 }) }
 }

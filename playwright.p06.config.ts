@@ -21,7 +21,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: 'P06_API_URL=http://127.0.0.1:3018 node_modules/.bin/vite dev --host 127.0.0.1 --port 5175 --strictPort',
+      command: 'P06_API_URL=http://127.0.0.1:3018 ORIGIN=http://127.0.0.1:5175 node_modules/.bin/vite dev --host 127.0.0.1 --port 5175 --strictPort',
       cwd: 'apps/web',
       url: 'http://127.0.0.1:5175/',
       timeout: 30_000,

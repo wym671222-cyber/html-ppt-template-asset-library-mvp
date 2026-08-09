@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { createApp } from '../apps/api/src/app.js'
+import { AuthApplicationService } from '../apps/api/src/auth/service.js'
 import { AssetCatalogRepository } from '../apps/api/src/assets/catalog-repository.js'
 import { AssetLibraryCatalog } from '../apps/api/src/assets/library-catalog.js'
 import { LocalContentStore } from '../apps/api/src/assets/content-store.js'
@@ -15,7 +16,7 @@ import { PresentationExportRepository } from '../apps/api/src/presentation-expor
 import { LocalRecoveryService } from '../apps/api/src/recovery/local-recovery.js'
 import { SecurePreviewRenderer } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
-import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
+import { seedTestUser } from './p14-test-support.js'
 
 type SQLite = {
   pragma(statement: string): unknown
@@ -32,6 +33,11 @@ async function main(): Promise<void> {
   const database = new Database(databasePath)
   database.pragma('foreign_keys = ON')
   const user = seedTestUser(database as never)
+  const auth = new AuthApplicationService(database as never)
+  auth.authenticate = () => ({
+    user,
+    session: { id: 'session-00000000-0000-4000-8000-000000000001', userId: user.id, createdAt: user.createdAt, expiresAt: user.createdAt + 604_800_000 },
+  })
   const store = new LocalContentStore(join(directory, 'objects'))
   const template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
   const registered = new AssetCatalogRepository(database as never, store).registerTemplate(template)
@@ -64,7 +70,8 @@ async function main(): Promise<void> {
       backupRoot: join(directory, 'recovery-backups'),
       restoreRoot: join(directory, 'recovery-drills'),
     }),
-    auth: createTrustedTestAuth(user),
+    auth,
+    allowedOrigins: ['http://127.0.0.1:5175'],
   })
   serve({ fetch: app.fetch, hostname: '127.0.0.1', port }, () => {
     console.log(`P06 fixture API ready at http://127.0.0.1:${port}`)

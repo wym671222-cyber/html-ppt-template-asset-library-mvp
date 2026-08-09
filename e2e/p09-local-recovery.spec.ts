@@ -45,7 +45,7 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
   expect(after.recovery.stateSha256).toBe(before.recovery.stateSha256)
   expect(after.recovery.databaseSha256).toBe(before.recovery.databaseSha256)
   const backup = after.recovery.backups[0]
-  const repeated = await request.post(`/api/recovery/backups/${backup.id}/restore`, { data: { expectedManifestSha256: backup.manifestSha256 } })
+  const repeated = await request.post(`/api/recovery/backups/${backup.id}/restore`, { headers: { origin: 'http://127.0.0.1:5175', 'content-type': 'application/json' }, data: { expectedManifestSha256: backup.manifestSha256 } })
   expect(repeated.status()).toBe(409)
 
   expect(await page.locator('iframe, [srcdoc]').count()).toBe(0)
@@ -59,7 +59,9 @@ test('P09 recovery controls remain focused and usable at 680px while unsafe and 
   await expect(page.getByRole('link', { name: 'Manifest' }).last()).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  expect((await request.post('/api/recovery/backups', { data: { expectedStateSha256: '0'.repeat(64), path: '../outside' } })).status()).toBe(400)
+  expect((await request.post('/api/recovery/backups', { headers: { origin: 'http://127.0.0.1:5175', 'content-type': 'application/json' }, data: { expectedStateSha256: '0'.repeat(64), path: '../outside' } })).status()).toBe(400)
   expect((await request.get('/api/recovery?path=../outside')).status()).toBe(400)
-  for (const path of ['/api/auth/login', '/api/admin/users', '/api/preview', '/api/export', '/api/search']) expect((await request.get(path)).status()).toBe(404)
+  expect((await request.get('/api/auth/login')).status()).toBe(400)
+  expect((await request.get('/api/admin/users')).status()).toBe(200)
+  for (const path of ['/api/preview', '/api/export', '/api/search']) expect((await request.get(path)).status()).toBe(404)
 })

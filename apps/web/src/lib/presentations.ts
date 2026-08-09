@@ -5,7 +5,7 @@ export type PresentationExport = Readonly<{ id: string; presentationId: string; 
 type PresentationPayload = { error?: string; presentation?: Presentation; presentations?: Presentation[]; export?: PresentationExport; exports?: PresentationExport[] }
 
 async function request(path: string, method = 'GET', body?: Record<string, unknown>): Promise<PresentationPayload> {
-  const response = await fetch(path, { method, credentials: 'omit', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+  const response = await fetch(path, { method, credentials: 'include', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
   const payload = await response.json().catch(() => ({ error: '汇报服务返回了无效响应' })) as PresentationPayload
   if (!response.ok) throw new Error(payload.error ?? `汇报请求失败（${response.status}）`)
   return payload

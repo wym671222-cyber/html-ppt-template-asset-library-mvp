@@ -66,11 +66,16 @@ test('P06 responsive layout remains usable and old or online routes stay unreach
   await expect(page.getByRole('complementary', { name: '所选模板详情' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  for (const path of ['/login', '/api/providers', '/api/preview', '/api/export']) {
+  const login = await request.get('http://127.0.0.1:5175/login')
+  expect(login.status()).toBe(200)
+  expect(await login.text()).toContain('模板资产库')
+  for (const path of ['/api/providers', '/api/preview', '/api/export']) {
     const response = await request.get(`http://127.0.0.1:5175${path}`)
     expect(response.status()).toBe(404)
   }
   expect((await request.get(`${apiUrl}/api/catalog`, { headers: { host: 'example.test' } })).status()).toBe(421)
   expect((await request.get(`${apiUrl}/api/catalog`, { headers: { origin: 'https://example.test' } })).status()).toBe(403)
+  expect((await request.get('http://127.0.0.1:5175/api/auth/login')).status()).toBe(400)
+  expect((await request.get('http://127.0.0.1:5175/api/admin/users')).status()).toBe(200)
   expect((await request.get(`${apiUrl}/api/auth/login`)).status()).toBe(404)
 })

@@ -14,11 +14,25 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(body.error ?? `Request failed: ${res.status}`)
   }
 
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
 export const api = {
   // Auth
+  registerAccount: (data: { username: string; password: string }) =>
+    request<{ user: import('$lib/auth').SessionUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  loginAccount: (data: { username: string; password: string }) =>
+    request<{ user: import('$lib/auth').SessionUser }>('/api/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  session: () => request<{ user: import('$lib/auth').SessionUser }>('/api/auth/session'),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    request<void>('/api/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
+  p15Logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
+  p15ListUsers: (status?: 'pending' | 'active' | 'disabled') =>
+    request<{ users: import('$lib/auth').SessionUser[] }>(`/api/admin/users${status ? `?status=${status}` : ''}`),
+  p15ApproveUser: (id: string) => request<{ user: import('$lib/auth').SessionUser }>(`/api/admin/users/${id}/approve`, { method: 'POST', body: '{}' }),
+  p15DisableUser: (id: string) => request<{ user: import('$lib/auth').SessionUser }>(`/api/admin/users/${id}/disable`, { method: 'POST', body: '{}' }),
+  p15ResetPassword: (id: string) => request<{ user: import('$lib/auth').SessionUser; temporaryPassword: string }>(`/api/admin/users/${id}/reset-password`, { method: 'POST', body: '{}' }),
   register: (data: { email: string; password: string; name: string }) =>
     request('/api/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data: { email: string; password: string }) =>

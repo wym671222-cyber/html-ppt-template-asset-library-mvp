@@ -48,7 +48,7 @@ export function catalogQuery(filters: CatalogFilters): string {
 }
 
 export async function loadCatalog(filters: CatalogFilters, signal?: AbortSignal): Promise<CatalogResponse> {
-  const response = await fetch(catalogQuery(filters), { method: 'GET', credentials: 'omit', signal })
+  const response = await fetch(catalogQuery(filters), { method: 'GET', credentials: 'include', signal })
   const body = await response.json().catch(() => ({ error: '资产目录返回了无效响应' })) as CatalogResponse | { error?: string }
   if (!response.ok) throw new Error('error' in body && body.error ? body.error : `资产目录加载失败（${response.status}）`)
   if (!('items' in body) || !Array.isArray(body.items)) throw new Error('资产目录响应不符合共享目录契约')
