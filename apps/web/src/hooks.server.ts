@@ -1,27 +1,9 @@
 import type { Handle } from '@sveltejs/kit'
 
-function isLoopbackHost(host: string): boolean {
-  const hostname = host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.split(':', 1)[0]
-  return hostname === '127.0.0.1' || hostname === 'localhost'
-}
-
-function isLoopbackOrigin(origin: string): boolean {
-  try {
-    const value = new URL(origin)
-    return value.protocol === 'http:' && !value.username && !value.password && !value.pathname.replace('/', '') && !value.search && !value.hash && isLoopbackHost(value.host)
-  } catch { return false }
-}
-
+// Deployed on a public domain (ppt.ajjy-ai.site) behind Caddy.
+// The original loopback-only guard is intentionally removed so the app
+// can be served from a real hostname; CSP and route whitelist remain.
 export const handle: Handle = async ({ event, resolve }) => {
-  if (!isLoopbackHost(event.request.headers.get('host') ?? event.url.host)) {
-    return new Response('Loopback Host required', { status: 421 })
-  }
-
-  const origin = event.request.headers.get('origin')
-  if (origin && !isLoopbackOrigin(origin)) {
-    return new Response('Loopback Origin required', { status: 403 })
-  }
-
   const catalogRoute = event.url.pathname === '/api/catalog' || event.url.pathname.startsWith('/api/catalog/assets/')
   const presentationRoute = event.url.pathname === '/api/presentations' || event.url.pathname.startsWith('/api/presentations/')
   const recoveryRoute = event.url.pathname === '/api/recovery' || event.url.pathname.startsWith('/api/recovery/')
@@ -38,6 +20,6 @@ export const handle: Handle = async ({ event, resolve }) => {
   response.headers.set('X-Frame-Options', 'SAMEORIGIN')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'no-referrer')
-  response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'none'")
+  response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'none'")
   return response
 }
