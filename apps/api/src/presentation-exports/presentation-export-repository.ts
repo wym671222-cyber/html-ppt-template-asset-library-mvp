@@ -1,12 +1,12 @@
 import type BetterSqlite3 from 'better-sqlite3'
-import type { OwnerContext } from '../owner.js'
+import { isUserId, type OwnerContext } from '../owner.js'
 import { LocalContentStore, type StoredContentObject } from '../assets/content-store.js'
 import { assertSafeExportPath, createStoredZip, readStoredZip, sha256 } from './offline-archive.js'
 
 type Database = BetterSqlite3.Database
 
-const EXPORT_CONTRACT = 'html-presentation-export/v1' as const
-const PACKAGE_CONTRACT = 'html-presentation-export-package/v1' as const
+const EXPORT_CONTRACT = 'html-presentation-export/v2' as const
+const PACKAGE_CONTRACT = 'html-presentation-export-package/v2' as const
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SHA256 = /^[0-9a-f]{64}$/
 const MAX_ITEMS = 100
@@ -62,7 +62,7 @@ export type ExportItemManifest = Readonly<{
 export type PresentationExportManifest = Readonly<{
   contractVersion: typeof EXPORT_CONTRACT
   exportId: string
-  owner: 'local-owner'
+  ownerUserId: string
   createdAt: number
   presentation: { id: string; name: string; revision: number }
   items: ExportItemManifest[]
@@ -123,12 +123,14 @@ type SnapshotItem = ExportItemManifest & Readonly<{
 }>
 
 type ExportSnapshot = Readonly<{
+  ownerUserId: string
   presentation: { id: string; name: string; revision: number }
   items: SnapshotItem[]
 }>
 
 type ExportRow = {
   id: string
+  owner_user_id: string
   presentation_id: string
   presentation_revision: number
   manifest_digest: string
@@ -151,7 +153,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function assertOwner(owner: OwnerContext): void {
-  if (owner.id !== 'local-owner' || owner.kind !== 'local') throw new ExportRequestError('Fixed local OwnerContext required', 404)
+  if (owner.kind !== 'user' || !isUserId(owner.id)) throw new ExportRequestError('Authenticated user OwnerContext required', 404)
 }
 
 function assertId(value: string, label: string): void {
@@ -351,7 +353,7 @@ function fileManifest(relativePath: string, mediaType: string, content: Buffer):
 }
 
 function exportFingerprint(snapshot: ExportSnapshot): string {
-  return sha256(Buffer.from(JSON.stringify({ presentation: snapshot.presentation, items: publicItems(snapshot.items) }), 'utf8'))
+  return sha256(Buffer.from(JSON.stringify({ ownerUserId: snapshot.ownerUserId, presentation: snapshot.presentation, items: publicItems(snapshot.items) }), 'utf8'))
 }
 
 function summary(manifest: PresentationExportManifest): PresentationExportSummary {
@@ -369,7 +371,7 @@ function summary(manifest: PresentationExportManifest): PresentationExportSummar
 }
 
 function assertStoredManifestShape(manifest: PresentationExportManifest): void {
-  if (!ID.test(manifest.presentation.id) || typeof manifest.presentation.name !== 'string' || !Number.isInteger(manifest.presentation.revision) || manifest.presentation.revision < 0 || !Number.isInteger(manifest.createdAt) || manifest.createdAt < 0 || manifest.items.length < 1 || manifest.items.length > MAX_ITEMS) {
+  if (!isUserId(manifest.ownerUserId) || !ID.test(manifest.presentation.id) || typeof manifest.presentation.name !== 'string' || !Number.isInteger(manifest.presentation.revision) || manifest.presentation.revision < 0 || !Number.isInteger(manifest.createdAt) || manifest.createdAt < 0 || manifest.items.length < 1 || manifest.items.length > MAX_ITEMS) {
     throw new ExportRequestError('Stored export manifest snapshot is invalid', 409)
   }
   manifest.items.forEach((item, index) => {
@@ -383,7 +385,7 @@ function assertStoredManifestShape(manifest: PresentationExportManifest): void {
       throw new ExportRequestError('Stored export manifest derivative identity is invalid', 409)
     }
   })
-  if (manifest.exportId !== `export-${sha256(Buffer.from(JSON.stringify({ presentation: manifest.presentation, items: manifest.items }), 'utf8'))}`) throw new ExportRequestError('Stored export manifest fingerprint is invalid', 409)
+  if (manifest.exportId !== `export-${sha256(Buffer.from(JSON.stringify({ ownerUserId: manifest.ownerUserId, presentation: manifest.presentation, items: manifest.items }), 'utf8'))}`) throw new ExportRequestError('Stored export manifest fingerprint is invalid', 409)
   if (manifest.package.files.length !== manifest.items.length + 2) throw new ExportRequestError('Stored export file allowlist size is invalid', 409)
   const index = manifest.package.files.find((file) => file.relativePath === 'index.html')
   const embedded = manifest.package.files.find((file) => file.relativePath === 'manifest.json')
@@ -403,7 +405,7 @@ export class PresentationExportRepository {
     assertId(presentationId, 'Presentation id')
     const requestedRevision = expectedRevision(revision)
     const itemIds = expectedItemIds(itemIdsValue)
-    const snapshot = this.database.transaction(() => this.loadSnapshot(presentationId, requestedRevision, itemIds))()
+    const snapshot = this.database.transaction(() => this.loadSnapshot(owner, presentationId, requestedRevision, itemIds))()
     const fingerprint = exportFingerprint(snapshot)
     const exportId = `export-${fingerprint}`
     const createdAt = Date.now()
@@ -413,6 +415,7 @@ export class PresentationExportRepository {
     const packageManifest = {
       contractVersion: PACKAGE_CONTRACT,
       exportId,
+      ownerUserId: owner.id,
       presentation: snapshot.presentation,
       items: publicItems(snapshot.items),
       files: payloadFiles,
@@ -428,7 +431,7 @@ export class PresentationExportRepository {
     const manifest: PresentationExportManifest = {
       contractVersion: EXPORT_CONTRACT,
       exportId,
-      owner: 'local-owner',
+      ownerUserId: owner.id,
       createdAt,
       presentation: snapshot.presentation,
       items: publicItems(snapshot.items),
@@ -444,9 +447,9 @@ export class PresentationExportRepository {
     const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
 
     return this.database.transaction(() => {
-      const verifiedSnapshot = this.loadSnapshot(presentationId, requestedRevision, itemIds)
+      const verifiedSnapshot = this.loadSnapshot(owner, presentationId, requestedRevision, itemIds)
       if (exportFingerprint(verifiedSnapshot) !== fingerprint) throw new ExportRequestError('Presentation export snapshot changed; reload and retry', 409)
-      const existing = this.findRow(presentationId, exportId)
+      const existing = this.findRow(owner, presentationId, exportId)
       if (existing) {
         const existingManifest = this.verifyRow(existing).manifest
         return { manifest: existingManifest, summary: summary(existingManifest), created: false }
@@ -458,7 +461,7 @@ export class PresentationExportRepository {
       for (const object of [htmlObject, zipObject, manifestObject]) this.registerContentObject(object)
       this.database.prepare(`INSERT INTO presentation_exports (id, presentation_id, presentation_revision, manifest_digest, html_digest, zip_digest, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(exportId, presentationId, requestedRevision, manifestObject.digest, htmlObject.digest, zipObject.digest, createdAt)
-      const verified = this.verifyRow(this.findRow(presentationId, exportId)!)
+      const verified = this.verifyRow(this.findRow(owner, presentationId, exportId)!)
       return { manifest: verified.manifest, summary: summary(verified.manifest), created: true }
     })()
   }
@@ -466,9 +469,9 @@ export class PresentationExportRepository {
   list(owner: OwnerContext, presentationId: string): PresentationExportSummary[] {
     assertOwner(owner)
     assertId(presentationId, 'Presentation id')
-    const presentation = this.database.prepare('SELECT id FROM presentations WHERE id = ?').get(presentationId)
+    const presentation = this.database.prepare('SELECT id FROM presentations WHERE id = ? AND owner_user_id = ?').get(presentationId, owner.id)
     if (!presentation) throw new ExportRequestError('Presentation not found', 404)
-    const rows = this.database.prepare(`${this.rowSelect()} WHERE export.presentation_id = ? ORDER BY export.created_at DESC, export.id ASC LIMIT 100`).all(presentationId) as ExportRow[]
+    const rows = this.database.prepare(`${this.rowSelect()} WHERE export.presentation_id = ? AND presentation.owner_user_id = ? ORDER BY export.created_at DESC, export.id ASC LIMIT 100`).all(presentationId, owner.id) as ExportRow[]
     return rows.map((row) => summary(this.verifyRow(row).manifest))
   }
 
@@ -485,13 +488,13 @@ export class PresentationExportRepository {
     assertOwner(owner)
     assertId(presentationId, 'Presentation id')
     assertId(exportId, 'Export id')
-    const row = this.findRow(presentationId, exportId)
+    const row = this.findRow(owner, presentationId, exportId)
     if (!row) throw new ExportRequestError('Presentation export not found', 404)
     return this.verifyRow(row)
   }
 
-  private loadSnapshot(presentationId: string, revision: number, itemIds: readonly string[]): ExportSnapshot {
-    const presentation = this.database.prepare('SELECT id, name, revision FROM presentations WHERE id = ?').get(presentationId) as { id: string; name: string; revision: number } | undefined
+  private loadSnapshot(owner: OwnerContext, presentationId: string, revision: number, itemIds: readonly string[]): ExportSnapshot {
+    const presentation = this.database.prepare('SELECT id, name, revision FROM presentations WHERE id = ? AND owner_user_id = ?').get(presentationId, owner.id) as { id: string; name: string; revision: number } | undefined
     if (!presentation) throw new ExportRequestError('Presentation not found', 404)
     if (presentation.revision !== revision) throw new ExportRequestError('Presentation has changed; reload and retry', 409)
     const rows = this.database.prepare(`
@@ -549,7 +552,7 @@ export class PresentationExportRepository {
         thumbnail,
       }
     })
-    return { presentation: { id: presentation.id, name: presentation.name, revision: presentation.revision }, items }
+    return { ownerUserId: owner.id, presentation: { id: presentation.id, name: presentation.name, revision: presentation.revision }, items }
   }
 
   private readObject(digest: string, mediaType: string, byteSize: number, relativePath: string, label: string): Buffer {
@@ -570,18 +573,19 @@ export class PresentationExportRepository {
   }
 
   private rowSelect(): string {
-    return `SELECT export.id, export.presentation_id, export.presentation_revision, export.manifest_digest, export.html_digest, export.zip_digest, export.created_at,
+    return `SELECT export.id, presentation.owner_user_id, export.presentation_id, export.presentation_revision, export.manifest_digest, export.html_digest, export.zip_digest, export.created_at,
       manifest.media_type AS manifest_media_type, manifest.byte_size AS manifest_byte_size, manifest.relative_path AS manifest_relative_path,
       html.media_type AS html_media_type, html.byte_size AS html_byte_size, html.relative_path AS html_relative_path,
       zip.media_type AS zip_media_type, zip.byte_size AS zip_byte_size, zip.relative_path AS zip_relative_path
       FROM presentation_exports export
+      JOIN presentations presentation ON presentation.id = export.presentation_id
       JOIN content_objects manifest ON manifest.digest = export.manifest_digest
       JOIN content_objects html ON html.digest = export.html_digest
       JOIN content_objects zip ON zip.digest = export.zip_digest`
   }
 
-  private findRow(presentationId: string, exportId: string): ExportRow | undefined {
-    return this.database.prepare(`${this.rowSelect()} WHERE export.presentation_id = ? AND export.id = ?`).get(presentationId, exportId) as ExportRow | undefined
+  private findRow(owner: OwnerContext, presentationId: string, exportId: string): ExportRow | undefined {
+    return this.database.prepare(`${this.rowSelect()} WHERE export.presentation_id = ? AND export.id = ? AND presentation.owner_user_id = ?`).get(presentationId, exportId, owner.id) as ExportRow | undefined
   }
 
   private verifyRow(row: ExportRow): { manifest: PresentationExportManifest; html: Buffer; zip: Buffer } {
@@ -593,7 +597,7 @@ export class PresentationExportRepository {
     try { parsed = JSON.parse(manifestBytes.toString('utf8')) } catch { throw new ExportRequestError('Stored export manifest is malformed', 409) }
     if (!isRecord(parsed) || `${JSON.stringify(parsed, null, 2)}\n` !== manifestBytes.toString('utf8')) throw new ExportRequestError('Stored export manifest is not canonical', 409)
     const manifest = parsed as unknown as PresentationExportManifest
-    if (manifest.contractVersion !== EXPORT_CONTRACT || manifest.exportId !== row.id || manifest.owner !== 'local-owner' || manifest.presentation?.id !== row.presentation_id || manifest.presentation.revision !== row.presentation_revision || manifest.createdAt !== row.created_at || !Array.isArray(manifest.items) || !isRecord(manifest.package)) {
+    if (manifest.contractVersion !== EXPORT_CONTRACT || manifest.exportId !== row.id || manifest.ownerUserId !== row.owner_user_id || !isUserId(manifest.ownerUserId) || manifest.presentation?.id !== row.presentation_id || manifest.presentation.revision !== row.presentation_revision || manifest.createdAt !== row.created_at || !Array.isArray(manifest.items) || !isRecord(manifest.package)) {
       throw new ExportRequestError('Stored export manifest identity is invalid', 409)
     }
     if (manifest.package.entry !== 'index.html' || manifest.package.embeddedManifest !== 'manifest.json' || manifest.package.htmlSha256 !== row.html_digest || manifest.package.zipSha256 !== row.zip_digest || manifest.package.zipByteSize !== zip.byteLength || !Array.isArray(manifest.package.files)) {
@@ -618,7 +622,7 @@ export class PresentationExportRepository {
     const embedded = archive.get('manifest.json')
     let embeddedValue: unknown
     try { embeddedValue = embedded ? JSON.parse(embedded.toString('utf8')) : null } catch { throw new ExportRequestError('Embedded export manifest is malformed', 409) }
-    if (!isRecord(embeddedValue) || embeddedValue.contractVersion !== PACKAGE_CONTRACT || embeddedValue.exportId !== row.id || JSON.stringify(embeddedValue.presentation) !== JSON.stringify(manifest.presentation) || JSON.stringify(embeddedValue.items) !== JSON.stringify(manifest.items)) {
+    if (!isRecord(embeddedValue) || embeddedValue.contractVersion !== PACKAGE_CONTRACT || embeddedValue.exportId !== row.id || embeddedValue.ownerUserId !== row.owner_user_id || JSON.stringify(embeddedValue.presentation) !== JSON.stringify(manifest.presentation) || JSON.stringify(embeddedValue.items) !== JSON.stringify(manifest.items)) {
       throw new ExportRequestError('Embedded export manifest does not match the audit manifest', 409)
     }
     const embeddedFiles = embeddedValue.files

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { createApp } from '../apps/api/src/app.js'
 import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { requireFixedDatabaseUrl } from '../apps/api/src/db/paths.js'
-import { getOwnerContext } from '../apps/api/src/owner.js'
+import { createTrustedTestAuth, seedTestUser, testOwner } from './p14-test-support.js'
 
 type SQLite = {
   pragma(statement: string, options?: { simple: true }): unknown
@@ -23,10 +23,11 @@ function temporaryDatabase(): string {
 }
 
 describe('P02 loopback composition root', () => {
-  it('uses one request-independent owner and excludes legacy routes', async () => {
-    const app = createApp()
-    const owner = getOwnerContext()
-    expect(owner).toEqual({ id: 'local-owner', kind: 'local' })
+  it('derives the owner from authenticated user context and excludes legacy collaboration routes', async () => {
+    const user = seedTestUser({ prepare: () => ({ run: () => undefined }) } as never)
+    const app = createApp({ auth: createTrustedTestAuth(user) })
+    const owner = testOwner()
+    expect(owner).toEqual({ id: user.id, kind: 'user' })
 
     const response = await app.request('http://127.0.0.1:3001/api/owner', {
       headers: { cookie: 'legacy-session=ignored', origin: 'http://127.0.0.1:5173' },
@@ -38,7 +39,6 @@ describe('P02 loopback composition root', () => {
     expect((await app.request('http://example.test/api/health')).status).toBe(421)
     expect((await app.request('http://127.0.0.1:3001/api/health', { headers: { origin: 'https://example.test' } })).status).toBe(403)
     expect((await app.request('http://127.0.0.1:3001/api/auth/login')).status).toBe(404)
-    expect((await app.request('http://127.0.0.1:3001/api/admin/users')).status).toBe(404)
     expect((await app.request('http://127.0.0.1:3001/api/decks/example/presence')).status).toBe(404)
     expect((await app.request('http://127.0.0.1:3001/api/providers')).status).toBe(404)
   })
@@ -67,9 +67,10 @@ describe('P02 SQL migrations', () => {
       const names = tables.map((table) => table.name)
       expect(names).toEqual(expect.arrayContaining(['template_assets', 'template_versions', 'presentation_items', 'content_objects', 'jobs', 'audit_events', 'users', 'sessions', 'auth_throttle']))
       expect(names.join(',')).not.toMatch(/organization|role_binding|approval|rbac/i)
-      expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 })
+      expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
 
       const now = Date.now()
+      const user = seedTestUser(sqlite as never)
       const digest = 'a'.repeat(64)
       sqlite.prepare('INSERT INTO content_objects (digest, media_type, byte_size, relative_path, created_at) VALUES (?, ?, ?, ?, ?)').run(digest, 'text/html', 1, 'objects/a.html', now)
       sqlite.prepare('INSERT INTO template_assets (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('asset-1', 'Asset', now, now)
@@ -80,7 +81,7 @@ describe('P02 SQL migrations', () => {
       expect(() => sqlite.prepare("UPDATE template_versions SET source_digest = ? WHERE id = 'version-1'").run('b'.repeat(64))).toThrow(/immutable/)
       expect(() => sqlite.prepare("DELETE FROM template_versions WHERE id = 'version-1'").run()).toThrow(/cannot be deleted/)
 
-      sqlite.prepare('INSERT INTO presentations (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').run('presentation-1', 'Presentation', now, now)
+      sqlite.prepare('INSERT INTO presentations (id, owner_user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run('presentation-1', user.id, 'Presentation', now, now)
       sqlite.prepare("INSERT INTO presentation_items (id, presentation_id, template_version_id, position, slot_overrides, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run('item-1', 'presentation-1', 'version-1', 0, '{"title":"Allowed"}', now, now)
       expect(() => sqlite.prepare("INSERT INTO presentation_items (id, presentation_id, template_version_id, position, slot_overrides, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run('item-2', 'presentation-1', 'version-1', 0, '{}', now, now)).toThrow(/UNIQUE constraint failed/)
       expect(() => sqlite.prepare("UPDATE presentation_items SET template_version_id = 'other' WHERE id = 'item-1'").run()).toThrow(/fixed/)

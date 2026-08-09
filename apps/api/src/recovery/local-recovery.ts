@@ -72,6 +72,7 @@ export type BackupDerivativeEntry = Readonly<{
 
 export type BackupPresentationEntry = Readonly<{
   id: string
+  ownerUserId: string
   revision: number
   itemCount: number
   items: Array<{
@@ -85,6 +86,7 @@ export type BackupPresentationEntry = Readonly<{
 
 export type BackupExportEntry = Readonly<{
   id: string
+  ownerUserId: string
   presentationId: string
   presentationRevision: number
   manifestSha256: string
@@ -143,7 +145,6 @@ export type RecoveryRestoreSummary = Readonly<{
 }>
 
 export type RecoveryOverview = Readonly<{
-  owner: 'local-owner'
   stateSha256: string
   databaseSha256: string
   migrationCount: number
@@ -405,7 +406,7 @@ function inspectDatabase(databasePath: string): DatabaseIndex {
     })
     for (const kinds of derivativePairs.values()) if (kinds.size !== 2 || !kinds.has('preview') || !kinds.has('thumbnail')) throw new RecoveryRequestError('P05 derivative pair is incomplete')
 
-    const presentationRows = database.prepare('SELECT id, revision FROM presentations ORDER BY id').all() as { id: string; revision: number }[]
+    const presentationRows = database.prepare('SELECT id, owner_user_id, revision FROM presentations ORDER BY id').all() as { id: string; owner_user_id: string; revision: number }[]
     if (presentationRows.length > MAX_PRESENTATIONS) throw new RecoveryRequestError(`Backup is limited to ${MAX_PRESENTATIONS} presentations`)
     let totalItems = 0
     const presentations = presentationRows.map((presentation) => {
@@ -414,6 +415,7 @@ function inspectDatabase(databasePath: string): DatabaseIndex {
       if (totalItems > MAX_ITEMS || items.some((item, index) => item.position !== index)) throw new RecoveryRequestError('Presentation item positions or count are invalid')
       return {
         id: presentation.id,
+        ownerUserId: presentation.owner_user_id,
         revision: presentation.revision,
         itemCount: items.length,
         items: items.map((item) => {
@@ -432,7 +434,7 @@ function inspectDatabase(databasePath: string): DatabaseIndex {
       }
     })
 
-    const exportRows = database.prepare('SELECT id, presentation_id, presentation_revision, manifest_digest, html_digest, zip_digest FROM presentation_exports ORDER BY id').all() as { id: string; presentation_id: string; presentation_revision: number; manifest_digest: string; html_digest: string; zip_digest: string }[]
+    const exportRows = database.prepare('SELECT export.id, presentation.owner_user_id, export.presentation_id, export.presentation_revision, export.manifest_digest, export.html_digest, export.zip_digest FROM presentation_exports export JOIN presentations presentation ON presentation.id = export.presentation_id ORDER BY export.id').all() as { id: string; owner_user_id: string; presentation_id: string; presentation_revision: number; manifest_digest: string; html_digest: string; zip_digest: string }[]
     if (exportRows.length > MAX_EXPORTS) throw new RecoveryRequestError(`Backup is limited to ${MAX_EXPORTS} exports`)
     const exports = exportRows.map((row) => {
       for (const [digest, role] of [[row.manifest_digest, 'export-manifest'], [row.html_digest, 'export-html'], [row.zip_digest, 'export-zip']] as const) {
@@ -440,7 +442,7 @@ function inspectDatabase(databasePath: string): DatabaseIndex {
         if (!roles.has(digest)) throw new RecoveryRequestError('P08 export references an unregistered content object')
         roles.get(digest)!.add(role)
       }
-      return { id: row.id, presentationId: row.presentation_id, presentationRevision: row.presentation_revision, manifestSha256: row.manifest_digest, htmlSha256: row.html_digest, zipSha256: row.zip_digest }
+      return { id: row.id, ownerUserId: row.owner_user_id, presentationId: row.presentation_id, presentationRevision: row.presentation_revision, manifestSha256: row.manifest_digest, htmlSha256: row.html_digest, zipSha256: row.zip_digest }
     })
 
     const jobOutputs = database.prepare('SELECT output_digest FROM jobs WHERE output_digest IS NOT NULL ORDER BY output_digest').all() as { output_digest: string }[]
@@ -486,12 +488,14 @@ function verifyExports(databasePath: string, contentRoot: string, index: Databas
     database.pragma('foreign_keys = ON')
     const exports = new PresentationExportRepository(database, new LocalContentStore(contentRoot))
     for (const record of index.exports) {
-      const manifest = exports.readManifest(getOwnerContext(), record.presentationId, record.id)
+      const owner = getOwnerContext(record.ownerUserId)
+      const manifest = exports.readManifest(owner, record.presentationId, record.id)
       if (manifest.presentation.revision !== record.presentationRevision
+        || manifest.ownerUserId !== record.ownerUserId
         || manifest.package.htmlSha256 !== record.htmlSha256
         || manifest.package.zipSha256 !== record.zipSha256) throw new RecoveryRequestError('P08 export manifest does not match its fixed index')
-      exports.readArtifact(getOwnerContext(), record.presentationId, record.id, 'html')
-      exports.readArtifact(getOwnerContext(), record.presentationId, record.id, 'zip')
+      exports.readArtifact(owner, record.presentationId, record.id, 'html')
+      exports.readArtifact(owner, record.presentationId, record.id, 'zip')
     }
   } catch (error) {
     throw wrapFailure(error, 'P08 export recovery verification failed')
@@ -593,7 +597,6 @@ export class LocalRecoveryService {
       verifyContentFiles(this.contentRoot, index)
       verifyExports(this.databasePath, this.contentRoot, index)
       return {
-        owner: 'local-owner',
         stateSha256: index.stateSha256,
         databaseSha256: sha256File(this.databasePath),
         migrationCount: index.migrationLedger.length,
@@ -720,16 +723,19 @@ export class LocalRecoveryService {
       const contentRoot = join(temporary, 'objects')
       const restored = inspectIsolatedDatabaseCopy(databasePath, contentRoot)
       if (restored.stateSha256 !== validated.index.stateSha256) throw new RecoveryRequestError('Restored logical state does not match the backup manifest')
+      this.revokeAllSessions(databasePath)
+      const sessionSafeRestore = inspectIsolatedDatabaseCopy(databasePath, contentRoot)
+      this.revokeAllSessions(this.databasePath)
       const summary: RecoveryRestoreSummary = {
         id: restoreId,
         backupId,
         verifiedAt: Date.now(),
         databaseSha256: sha256File(databasePath),
-        stateSha256: restored.stateSha256,
-        objectCount: restored.objects.length,
-        derivativeCount: restored.derivatives.length,
-        presentationCount: restored.presentations.length,
-        exportCount: restored.exports.length,
+        stateSha256: sessionSafeRestore.stateSha256,
+        objectCount: sessionSafeRestore.objects.length,
+        derivativeCount: sessionSafeRestore.derivatives.length,
+        presentationCount: sessionSafeRestore.presentations.length,
+        exportCount: sessionSafeRestore.exports.length,
       }
       writeExclusive(join(temporary, 'restore-report.json'), Buffer.from(canonical({ contractVersion: RESTORE_CONTRACT, ...summary }), 'utf8'))
       renameSync(temporary, destination)
@@ -737,6 +743,24 @@ export class LocalRecoveryService {
     } catch (error) {
       if (existsSync(temporary)) rmSync(temporary, { recursive: true, force: true })
       throw wrapFailure(error, 'Isolated restore failed')
+    }
+  }
+
+  private revokeAllSessions(databasePath: string): void {
+    const database = new Database(databasePath, { fileMustExist: true })
+    try {
+      database.pragma('foreign_keys = ON')
+      database.exec('BEGIN IMMEDIATE')
+      try {
+        database.prepare('DELETE FROM sessions').run()
+        database.exec('COMMIT')
+      } catch (error) {
+        database.exec('ROLLBACK')
+        throw error
+      }
+      if ((database.prepare('SELECT count(*) AS count FROM sessions').get() as { count: number }).count !== 0) throw new RecoveryRequestError('Recovery session revocation failed')
+    } finally {
+      database.close()
     }
   }
 

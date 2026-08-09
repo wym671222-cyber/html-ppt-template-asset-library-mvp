@@ -19,7 +19,6 @@ export type CatalogItem = Readonly<{
 }>
 
 export type CatalogResponse = Readonly<{
-  owner: 'local-owner'
   items: CatalogItem[]
   facets: { categories: string[]; tags: string[] }
   total: number
@@ -52,7 +51,7 @@ export async function loadCatalog(filters: CatalogFilters, signal?: AbortSignal)
   const response = await fetch(catalogQuery(filters), { method: 'GET', credentials: 'omit', signal })
   const body = await response.json().catch(() => ({ error: '资产目录返回了无效响应' })) as CatalogResponse | { error?: string }
   if (!response.ok) throw new Error('error' in body && body.error ? body.error : `资产目录加载失败（${response.status}）`)
-  if (!('owner' in body) || body.owner !== 'local-owner' || !Array.isArray(body.items)) throw new Error('资产目录响应不符合本机 Owner 契约')
+  if (!('items' in body) || !Array.isArray(body.items)) throw new Error('资产目录响应不符合共享目录契约')
   for (const item of body.items) {
     safeDerivativeUrl(item.derivative.previewUrl)
     safeDerivativeUrl(item.derivative.thumbnailUrl)

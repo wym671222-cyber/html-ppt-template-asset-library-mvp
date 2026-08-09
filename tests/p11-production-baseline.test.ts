@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../apps/api/src/app.js'
 import { parseReadOnlyMode } from '../apps/api/src/env.js'
+import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
 
 const repositoryRoot = join(import.meta.dirname, '..')
 
@@ -30,9 +31,10 @@ describe('P11 health and read-only behavior', () => {
 
   it('keeps reads available and rejects every business write with the stable read-only code', async () => {
     const catalog = {
-      list: () => ({ owner: 'local-owner', facets: { categories: [], tags: [] }, items: [] }),
+      list: () => ({ facets: { categories: [], tags: [] }, items: [], total: 0 }),
     }
-    const app = createApp({ catalog: catalog as never, readOnly: true })
+    const user = seedTestUser({ prepare: () => ({ run: () => undefined }) } as never)
+    const app = createApp({ catalog: catalog as never, auth: createTrustedTestAuth(user), readOnly: true })
 
     const catalogResponse = await app.request('http://127.0.0.1:3001/api/catalog')
     expect(catalogResponse.status).toBe(200)
@@ -50,7 +52,7 @@ describe('P11 health and read-only behavior', () => {
     }
 
     const normal = await createApp().request('http://127.0.0.1:3001/api/presentations', { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } })
-    await expect(normal.json()).resolves.toEqual({ error: 'Presentation service unavailable' })
+    await expect(normal.json()).resolves.toEqual({ error: 'Authentication service unavailable' })
     expect(parseReadOnlyMode(undefined)).toBe(false)
     expect(parseReadOnlyMode('false')).toBe(false)
     expect(parseReadOnlyMode('true')).toBe(true)

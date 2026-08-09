@@ -57,7 +57,7 @@ test('P08 exposes keyboard-accessible loading, empty, success and audited artifa
   const manifestResponse = await request.get(await manifestLink.getAttribute('href') ?? '')
   expect(manifestResponse.ok()).toBeTruthy()
   const manifest = await manifestResponse.json() as { manifest: { contractVersion: string; package: { files: Array<{ relativePath: string; sha256: string }> } } }
-  expect(manifest.manifest.contractVersion).toBe('html-presentation-export/v1')
+  expect(manifest.manifest.contractVersion).toBe('html-presentation-export/v2')
   expect(manifest.manifest.package.files.map((file) => file.relativePath)).toEqual(['index.html', 'assets/slide-0001-thumbnail.png', 'manifest.json'])
   expect(manifest.manifest.package.files.every((file) => /^[0-9a-f]{64}$/.test(file.sha256))).toBe(true)
   expect((await request.get(await htmlLink.getAttribute('href') ?? '')).headers()['content-type']).toContain('text/html')

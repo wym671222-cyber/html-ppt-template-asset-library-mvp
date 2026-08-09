@@ -26,7 +26,7 @@ import { readStoredZip, sha256 } from '../apps/api/src/presentation-exports/offl
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
 import { LocalRecoveryService, type LocalBackupManifest } from '../apps/api/src/recovery/local-recovery.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
-import { getOwnerContext } from '../apps/api/src/owner.js'
+import { createTrustedTestAuth, seedTestUser, testOwner } from './p14-test-support.js'
 
 type SQLite = {
   pragma(statement: string, options?: { simple: true }): unknown
@@ -71,6 +71,7 @@ function fixture() {
   migrateDatabase(databasePath)
   const database = new Database(databasePath)
   database.pragma('foreign_keys = ON')
+  const user = seedTestUser(database as never)
   const store = new LocalContentStore(contentRoot)
   const template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
   const registered = new AssetCatalogRepository(database as never, store).registerTemplate(template)
@@ -85,14 +86,14 @@ function fixture() {
   }
   const presentations = new PresentationRepository(database as never)
   const exports = new PresentationExportRepository(database as never, store)
-  const owner = getOwnerContext()
+  const owner = testOwner()
   const created = presentations.create(owner, 'P09 Recovery Fixture')
   const added = presentations.add(owner, created.id, template.version.id, created.revision)
   const presentation = presentations.reviseOverrides(owner, added.id, added.items[0].id, { title: 'Recovered & fixed', 'accent-color': '#123abc' }, added.revision)
   const exported = exports.create(owner, presentation.id, presentation.revision, presentation.items.map((item) => item.id))
   database.close()
   const service = new LocalRecoveryService({ databasePath, contentRoot, backupRoot, restoreRoot })
-  return { directory, databasePath, contentRoot, backupRoot, restoreRoot, service, template, presentation, exported }
+  return { directory, databasePath, contentRoot, backupRoot, restoreRoot, service, template, presentation, exported, user }
 }
 
 function sourceFingerprint(state: ReturnType<typeof fixture>): string {
@@ -123,6 +124,7 @@ describe('P09 auditable local backup manifest', () => {
     try {
       const before = sourceFingerprint(state)
       const overview = state.service.inspectCurrent()
+      expect(overview).not.toHaveProperty('owner')
       const backup = await state.service.createBackup(overview.stateSha256)
       const { manifest, manifestSha256 } = state.service.readBackupManifest(backup.id)
       expect(manifestSha256).toBe(backup.manifestSha256)
@@ -135,12 +137,12 @@ describe('P09 auditable local backup manifest', () => {
           { templateVersionId: state.template.version.id, kind: 'preview', rendererVersion: 'p09-fixture-renderer' },
           { templateVersionId: state.template.version.id, kind: 'thumbnail', rendererVersion: 'p09-fixture-renderer' },
         ],
-        presentations: [{ id: state.presentation.id, revision: state.presentation.revision, itemCount: 1, items: [{ templateVersionId: state.template.version.id }] }],
-        exports: [{ id: state.exported.summary.id, presentationRevision: state.presentation.revision }],
+        presentations: [{ id: state.presentation.id, ownerUserId: state.user.id, revision: state.presentation.revision, itemCount: 1, items: [{ templateVersionId: state.template.version.id }] }],
+        exports: [{ id: state.exported.summary.id, ownerUserId: state.user.id, presentationRevision: state.presentation.revision }],
       })
       expect(manifest.database.migrationLedger.map((entry) => entry.tag)).toEqual([
         '0000_p02_foundation', '0001_p04_catalog_jobs', '0002_p05_preview_derivatives', '0003_p07_presentation_items', '0004_p08_presentation_exports',
-        '0005_p12_auth_core',
+        '0005_p12_auth_core', '0006_p14_presentation_ownership',
       ])
       expect(manifest.database.migrationLedger.every((entry) => /^[0-9a-f]{64}$/.test(entry.sha256))).toBe(true)
       expect(new Set(manifest.objects.flatMap((object) => object.roles))).toEqual(expect.objectContaining(new Set(['template-package', 'preview', 'thumbnail', 'export-manifest', 'export-html', 'export-zip'])))
@@ -172,9 +174,9 @@ describe('P09 isolated restore and fixture-only replay', () => {
         expect(database.pragma('quick_check', { simple: true })).toBe('ok')
         expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
         expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-        expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 })
+        expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
         const store = new LocalContentStore(restoredContentRoot)
-        const owner = getOwnerContext()
+        const owner = testOwner()
         const catalog = new AssetLibraryCatalog(database as never, store)
         const catalogResult = catalog.list(owner, parseCatalogQuery('http://127.0.0.1/api/catalog'))
         expect(catalogResult.items).toHaveLength(1)
@@ -295,10 +297,13 @@ describe('P09 recovery negative and security boundaries', () => {
     const state = fixture()
     try {
       const overview = state.service.inspectCurrent()
-      const app = createApp({ recovery: state.service })
+      const app = createApp({ recovery: state.service, auth: createTrustedTestAuth(state.user) })
       const root = 'http://127.0.0.1:3001/api/recovery'
       const origin = { origin: 'http://127.0.0.1:5173' }
-      expect((await app.request(root)).status).toBe(200)
+      const rootResponse = await app.request(root)
+      expect(rootResponse.status).toBe(200)
+      const rootPayload = await rootResponse.json() as { recovery: Record<string, unknown> }
+      expect(rootPayload.recovery).not.toHaveProperty('owner')
       expect((await app.request(`${root}?path=../outside`)).status).toBe(400)
       expect((await app.request('http://example.test/api/recovery')).status).toBe(421)
       expect((await app.request(root, { headers: { origin: 'https://example.test' } })).status).toBe(403)
@@ -316,7 +321,7 @@ describe('P09 recovery negative and security boundaries', () => {
       expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: '0'.repeat(64) }) })).status).toBe(409)
       expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(201)
       expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(409)
-      for (const path of ['/api/auth/login', '/api/admin/users', '/api/preview', '/api/export', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
+      for (const path of ['/api/preview', '/api/export', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
     } finally { rmSync(state.directory, { recursive: true, force: true }) }
   })
 

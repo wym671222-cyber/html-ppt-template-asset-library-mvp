@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { integer, primaryKey, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 // P02 target schema only. Legacy CUNY tables intentionally remain outside the
 // active TypeScript program and are not represented by these migrations.
@@ -47,12 +47,13 @@ export const templateAssetTags = sqliteTable('template_asset_tags', {
 
 export const presentations = sqliteTable('presentations', {
   id: text('id').primaryKey(),
+  ownerUserId: text('owner_user_id').notNull().references((): AnySQLiteColumn => users.id),
   name: text('name').notNull(),
   status: text('status', { enum: ['draft', 'archived'] }).notNull().default('draft'),
   revision: integer('revision').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-})
+}, (table) => [index('presentations_owner_updated_idx').on(table.ownerUserId, table.updatedAt, table.id)])
 
 export const presentationItems = sqliteTable('presentation_items', {
   id: text('id').primaryKey(),

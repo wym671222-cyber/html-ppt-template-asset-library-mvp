@@ -12,6 +12,7 @@ import { LocalJobRepository } from '../apps/api/src/jobs/local-jobs.js'
 import { TemplatePreviewJobWorker, TEMPLATE_PREVIEW_JOB_TYPE, type PreviewRenderer } from '../apps/api/src/previews/preview-jobs.js'
 import type { SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
+import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
 import { catalogQuery, safeDerivativeUrl } from '../apps/web/src/lib/asset-library.js'
 
 type SQLite = {
@@ -58,6 +59,7 @@ async function fixtureApp(): Promise<{ app: ReturnType<typeof createApp>; databa
   migrateDatabase(databasePath)
   const database = new Database(databasePath)
   database.pragma('foreign_keys = ON')
+  const user = seedTestUser(database as never)
   const store = new LocalContentStore(join(directory, 'objects'))
   const template = adaptSimulatedTemplatePackage(fixture)
   const registered = new AssetCatalogRepository(database as never, store).registerTemplate(template)
@@ -66,7 +68,7 @@ async function fixtureApp(): Promise<{ app: ReturnType<typeof createApp>; databa
   const renderer: PreviewRenderer = { render: async () => fakeRender() }
   await new TemplatePreviewJobWorker(database as never, jobs, store, renderer, 'p06-worker', 30_000).runOnce()
   const catalog = new AssetLibraryCatalog(database as never, store)
-  return { app: createApp({ catalog }), database, store, assetId: template.asset.id, versionId: template.version.id }
+  return { app: createApp({ catalog, auth: createTrustedTestAuth(user) }), database, store, assetId: template.asset.id, versionId: template.version.id }
 }
 
 describe('P06 bounded deterministic catalog query', () => {
@@ -107,8 +109,9 @@ describe('P06 read-only catalog API and PNG trust boundary', () => {
       `).run(incompletePreview.digest)
       const response = await state.app.request('http://127.0.0.1:3001/api/catalog', { headers: { origin: 'http://127.0.0.1:5173' } })
       expect(response.status).toBe(200)
-      const body = await response.json() as { items: Array<Record<string, unknown>>; facets: { categories: string[]; tags: string[] }; total: number; owner: string }
-      expect(body).toMatchObject({ owner: 'local-owner', total: 1, facets: { categories: ['report/quarterly'], tags: ['brief', 'quarterly', 'simulated'] } })
+      const body = await response.json() as { items: Array<Record<string, unknown>>; facets: { categories: string[]; tags: string[] }; total: number }
+      expect(body).toMatchObject({ total: 1, facets: { categories: ['report/quarterly'], tags: ['brief', 'quarterly', 'simulated'] } })
+      expect(body).not.toHaveProperty('owner')
       expect(body.items[0]).toMatchObject({
         id: state.assetId,
         title: 'Simulated Quarterly Brief',
@@ -172,7 +175,7 @@ describe('P06 read-only catalog API and PNG trust boundary', () => {
     try {
       expect((await state.app.request('http://example.test/api/catalog')).status).toBe(421)
       expect((await state.app.request('http://127.0.0.1:3001/api/catalog', { headers: { origin: 'https://example.test' } })).status).toBe(403)
-      for (const path of ['/api/auth/login', '/api/admin/users', '/api/decks/x/share', '/api/providers', '/api/export', '/api/search']) {
+      for (const path of ['/api/decks/x/share', '/api/providers', '/api/export', '/api/search']) {
         expect((await state.app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
       }
     } finally {
@@ -194,7 +197,7 @@ describe('P06 schema and Web execution boundary', () => {
       expect(database.pragma('quick_check', { simple: true })).toBe('ok')
       expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 })
+      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
     } finally {
       database.close()
     }

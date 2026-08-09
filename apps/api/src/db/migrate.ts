@@ -42,6 +42,8 @@ export const TARGET_DATABASE_TRIGGERS = [
   'presentation_items_slot_schema_insert',
   'presentation_items_slot_schema_update',
   'presentation_items_template_version_fixed',
+  'presentations_owner_immutable',
+  'presentations_owner_required_insert',
   'presentations_revision_monotonic',
   'template_assets_current_version_insert',
   'template_assets_current_version_update',
@@ -58,8 +60,10 @@ export const TARGET_DATABASE_TRIGGERS = [
 ] as const
 
 const targetTriggers = new Set<string>(TARGET_DATABASE_TRIGGERS)
+const p14Triggers = new Set(['presentations_owner_immutable', 'presentations_owner_required_insert'])
 const p12Triggers = new Set(['sessions_fixed_update', 'users_disable_revokes_sessions', 'users_password_change_revokes_sessions'])
-const preP12TargetTriggers = TARGET_DATABASE_TRIGGERS.filter((trigger) => !p12Triggers.has(trigger))
+const preP14TargetTriggers = TARGET_DATABASE_TRIGGERS.filter((trigger) => !p14Triggers.has(trigger))
+const preP12TargetTriggers = preP14TargetTriggers.filter((trigger) => !p12Triggers.has(trigger))
 
 export type DatabasePreflight = {
   existed: boolean
@@ -73,7 +77,7 @@ function sha256(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
 }
 
-function inspectSchema(path: string): { tables: string[]; triggers: string[] } {
+function inspectSchema(path: string): { tables: string[]; triggers: string[]; presentationOwnerColumn: boolean; ownershipCounts: Record<string, number> } {
   const sqlite = new Database(path, { readonly: true, fileMustExist: true })
   try {
     sqlite.pragma('query_only = ON')
@@ -81,7 +85,14 @@ function inspectSchema(path: string): { tables: string[]; triggers: string[] } {
     const quickCheck = sqlite.pragma('quick_check', { simple: true })
     if (quickCheck !== 'ok') throw new Error(`SQLite quick_check failed before migration: ${quickCheck}`)
     const names = (type: 'table' | 'trigger') => (sqlite.prepare("SELECT name FROM sqlite_master WHERE type = ? AND name NOT LIKE 'sqlite_%' ORDER BY name").all(type) as { name: string }[]).map((row) => row.name)
-    return { tables: names('table'), triggers: names('trigger') }
+    const tables = names('table')
+    const presentationOwnerColumn = tables.includes('presentations')
+      && (sqlite.prepare('PRAGMA table_info(presentations)').all() as { name: string }[]).some((column) => column.name === 'owner_user_id')
+    const ownershipCounts = Object.fromEntries(['presentations', 'presentation_items', 'presentation_exports'].map((table) => [
+      table,
+      tables.includes(table) ? (sqlite.prepare(`SELECT count(*) AS count FROM "${table}"`).get() as { count: number }).count : 0,
+    ]))
+    return { tables, triggers: names('trigger'), presentationOwnerColumn, ownershipCounts }
   } finally {
     sqlite.close()
   }
@@ -90,7 +101,7 @@ function inspectSchema(path: string): { tables: string[]; triggers: string[] } {
 export function preflightDatabase(path = LOCAL_DATABASE_PATH): DatabasePreflight {
   if (!existsSync(path)) return { existed: false, tables: [], triggers: [] }
 
-  const { tables, triggers } = inspectSchema(path)
+  const { tables, triggers, presentationOwnerColumn, ownershipCounts } = inspectSchema(path)
   const backupDirectory = join(dirname(path), 'backups')
   mkdirSync(backupDirectory, { recursive: true })
   const backupPath = join(backupDirectory, `${basename(path, '.db')}.${Date.now()}.pre-migration.db`)
@@ -105,9 +116,16 @@ export function preflightDatabase(path = LOCAL_DATABASE_PATH): DatabasePreflight
     throw new Error(`Migration stopped after backup: unknown database triggers: ${unknownTriggers.join(', ')}`)
   }
   const recognizedTriggerSet = JSON.stringify(triggers) === JSON.stringify([...TARGET_DATABASE_TRIGGERS].sort())
+    || JSON.stringify(triggers) === JSON.stringify([...preP14TargetTriggers].sort())
     || JSON.stringify(triggers) === JSON.stringify([...preP12TargetTriggers].sort())
   if (tables.includes('__drizzle_migrations') && !recognizedTriggerSet) {
     throw new Error('Migration stopped after backup: target database trigger set is incomplete')
+  }
+  if (!presentationOwnerColumn) {
+    const populated = Object.entries(ownershipCounts).filter(([, count]) => count !== 0)
+    if (populated.length > 0) {
+      throw new Error(`Migration stopped after backup: P14 ownership mapping required for non-empty tables: ${populated.map(([table, count]) => `${table}=${count}`).join(', ')}`)
+    }
   }
   return { existed: true, tables, triggers, backupPath, backupSha256 }
 }

@@ -1,11 +1,15 @@
 export type OwnerContext = Readonly<{
-  id: 'local-owner'
-  kind: 'local'
+  id: string
+  kind: 'user'
 }>
 
-const localOwner: OwnerContext = Object.freeze({ id: 'local-owner', kind: 'local' })
+const USER_ID = /^user-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
-// Deliberately request-independent: no cookie, header, user record, or role.
-export function getOwnerContext(): OwnerContext {
-  return localOwner
+export function isUserId(value: unknown): value is string {
+  return typeof value === 'string' && USER_ID.test(value)
+}
+
+export function getOwnerContext(userId: string): OwnerContext {
+  if (!isUserId(userId)) throw new Error('Authenticated user id is invalid')
+  return Object.freeze({ id: userId, kind: 'user' })
 }

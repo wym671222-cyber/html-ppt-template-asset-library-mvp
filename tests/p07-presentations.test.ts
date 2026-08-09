@@ -9,17 +9,18 @@ import { LocalContentStore } from '../apps/api/src/assets/content-store.js'
 import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
-import { getOwnerContext } from '../apps/api/src/owner.js'
+import { createTrustedTestAuth, seedTestUser, testOwner } from './p14-test-support.js'
 
 type SQLite = { pragma(statement: string): unknown; prepare(statement: string): { get(...parameters: unknown[]): unknown; run(...parameters: unknown[]): { changes: number }; all(...parameters: unknown[]): unknown[] }; close(): void }
 const Database = createRequire(new URL('../apps/api/package.json', import.meta.url))('better-sqlite3') as new (path: string) => SQLite
 
-function fixture(): { database: SQLite; repository: PresentationRepository; templateVersionId: string; assetId: string } {
+function fixture(): { database: SQLite; repository: PresentationRepository; templateVersionId: string; assetId: string; user: ReturnType<typeof seedTestUser> } {
   const directory = mkdtempSync(join(tmpdir(), 'asset-library-p07-'))
   const path = join(directory, 'asset-library.db')
   migrateDatabase(path)
   const database = new Database(path)
   database.pragma('foreign_keys = ON')
+  const user = seedTestUser(database as never)
   const template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
   new AssetCatalogRepository(database as never, new LocalContentStore(join(directory, 'objects'))).registerTemplate(template)
   const now = Date.now()
@@ -28,7 +29,7 @@ function fixture(): { database: SQLite; repository: PresentationRepository; temp
     database.prepare('INSERT INTO content_objects (digest, media_type, byte_size, relative_path, created_at) VALUES (?, ?, ?, ?, ?)').run(digest, 'image/png', 1, `objects/${digest}.png`, now)
     database.prepare('INSERT INTO template_preview_derivatives (template_version_id, kind, source_digest, content_digest, renderer_version, security_diagnostic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(template.version.id, kind, template.version.sourceDigest, digest, 'p07-test', '{}', now)
   }
-  return { database, repository: new PresentationRepository(database as never), templateVersionId: template.version.id, assetId: template.asset.id }
+  return { database, repository: new PresentationRepository(database as never), templateVersionId: template.version.id, assetId: template.asset.id, user }
 }
 
 describe('P07 presentation persistence and revision CAS', () => {
@@ -40,7 +41,7 @@ describe('P07 presentation persistence and revision CAS', () => {
     expect(repeated.backupPath && existsSync(repeated.backupPath)).toBe(true)
     const database = new Database(path)
     try {
-      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 })
+      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
       expect(database.prepare("SELECT count(*) AS count FROM sqlite_master WHERE type = 'trigger' AND name IN ('presentation_items_position_fixed', 'presentation_items_non_last_delete_forbidden')").get()).toEqual({ count: 0 })
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     } finally { database.close() }
@@ -49,7 +50,7 @@ describe('P07 presentation persistence and revision CAS', () => {
   it('creates, fixes the catalog version, maintains continuous positions, and advances revision once per successful write', () => {
     const state = fixture()
     try {
-      const owner = getOwnerContext()
+      const owner = testOwner()
       const created = state.repository.create(owner, 'Q3 汇报')
       const added = state.repository.add(owner, created.id, state.templateVersionId, created.revision)
       expect(added).toMatchObject({ revision: 1, items: [{ position: 0, templateVersionId: state.templateVersionId }] })
@@ -71,7 +72,7 @@ describe('P07 presentation persistence and revision CAS', () => {
   it('rejects retired/current-version drift, cross-presentation items, invalid positions and unsafe overrides without partial writes', () => {
     const state = fixture()
     try {
-      const owner = getOwnerContext()
+      const owner = testOwner()
       const first = state.repository.create(owner, 'One')
       const second = state.repository.create(owner, 'Two')
       const added = state.repository.add(owner, first.id, state.templateVersionId, first.revision)
@@ -91,7 +92,7 @@ describe('P07 presentation persistence and revision CAS', () => {
   it('exposes bounded JSON API routes while preserving loopback and legacy route rejection', async () => {
     const state = fixture()
     try {
-      const app = createApp({ presentations: state.repository })
+      const app = createApp({ presentations: state.repository, auth: createTrustedTestAuth(state.user) })
       const origin = { origin: 'http://127.0.0.1:5173' }
       const create = await app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', headers: origin, body: JSON.stringify({ name: 'API 汇报' }) })
       expect(create.status).toBe(201)
@@ -107,7 +108,7 @@ describe('P07 presentation persistence and revision CAS', () => {
       ]) expect((await request).status).toBe(400)
       expect((await app.request('http://example.test/api/presentations')).status).toBe(421)
       expect((await app.request('http://127.0.0.1:3001/api/presentations', { headers: { origin: 'https://example.test' } })).status).toBe(403)
-      for (const path of ['/api/auth/login', '/api/admin/users', '/api/decks/x/lock', '/api/preview', '/api/export', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
+      for (const path of ['/api/decks/x/lock', '/api/preview', '/api/export', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
     } finally { state.database.close() }
   })
 })

@@ -1,5 +1,5 @@
 import type BetterSqlite3 from 'better-sqlite3'
-import type { OwnerContext } from '../owner.js'
+import { isUserId, type OwnerContext } from '../owner.js'
 import { LocalContentStore } from './content-store.js'
 
 type Database = BetterSqlite3.Database
@@ -45,7 +45,6 @@ export type CatalogItem = Readonly<{
 }>
 
 export type CatalogResponse = Readonly<{
-  owner: 'local-owner'
   items: CatalogItem[]
   facets: { categories: string[]; tags: string[] }
   total: number
@@ -73,7 +72,7 @@ type DerivativeRow = {
 }
 
 function assertOwner(owner: OwnerContext): void {
-  if (owner.id !== 'local-owner' || owner.kind !== 'local') throw new CatalogRequestError('Fixed local OwnerContext required', 404)
+  if (owner.kind !== 'user' || !isUserId(owner.id)) throw new CatalogRequestError('Authenticated user OwnerContext required', 404)
 }
 
 function boundedFilter(value: string | null, name: string, maxLength = MAX_FILTER_LENGTH): string | null {
@@ -231,7 +230,7 @@ export class AssetLibraryCatalog {
       ORDER BY tag.label COLLATE NOCASE ASC, tag.id ASC LIMIT 100
     `).all() as { label: string }[]).map(({ label }) => label)
 
-    return { owner: 'local-owner', items, facets: { categories, tags }, total: items.length }
+    return { items, facets: { categories, tags }, total: items.length }
   }
 
   readDerivative(owner: OwnerContext, assetId: string, kind: 'preview' | 'thumbnail'): Buffer {

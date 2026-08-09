@@ -7,6 +7,8 @@ import { LocalRecoveryService, RecoveryRequestError } from './recovery/local-rec
 import { AuthApplicationService } from './auth/service.js'
 import { createAuthRouter } from './routes/auth.js'
 import { createAdminRouter } from './routes/admin.js'
+import { createBusinessAuthMiddleware, type AuthVariables } from './middleware/auth.js'
+import { createAdminMiddleware } from './middleware/admin.js'
 
 export const LOOPBACK_HOST = '127.0.0.1'
 export const PRODUCTION_APP_ORIGIN = 'https://ppt.ajjy-ai.site'
@@ -34,13 +36,17 @@ type ReadinessCheck = () => void | Promise<void>
 async function jsonBody(context: { req: { text(): Promise<string> } }): Promise<Record<string, unknown>> {
   const text = await context.req.text()
   if (!text || text.length > MAX_JSON_BYTES) throw new PresentationRequestError('JSON request body is invalid or too large')
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(text) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object')
-    return parsed as Record<string, unknown>
+    parsed = JSON.parse(text) as unknown
   } catch {
     throw new PresentationRequestError('JSON request body is invalid or too large')
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new PresentationRequestError('JSON request body is invalid or too large')
+  if (Object.hasOwn(parsed, 'owner') || Object.hasOwn(parsed, 'ownerId') || Object.hasOwn(parsed, 'ownerUserId') || Object.hasOwn(parsed, 'userId')) {
+    throw new PresentationRequestError('Owner identity is derived from the authenticated session')
+  }
+  return parsed as Record<string, unknown>
 }
 
 function presentationError(context: { json(value: { error: string }, status: 400 | 404 | 409 | 500): Response }, error: unknown): Response {
@@ -77,8 +83,8 @@ export function createApp(options: {
   allowedOrigins?: readonly string[]
   readOnly?: boolean
   readiness?: ReadinessCheck
-} = {}): Hono {
-  const app = new Hono()
+} = {}): Hono<AuthVariables> {
+  const app = new Hono<AuthVariables>()
   const catalog = options.catalog
   const presentations = options.presentations
   const exports = options.exports
@@ -89,6 +95,13 @@ export function createApp(options: {
   const allowedOriginSet = new Set(allowedOrigins)
   const readOnly = options.readOnly ?? false
   const readiness = options.readiness ?? (() => undefined)
+  const unavailableAuth = async (context: { header(name: string, value: string): void; json(value: { error: string }, status: 503): Response }) => {
+    context.header('Cache-Control', 'no-store')
+    return context.json({ error: 'Authentication service unavailable' }, 503)
+  }
+  const businessAuth = auth ? createBusinessAuthMiddleware(auth, 'business.access') : unavailableAuth
+  const recoveryAuth = auth ? createBusinessAuthMiddleware(auth, 'recovery.access') : unavailableAuth
+  const recoveryAdmin = auth ? createAdminMiddleware(auth, 'recovery.access') : unavailableAuth
 
   app.use('*', async (context, next) => {
     const host = context.req.header('host') ?? new URL(context.req.url).host
@@ -134,15 +147,22 @@ export function createApp(options: {
       return context.json({ error: 'APP_NOT_READY' }, 503)
     }
   })
-  app.get('/api/owner', (context) => context.json({ owner: getOwnerContext() }))
   if (auth) {
     app.route('/api/auth', createAuthRouter(auth))
     app.route('/api/admin', createAdminRouter(auth))
   }
+  app.use('/api/owner', businessAuth)
+  app.use('/api/catalog', businessAuth)
+  app.use('/api/catalog/*', businessAuth)
+  app.use('/api/presentations', businessAuth)
+  app.use('/api/presentations/*', businessAuth)
+  app.use('/api/recovery', recoveryAuth, recoveryAdmin)
+  app.use('/api/recovery/*', recoveryAuth, recoveryAdmin)
+  app.get('/api/owner', (context) => context.json({ owner: getOwnerContext(context.get('auth').user.id) }))
   app.get('/api/catalog', (context) => {
     if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)
     try {
-      return context.json(catalog.list(getOwnerContext(), parseCatalogQuery(context.req.url)))
+      return context.json(catalog.list(getOwnerContext(context.get('auth').user.id), parseCatalogQuery(context.req.url)))
     } catch (error) {
       if (error instanceof CatalogRequestError) return context.json({ error: error.message }, error.status)
       return context.json({ error: 'Catalog query failed' }, 500)
@@ -154,7 +174,7 @@ export function createApp(options: {
     if (kind !== 'preview' && kind !== 'thumbnail') return context.json({ error: 'Derivative kind not found' }, 404)
     if (new URL(context.req.url).search) return context.json({ error: 'Derivative query parameters are not accepted' }, 400)
     try {
-      const content = catalog.readDerivative(getOwnerContext(), context.req.param('assetId'), kind)
+      const content = catalog.readDerivative(getOwnerContext(context.get('auth').user.id), context.req.param('assetId'), kind)
       context.header('Content-Type', 'image/png')
       context.header('Content-Length', String(content.byteLength))
       context.header('Cache-Control', 'no-store')
@@ -167,20 +187,22 @@ export function createApp(options: {
   })
   app.get('/api/presentations', (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
-    try { return context.json({ owner: getOwnerContext(), presentations: presentations.list(getOwnerContext()) }) } catch (error) { return presentationError(context, error) }
+    const owner = getOwnerContext(context.get('auth').user.id)
+    try { return context.json({ owner, presentations: presentations.list(owner) }) } catch (error) { return presentationError(context, error) }
   })
   app.post('/api/presentations', async (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
-    try { return context.json({ presentation: presentations.create(getOwnerContext(), (await jsonBody(context)).name) }, 201) } catch (error) { return presentationError(context, error) }
+    try { return context.json({ presentation: presentations.create(getOwnerContext(context.get('auth').user.id), (await jsonBody(context)).name) }, 201) } catch (error) { return presentationError(context, error) }
   })
   app.get('/api/presentations/:presentationId', (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
-    try { return context.json({ presentation: presentations.read(getOwnerContext(), context.req.param('presentationId')) }) } catch (error) { return presentationError(context, error) }
+    try { return context.json({ presentation: presentations.read(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId')) }) } catch (error) { return presentationError(context, error) }
   })
   app.get('/api/presentations/:presentationId/exports', (context) => {
     if (!exports) return context.json({ error: 'Export service unavailable' }, 503)
     if (new URL(context.req.url).search) return context.json({ error: 'Export query parameters are not accepted' }, 400)
-    try { return context.json({ owner: getOwnerContext(), exports: exports.list(getOwnerContext(), context.req.param('presentationId')) }) } catch (error) { return exportError(context, error) }
+    const owner = getOwnerContext(context.get('auth').user.id)
+    try { return context.json({ owner, exports: exports.list(owner, context.req.param('presentationId')) }) } catch (error) { return exportError(context, error) }
   })
   app.post('/api/presentations/:presentationId/exports', async (context) => {
     if (!exports) return context.json({ error: 'Export service unavailable' }, 503)
@@ -188,20 +210,20 @@ export function createApp(options: {
     try {
       const body = await jsonBody(context)
       assertOnlyKeys(body, ['expectedRevision', 'itemIds'])
-      const result = exports.create(getOwnerContext(), context.req.param('presentationId'), body.expectedRevision, body.itemIds)
+      const result = exports.create(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), body.expectedRevision, body.itemIds)
       return context.json({ export: result.summary, manifest: result.manifest }, result.created ? 201 : 200)
     } catch (error) { return exportError(context, error) }
   })
   app.get('/api/presentations/:presentationId/exports/:exportId/manifest', (context) => {
     if (!exports) return context.json({ error: 'Export service unavailable' }, 503)
     if (new URL(context.req.url).search) return context.json({ error: 'Export query parameters are not accepted' }, 400)
-    try { return context.json({ manifest: exports.readManifest(getOwnerContext(), context.req.param('presentationId'), context.req.param('exportId')) }) } catch (error) { return exportError(context, error) }
+    try { return context.json({ manifest: exports.readManifest(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), context.req.param('exportId')) }) } catch (error) { return exportError(context, error) }
   })
   app.get('/api/presentations/:presentationId/exports/:exportId/html', (context) => {
     if (!exports) return context.json({ error: 'Export service unavailable' }, 503)
     if (new URL(context.req.url).search) return context.json({ error: 'Export query parameters are not accepted' }, 400)
     try {
-      const content = exports.readArtifact(getOwnerContext(), context.req.param('presentationId'), context.req.param('exportId'), 'html')
+      const content = exports.readArtifact(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), context.req.param('exportId'), 'html')
       context.header('Content-Type', 'text/html; charset=utf-8')
       context.header('Content-Length', String(content.byteLength))
       context.header('Content-Disposition', `attachment; filename="${context.req.param('exportId')}.html"`)
@@ -215,7 +237,7 @@ export function createApp(options: {
     if (!exports) return context.json({ error: 'Export service unavailable' }, 503)
     if (new URL(context.req.url).search) return context.json({ error: 'Export query parameters are not accepted' }, 400)
     try {
-      const content = exports.readArtifact(getOwnerContext(), context.req.param('presentationId'), context.req.param('exportId'), 'zip')
+      const content = exports.readArtifact(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), context.req.param('exportId'), 'zip')
       context.header('Content-Type', 'application/zip')
       context.header('Content-Length', String(content.byteLength))
       context.header('Content-Disposition', `attachment; filename="${context.req.param('exportId')}.zip"`)
@@ -254,15 +276,15 @@ export function createApp(options: {
   })
   app.patch('/api/presentations/:presentationId', async (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
-    try { const body = await jsonBody(context); return context.json({ presentation: presentations.rename(getOwnerContext(), context.req.param('presentationId'), body.name, body.expectedRevision) }) } catch (error) { return presentationError(context, error) }
+    try { const body = await jsonBody(context); return context.json({ presentation: presentations.rename(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), body.name, body.expectedRevision) }) } catch (error) { return presentationError(context, error) }
   })
   app.post('/api/presentations/:presentationId/items', async (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
-    try { const body = await jsonBody(context); return context.json({ presentation: presentations.add(getOwnerContext(), context.req.param('presentationId'), body.templateVersionId, body.expectedRevision, body.position) }, 201) } catch (error) { return presentationError(context, error) }
+    try { const body = await jsonBody(context); return context.json({ presentation: presentations.add(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), body.templateVersionId, body.expectedRevision, body.position) }, 201) } catch (error) { return presentationError(context, error) }
   })
   app.post('/api/presentations/:presentationId/items/:itemId/copy', async (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
-    try { const body = await jsonBody(context); return context.json({ presentation: presentations.copy(getOwnerContext(), context.req.param('presentationId'), context.req.param('itemId'), body.expectedRevision, body.position) }, 201) } catch (error) { return presentationError(context, error) }
+    try { const body = await jsonBody(context); return context.json({ presentation: presentations.copy(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), context.req.param('itemId'), body.expectedRevision, body.position) }, 201) } catch (error) { return presentationError(context, error) }
   })
   app.patch('/api/presentations/:presentationId/items/:itemId', async (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
@@ -272,14 +294,14 @@ export function createApp(options: {
       const hasOverrides = Object.hasOwn(body, 'slotOverrides')
       if (hasPosition === hasOverrides) throw new PresentationRequestError('Provide exactly one of position or slotOverrides')
       const presentation = hasPosition
-        ? presentations.move(getOwnerContext(), context.req.param('presentationId'), context.req.param('itemId'), body.position, body.expectedRevision)
-        : presentations.reviseOverrides(getOwnerContext(), context.req.param('presentationId'), context.req.param('itemId'), body.slotOverrides, body.expectedRevision)
+        ? presentations.move(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), context.req.param('itemId'), body.position, body.expectedRevision)
+        : presentations.reviseOverrides(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), context.req.param('itemId'), body.slotOverrides, body.expectedRevision)
       return context.json({ presentation })
     } catch (error) { return presentationError(context, error) }
   })
   app.delete('/api/presentations/:presentationId/items/:itemId', async (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)
-    try { const body = await jsonBody(context); return context.json({ presentation: presentations.remove(getOwnerContext(), context.req.param('presentationId'), context.req.param('itemId'), body.expectedRevision) }) } catch (error) { return presentationError(context, error) }
+    try { const body = await jsonBody(context); return context.json({ presentation: presentations.remove(getOwnerContext(context.get('auth').user.id), context.req.param('presentationId'), context.req.param('itemId'), body.expectedRevision) }) } catch (error) { return presentationError(context, error) }
   })
   app.notFound((context) => context.json({ error: 'Not found' }, 404))
 

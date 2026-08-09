@@ -12,7 +12,7 @@ import { assertSafeExportHtml, PresentationExportRepository } from '../apps/api/
 import { assertSafeExportPath, createStoredZip, readStoredZip, sha256 } from '../apps/api/src/presentation-exports/offline-archive.js'
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
-import { getOwnerContext } from '../apps/api/src/owner.js'
+import { createTrustedTestAuth, seedTestUser, testOwner } from './p14-test-support.js'
 
 type SQLite = {
   pragma(statement: string, options?: { simple: true }): unknown
@@ -42,12 +42,14 @@ function fixture(): {
   templateVersionId: string
   assetId: string
   sourceDigest: string
+  user: ReturnType<typeof seedTestUser>
 } {
   const directory = mkdtempSync(join(tmpdir(), 'asset-library-p08-'))
   const databasePath = join(directory, 'asset-library.db')
   migrateDatabase(databasePath)
   const database = new Database(databasePath)
   database.pragma('foreign_keys = ON')
+  const user = seedTestUser(database as never)
   const store = new LocalContentStore(join(directory, 'objects'))
   const template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
   const registered = new AssetCatalogRepository(database as never, store).registerTemplate(template)
@@ -69,11 +71,12 @@ function fixture(): {
     templateVersionId: template.version.id,
     assetId: template.asset.id,
     sourceDigest: registered.sourceDigest,
+    user,
   }
 }
 
 function preparedPresentation(state: ReturnType<typeof fixture>, name = 'P08 Offline Brief') {
-  const owner = getOwnerContext()
+  const owner = testOwner()
   const created = state.presentations.create(owner, name)
   const added = state.presentations.add(owner, created.id, state.templateVersionId, created.revision)
   return state.presentations.reviseOverrides(owner, added.id, added.items[0].id, { title: 'Audited & verified', 'accent-color': '#123abc' }, added.revision)
@@ -88,15 +91,15 @@ describe('P08 fixed revision HTML/ZIP export', () => {
   it('persists an immutable audited manifest and re-verifies controlled HTML/ZIP files without changing P04-P07 state', () => {
     const state = fixture()
     try {
-      const owner = getOwnerContext()
+      const owner = testOwner()
       const presentation = preparedPresentation(state)
       const protectedBefore = protectedState(state.database)
       const sourceBefore = Buffer.from(state.store.read(state.sourceDigest))
       const created = state.exports.create(owner, presentation.id, presentation.revision, presentation.items.map((item) => item.id))
       expect(created.created).toBe(true)
       expect(created.manifest).toMatchObject({
-        contractVersion: 'html-presentation-export/v1',
-        owner: 'local-owner',
+        contractVersion: 'html-presentation-export/v2',
+        ownerUserId: owner.id,
         presentation: { id: presentation.id, revision: presentation.revision },
         items: [{ itemId: presentation.items[0].id, position: 0, templateVersionId: state.templateVersionId, source: { sourceSha256: state.sourceDigest, contentObjectSha256: state.sourceDigest }, slotOverrides: { 'accent-color': '#123abc', title: 'Audited & verified' } }],
       })
@@ -132,7 +135,7 @@ describe('P08 fixed revision HTML/ZIP export', () => {
   })
 
   it('rejects stale, unknown, cross-Presentation, unavailable and tampered inputs without a published or partial export', () => {
-    const owner = getOwnerContext()
+    const owner = testOwner()
     const state = fixture()
     try {
       const presentation = preparedPresentation(state, 'First')
@@ -196,7 +199,7 @@ describe('P08 API and migration boundary', () => {
       expect(database.pragma('quick_check', { simple: true })).toBe('ok')
       expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 })
+      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
       expect(database.prepare("SELECT count(*) AS count FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'presentation_exports_%'").get()).toEqual({ count: 4 })
     } finally { database.close() }
   })
@@ -205,7 +208,7 @@ describe('P08 API and migration boundary', () => {
     const state = fixture()
     try {
       const presentation = preparedPresentation(state)
-      const app = createApp({ presentations: state.presentations, exports: state.exports })
+      const app = createApp({ presentations: state.presentations, exports: state.exports, auth: createTrustedTestAuth(state.user) })
       const url = `http://127.0.0.1:3001/api/presentations/${presentation.id}/exports`
       const origin = { origin: 'http://127.0.0.1:5173' }
       const create = await app.request(url, { method: 'POST', headers: origin, body: JSON.stringify({ expectedRevision: presentation.revision, itemIds: presentation.items.map((item) => item.id) }) })
@@ -224,14 +227,14 @@ describe('P08 API and migration boundary', () => {
       ]) expect([400, 409]).toContain((await request).status)
       expect((await app.request(`http://example.test/api/presentations/${presentation.id}/exports`)).status).toBe(421)
       expect((await app.request(url, { headers: { origin: 'https://example.test' } })).status).toBe(403)
-      for (const path of ['/api/export', '/api/preview', '/api/auth/login', '/api/admin/users', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
+      for (const path of ['/api/export', '/api/preview', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
     } finally { state.database.close() }
   })
 
   it('rejects a malformed stored audit manifest with a bounded diagnostic', () => {
     const state = fixture()
     try {
-      const owner = getOwnerContext()
+      const owner = testOwner()
       const presentation = state.presentations.create(owner, 'Malformed manifest')
       const html = state.store.put(Buffer.from('<!doctype html><html><body>safe</body></html>'), 'text/html; charset=utf-8')
       const zip = state.store.put(createStoredZip([{ relativePath: 'index.html', content: Buffer.from('<!doctype html><html><body>safe</body></html>') }]), 'application/zip')

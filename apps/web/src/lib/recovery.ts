@@ -12,7 +12,6 @@ export type RecoveryBackup = Readonly<{
 }>
 
 export type RecoveryOverview = Readonly<{
-  owner: 'local-owner'
   stateSha256: string
   databaseSha256: string
   migrationCount: number
@@ -46,7 +45,7 @@ async function request(path: string, method = 'GET', body?: Record<string, unkno
 
 export async function loadRecoveryOverview(): Promise<RecoveryOverview> {
   const payload = await request('/api/recovery')
-  if (!payload.recovery || payload.recovery.owner !== 'local-owner') throw new Error('恢复服务响应不符合本机 Owner 契约')
+  if (!payload.recovery || !Array.isArray(payload.recovery.backups)) throw new Error('恢复服务响应不符合全局管理契约')
   return payload.recovery
 }
 

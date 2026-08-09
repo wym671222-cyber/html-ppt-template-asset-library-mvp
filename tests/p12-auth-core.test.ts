@@ -115,7 +115,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
       expect(schemaNames(database, 'table')).toEqual([...TARGET_DATABASE_TABLES].sort())
       expect(schemaNames(database, 'trigger')).toEqual([...TARGET_DATABASE_TRIGGERS].sort())
-      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(6)
+      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
       expect(scalar(database, 'SELECT count(*) AS count FROM users')).toBe(0)
       expect(scalar(database, 'SELECT count(*) AS count FROM sessions')).toBe(0)
       expect(scalar(database, 'SELECT count(*) AS count FROM auth_throttle')).toBe(0)
@@ -149,7 +149,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
       expect(schemaNames(database, 'trigger')).toEqual([...TARGET_DATABASE_TRIGGERS].sort())
       const migratedDefinitions = new Map(triggerDefinitions(database).map((trigger) => [trigger.name, trigger.sql]))
       expect(oldTriggerDefinitions.every((trigger) => migratedDefinitions.get(trigger.name) === trigger.sql)).toBe(true)
-      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(6)
+      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
       expect(businessCounts(database)).toEqual(countsBefore)
       expect(database.pragma('quick_check', { simple: true })).toBe('ok')
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
@@ -160,7 +160,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
     expect(databaseSha256(path)).toBe(beforeRepeat)
     const repeated = openDatabase(path)
     try {
-      expect(scalar(repeated, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(6)
+      expect(scalar(repeated, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
       expect(businessCounts(repeated)).toEqual(countsBefore)
     } finally { repeated.close() }
   })
@@ -185,7 +185,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
     }
   })
 
-  it('includes the sixth ledger and auth tables in isolated backup/restore without secret diagnostics', async () => {
+  it('includes the seventh ledger and revokes restored sessions without secret diagnostics', async () => {
     const root = temporaryRoot('p12-recovery')
     const path = join(root, 'source/asset-library.db')
     migrateDatabase(path)
@@ -204,10 +204,10 @@ describe('P12 numbered migration and recovery boundaries', () => {
       restoreRoot: join(root, 'restores'),
     })
     const overview = service.inspectCurrent()
-    expect(overview.migrationCount).toBe(6)
+    expect(overview.migrationCount).toBe(7)
     const backup = await service.createBackup(overview.stateSha256)
     const { manifest } = service.readBackupManifest(backup.id)
-    expect(manifest.database.migrationLedger.at(-1)?.tag).toBe('0005_p12_auth_core')
+    expect(manifest.database.migrationLedger.at(-1)?.tag).toBe('0006_p14_presentation_ownership')
     const serializedManifest = JSON.stringify(manifest)
     expect(serializedManifest).not.toContain(rawPassword)
     expect(serializedManifest).not.toContain(created.token)
@@ -216,7 +216,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
     const restored = openDatabase(join(root, 'restores', restore.id, 'database/asset-library.db'))
     try {
       expect(scalar(restored, 'SELECT count(*) AS count FROM users')).toBe(1)
-      expect(scalar(restored, 'SELECT count(*) AS count FROM sessions')).toBe(1)
+      expect(scalar(restored, 'SELECT count(*) AS count FROM sessions')).toBe(0)
       expect(scalar(restored, 'SELECT count(*) AS count FROM auth_throttle')).toBe(1)
       expect(restored.pragma('quick_check', { simple: true })).toBe('ok')
       expect(restored.prepare('PRAGMA foreign_key_check').all()).toEqual([])

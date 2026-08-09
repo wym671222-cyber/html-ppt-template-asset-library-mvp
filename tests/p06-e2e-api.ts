@@ -15,6 +15,7 @@ import { PresentationExportRepository } from '../apps/api/src/presentation-expor
 import { LocalRecoveryService } from '../apps/api/src/recovery/local-recovery.js'
 import { SecurePreviewRenderer } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
+import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
 
 type SQLite = {
   pragma(statement: string): unknown
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
   migrateDatabase(databasePath)
   const database = new Database(databasePath)
   database.pragma('foreign_keys = ON')
+  const user = seedTestUser(database as never)
   const store = new LocalContentStore(join(directory, 'objects'))
   const template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
   const registered = new AssetCatalogRepository(database as never, store).registerTemplate(template)
@@ -62,6 +64,7 @@ async function main(): Promise<void> {
       backupRoot: join(directory, 'recovery-backups'),
       restoreRoot: join(directory, 'recovery-drills'),
     }),
+    auth: createTrustedTestAuth(user),
   })
   serve({ fetch: app.fetch, hostname: '127.0.0.1', port }, () => {
     console.log(`P06 fixture API ready at http://127.0.0.1:${port}`)

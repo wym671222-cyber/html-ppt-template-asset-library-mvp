@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type BetterSqlite3 from 'better-sqlite3'
-import type { OwnerContext } from '../owner.js'
+import { isUserId, type OwnerContext } from '../owner.js'
 
 type Database = BetterSqlite3.Database
 
@@ -36,7 +36,7 @@ type Slot = { id: string; type: 'text' | 'color'; maxLength?: number }
 type VersionRow = { id: string; slot_schema: string }
 
 function assertOwner(owner: OwnerContext): void {
-  if (owner.id !== 'local-owner' || owner.kind !== 'local') throw new PresentationRequestError('Fixed local OwnerContext required', 404)
+  if (owner.kind !== 'user' || !isUserId(owner.id)) throw new PresentationRequestError('Authenticated user OwnerContext required', 404)
 }
 
 function assertId(value: string, label: string): void {
@@ -106,13 +106,13 @@ export class PresentationRepository {
 
   list(owner: OwnerContext): Presentation[] {
     assertOwner(owner)
-    return (this.database.prepare('SELECT id FROM presentations ORDER BY updated_at DESC, id ASC LIMIT 100').all() as { id: string }[]).map((row) => this.read(owner, row.id))
+    return (this.database.prepare('SELECT id FROM presentations WHERE owner_user_id = ? ORDER BY updated_at DESC, id ASC LIMIT 100').all(owner.id) as { id: string }[]).map((row) => this.read(owner, row.id))
   }
 
   read(owner: OwnerContext, id: string): Presentation {
     assertOwner(owner)
     assertId(id, 'Presentation id')
-    const presentation = this.database.prepare('SELECT id, name, revision, created_at, updated_at FROM presentations WHERE id = ?').get(id) as { id: string; name: string; revision: number; created_at: number; updated_at: number } | undefined
+    const presentation = this.database.prepare('SELECT id, name, revision, created_at, updated_at FROM presentations WHERE id = ? AND owner_user_id = ?').get(id, owner.id) as { id: string; name: string; revision: number; created_at: number; updated_at: number } | undefined
     if (!presentation) throw new PresentationRequestError('Presentation not found', 404)
     const items = this.database.prepare(`
       SELECT item.id, item.template_version_id, item.position, item.slot_overrides, asset.title, version.version_number
@@ -132,7 +132,7 @@ export class PresentationRepository {
     const normalized = normalizeName(name)
     const now = Date.now()
     const id = `presentation-${randomUUID()}`
-    this.database.prepare('INSERT INTO presentations (id, name, revision, created_at, updated_at) VALUES (?, ?, 0, ?, ?)').run(id, normalized, now, now)
+    this.database.prepare('INSERT INTO presentations (id, owner_user_id, name, revision, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)').run(id, owner.id, normalized, now, now)
     return this.read(owner, id)
   }
 
@@ -232,11 +232,11 @@ export class PresentationRepository {
     assertId(id, 'Presentation id')
     const expected = assertExpectedRevision(expectedRevision)
     const transaction = this.database.transaction(() => {
-      const row = this.database.prepare('SELECT revision FROM presentations WHERE id = ?').get(id) as { revision: number } | undefined
+      const row = this.database.prepare('SELECT revision FROM presentations WHERE id = ? AND owner_user_id = ?').get(id, owner.id) as { revision: number } | undefined
       if (!row) throw new PresentationRequestError('Presentation not found', 404)
       if (row.revision !== expected) throw new PresentationRequestError('Presentation has changed; reload and retry', 409)
       operation()
-      const changed = this.database.prepare('UPDATE presentations SET revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?').run(Date.now(), id, expected).changes
+      const changed = this.database.prepare('UPDATE presentations SET revision = revision + 1, updated_at = ? WHERE id = ? AND owner_user_id = ? AND revision = ?').run(Date.now(), id, owner.id, expected).changes
       if (changed !== 1) throw new PresentationRequestError('Presentation has changed; reload and retry', 409)
     })
     transaction()

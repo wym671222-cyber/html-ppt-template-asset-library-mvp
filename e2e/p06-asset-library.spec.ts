@@ -2,7 +2,10 @@ import { expect, test } from '@playwright/test'
 
 const apiUrl = process.env.P06_API_URL ?? 'http://127.0.0.1:3018'
 
-test('P06 three-column catalog supports search, filters, selection, keyboard focus and safe PNG detail', async ({ page }) => {
+test('P06 three-column catalog supports search, filters, selection, keyboard focus and safe PNG detail', async ({ page, request }) => {
+  const catalogResponse = await request.get('/api/catalog')
+  expect(catalogResponse.ok()).toBeTruthy()
+  expect(await catalogResponse.json()).not.toHaveProperty('owner')
   await page.route('**/api/catalog', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 350))
     await route.continue()

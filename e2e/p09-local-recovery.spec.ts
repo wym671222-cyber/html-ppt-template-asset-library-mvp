@@ -8,7 +8,9 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
 
   const beforeResponse = await request.get('/api/recovery')
   expect(beforeResponse.ok()).toBeTruthy()
-  const before = await beforeResponse.json() as { recovery: { stateSha256: string; databaseSha256: string } }
+  const before = await beforeResponse.json() as { recovery: { stateSha256: string; databaseSha256: string; owner?: unknown } }
+  expect(before.recovery).not.toHaveProperty('owner')
+  expect(JSON.stringify(before.recovery)).not.toContain('local-owner')
 
   const backupButton = page.getByRole('button', { name: '生成备份清单' })
   await backupButton.focus()
@@ -24,7 +26,7 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
   expect(manifestResponse.ok()).toBeTruthy()
   const manifestPayload = await manifestResponse.json() as { manifestSha256: string; manifest: { contractVersion: string; database: { migrationLedger: unknown[] }; objects: Array<{ relativePath: string; digest: string }> } }
   expect(manifestPayload.manifest.contractVersion).toBe('asset-library-local-backup/v1')
-  expect(manifestPayload.manifest.database.migrationLedger).toHaveLength(6)
+  expect(manifestPayload.manifest.database.migrationLedger).toHaveLength(7)
   expect(manifestPayload.manifest.objects.every((object) => object.relativePath === `objects/sha256/${object.digest.slice(0, 2)}/${object.digest}`)).toBe(true)
   expect(JSON.stringify(manifestPayload)).not.toMatch(/\/Users\/|password|credential|api[_-]?key/i)
 
@@ -38,7 +40,8 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
   await expect(page.getByRole('button', { name: '恢复已验证' }).last()).toBeDisabled()
 
   const afterResponse = await request.get('/api/recovery')
-  const after = await afterResponse.json() as { recovery: { stateSha256: string; databaseSha256: string; backups: Array<{ id: string; manifestSha256: string }> } }
+  const after = await afterResponse.json() as { recovery: { stateSha256: string; databaseSha256: string; backups: Array<{ id: string; manifestSha256: string }>; owner?: unknown } }
+  expect(after.recovery).not.toHaveProperty('owner')
   expect(after.recovery.stateSha256).toBe(before.recovery.stateSha256)
   expect(after.recovery.databaseSha256).toBe(before.recovery.databaseSha256)
   const backup = after.recovery.backups[0]
