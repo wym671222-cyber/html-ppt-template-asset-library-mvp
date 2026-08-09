@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P13",
-    "activePhaseThreadId": "/root/p13_auth_approval_api",
+    "currentPhaseId": "P14",
+    "activePhaseThreadId": "/root/p14_user_ownership_retry",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -74,27 +74,35 @@
       "id": "P13",
       "title": "注册审批与密码管理 API",
       "objective": "完成注册待审批、唯一管理员、登录、禁用、重置和改密的服务端闭环",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P12"],
       "successor": "P14",
       "threadId": "/root/p13_auth_approval_api",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "9851afc0737564413bc543e8f2756106346ba353",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to supervisor baseline 332d393 exactly one amended atomic commit; tracked worktree clean",
+          "parent rerun: P13 10/10, P12+P13 21/21, shared/API tsc, API build and shell 8/8 passed",
+          "bootstrap build output, exact Origin, audit secrecy, persistent throttles and auth/admin state machine verified",
+          "forced-password admin bypass and untrusted forwarded-IP findings fixed before acceptance"
+        ]
+      }
     },
     {
       "id": "P14",
       "title": "用户数据归属与恢复边界迁移",
       "objective": "将 Presentation 和导出绑定用户并保持模板共享、恢复可审计和跨用户不可见",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P13"],
       "successor": "P15",
-      "threadId": null,
+      "threadId": "/root/p14_user_ownership_retry",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -142,5 +150,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-10T00:44:30+08:00"
+  "updatedAt": "2026-08-10T01:20:30+08:00"
 }

@@ -5,23 +5,23 @@
 - Workflow phase：`executing`
 - Plan version：`2.0`
 - User-approved version：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P12 `passed`；P13 `in_progress`（worker 已交付，等待父监督者独立验收）；P14–P17 pending
+- 当前实现阶段：P11–P13 `passed`；P14 `in_progress`；P15–P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p13_auth_approval_api`
-- 下一安全动作：父监督者独立核对 P13 原子提交、身份状态机、Origin/限流/审计负向与全量回归；通过前不得创建 P14，不得越过 G1/G2 写服务器或 push。
+- 当前任务：`/root/p14_user_ownership_retry`
+- 下一安全动作：P14 在隔离 DB 实现 Presentation/Item/Export 用户归属、共享 catalog 和 admin-only recovery；不得越界实现 P15 UI，不得越过 G1/G2 写服务器或 push。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
 | P11 | passed | `8d3cc0d91d2e4292967b3fba80f3aff5c7ed5542` | `/root/p11_reproducible_baseline` | passed | 父级复跑 P11 4/4、shared/API tsc、adapter-node Web build、shell 90/90；边界和原子提交已核验 |
 | P12 | passed | `7a0bfa457541a76c26b70a8d3613a0870339be98` | `/root/p12_auth_core` | passed | 父级复跑 P12 11/11、shared/API tsc、shell 8/8；迁移、令牌/Cookie/限流和退役边界已核验 |
-| P13 | in_progress（worker complete） | 本 handoff 所在原子提交 | `/root/p13_auth_approval_api` | supervisor pending | 注册待审批、登录/退出/改密、管理员审批/禁用/重置、持久限流、审计与离线 bootstrap 已有当前证据 |
-| P14 | pending | — | — | pending | 线上 Presentation/Item/Export 当前只读计数均为 0 |
+| P13 | passed | `9851afc0737564413bc543e8f2756106346ba353` | `/root/p13_auth_approval_api` | passed | 父级复跑 P13 10/10、P12+P13 21/21、shared/API tsc、API build、shell 8/8；强制改密和 IP 信任缺口修正后验收 |
+| P14 | in_progress | — | `/root/p14_user_ownership_retry` | pending | Presentation/Item/Export 归属、跨用户 404、共享 catalog 和 admin-only recovery 实施中 |
 | P15 | pending | — | — | pending | 登录/管理员 UI 尚未实施 |
 | P16 | pending | — | — | pending | systemd/原子发布仅为候选设计 |
 | P17 | pending | — | — | pending | 无 G2；禁止 push/迁移/部署 |
 
-### P13 worker 交付与当前证据
+### P13 通过事实与当前证据
 
 | 范围 | 已验证结果 |
 |---|---|
@@ -35,7 +35,9 @@
 | 验证 | P13 定向 10/10，P12+P13 21/21，全量 Vitest 31 files/762 tests，shell 8/8，shared/API TypeScript，API/root build 通过，真实 Chrome P02 1/1 与 P06–P09 10/10 通过。 |
 | 边界 | 未修改 Presentation Owner/Export/recovery 权限模型，未实现 P15 UI，未迁移实际/生产 DB，未访问 sibling 真实 `02` 资产，未修改 CHAIN_STATE/DECISION_LOG、remote/服务器/Caddy/PM2，无 push。 |
 
-P13 当前仅是 worker 交付，机器状态仍为 `in_progress`；父监督者独立验收通过前不得标记 passed 或创建 P14。
+P13 未修改 Presentation Owner/Export/recovery 权限，未实现 P14/P15，且无实际/生产 DB、sibling `02`、remote/服务器/push 操作。父监督者已于 2026-08-10 独立复核并要求关闭强制改密绕过与不可信代理头缺口；修正后重跑门禁，结论为 `passed`。
+
+P14 首个 worker `/root/p14_user_ownership` 在只读阶段误执行会遍历父目录的 `find ..`，触发 sibling 目录扫描硬边界后立即停止。该命令只返回本仓库 AGENTS 路径，未读取 sibling 文件内容、未写入或提交。父监督者已废弃该 worker 并以显式仓库路径规则重启 `/root/p14_user_ownership_retry`。
 
 ### P12 通过事实与当前证据
 
