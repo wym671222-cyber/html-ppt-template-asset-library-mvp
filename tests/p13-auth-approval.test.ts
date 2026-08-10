@@ -366,5 +366,5 @@ describe('P13 password reset/change, audit safety and persistent throttles', () 
       output,
     ], { cwd: process.cwd(), stdio: 'pipe' })
     expect(existsSync(join(output, 'auth/bootstrap-admin.js'))).toBe(true)
-  })
+  }, 15_000)
 })

@@ -25,6 +25,20 @@
 | P16T | in_progress | — | `/root/p16t_ci_stabilization` | pending | 仅允许单测级确定性时限；断言、真实 tsc 编译、覆盖、产品源码和 CI workflow 不变；不含 remote/生产权限 |
 | P17 | pending | — | `/root/p17_production_release` | pending | 首次尝试记录提交 `8932988…`；旧 SHA 已在 origin 两分支但 personal CI 重复红灯，生产未触碰；等待 P16T 新候选及新 G2 |
 
+### P16T 候选实现与当前证据
+
+| 范围 | 当前已验证结果 |
+|---|---|
+| 唯一实现 | 只为 `tests/p13-auth-approval.test.ts` 中 bootstrap build-graph 的现有 `it` 增加 Vitest 第三参数 `15_000`。真实 `node_modules/.bin/tsc`、API manifest/tsconfig 断言、`dist/auth/bootstrap-admin.js` 产物断言及其余 778 个测试均未改变；无 skip、retry、全局 timeout、mock 或 CI workflow/产品源码修改。 |
+| 定向稳定性 | P13 文件连续 3 次各 10/10 通过；目标真实编译测试单次约 1.0–1.2 秒。工作区全量 Vitest 35 files/779 tests 通过。 |
+| 静态与构建 | shell 8/8、shared/API TypeScript、Web check 0 errors/9 个既有 warnings、Web build、根 Turbo API/Web 2/2 build 全部通过。 |
+| 生产依赖 | `npx -y pnpm@9.15.0 audit --prod --audit-level high --json` 真实 exit 0；369 production dependencies，info/low/moderate/high/critical 全 0。 |
+| 发布与浏览器 | P16 non-root release rehearsal 与 local preflight 通过；P15 隔离 HTTPS Chrome 2/2、P06–P09 Chrome 10/10 通过。Node 24、无 Caddy/systemd/Docker runtime 的既有限制继续如实保留。 |
+| staged-index 干净导出 | 从仅含功能改动的精确暂存索引导出到独立 `/tmp` 树，确认不含 `.workbuddy/`，fresh frozen install 通过。首次在 `svelte-kit sync` 前跑全量 Vitest 时 3 个 Web suite 因缺生成的 `.svelte-kit/tsconfig.json` 仅在收集阶段失败，其余 32 files/756 tests 与 P13 均通过；先执行 Web check/sync 后，同一导出树复现 P13 连续 3 次、全量 779、shell/type/build、audit、rehearsal/preflight 与 Chrome 12/12 全部通过。 |
+| 边界 | 只使用仓库 P03 fixture、隔离 SQLite/CAS、临时目录与备用端口；未读取/暂存/修改 `.workbuddy/`，未读取 sibling `02`，未访问实际/生产 DB/CAS、服务器、WorkBuddy、Caddy/systemd/PM2、remote 或 G1/G2；未运行 `pnpm approve-builds`。 |
+
+P16T worker 只形成一个本地原子候选提交并停止。父监督者必须独立核对完整 SHA、提交路径、门禁与 tracked-clean 状态；通过后才可向用户重新请求该新 SHA 的 G2，当前旧 SHA 的 G2 不适用于本候选。
+
 ### P17 当前阻断（2026-08-10）
 
 - 已按精确 refspec 将获批产品提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 推到新的 `origin/feat/production-auth-hardening`；没有推送本地父级状态提交、upstream、tag 或其他 ref。
