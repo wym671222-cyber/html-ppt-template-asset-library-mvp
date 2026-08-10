@@ -2,17 +2,17 @@
 
 ## 生产化修复链 v2.2 当前状态（2026-08-10）
 
-- Workflow phase：`blocked`（等待新候选完整 SHA 的 G2）
+- Workflow phase：`executing`（P17）
 - Plan version：`2.2`（已批准，2026-08-10T14:19:02+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P16T `passed`；P17 pending
+- 当前实现阶段：P11–P16T `passed`；P17 `in_progress`
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：无；P16T worker 已停止并由父监督者独立验收
+- 当前任务：`/root/p17_production_release`
 - 上一轮 G2：用户于 2026-08-10T10:06:13+08:00 批准 `8d125d2d9afb213f449dbdc2d32c4939f5407441`，但发布分支 CI 红灯后在生产 preflight 前安全停止；该授权已关闭且不适用于新 SHA
-- 当前待批准候选：`72eadaa476a83b4a58f320149d7a5d0e0ad980ad`
+- 当前 G2：用户于 2026-08-10T16:40:05+08:00 明确批准提交 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` 推送并部署到 `ppt.ajjy-ai.site`
 - 最小修复授权：用户明确批准仅修复 P13 bootstrap build-graph 测试的确定性超时，保持断言与覆盖不变；形成新候选 SHA 后重新请求 G2。
-- 下一安全动作：只向用户报告新候选及父级证据并等待新的精确 G2；批准前不得 push、访问服务器或部署。
+- 下一安全动作：P17 仅对上述精确 SHA 执行 push；等待同 SHA CI 全绿后，运行线上预检、备份、原子部署与 smoke/readback；任何门禁失败即停止。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -24,7 +24,7 @@
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
 | P16S | passed | `8d125d2d9afb213f449dbdc2d32c4939f5407441` | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | passed | 父级复现 audit 真实 exit 0/五档全 0、定向 24/24、全量 779、shell/type/build、rehearsal/preflight 与 Chrome 12/12；提交边界和凭据扫描通过 |
 | P16T | passed | `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` | `/root/p16t_ci_stabilization` | passed | 父级确认单提交/三路径/唯一单测级 15 秒差异；独立复跑 P13 三轮、全量 779、shell/type/build、audit 全 0、rehearsal/preflight 与 Chrome 12/12 通过 |
-| P17 | pending | — | `/root/p17_production_release` | pending | 首次尝试记录提交 `8932988…`；旧 SHA 已在 origin 两分支但 personal CI 重复红灯，生产未触碰；等待 P16T 新候选及新 G2 |
+| P17 | in_progress | — | `/root/p17_production_release` | pending | 新 G2 已批准精确 SHA `72eadaa…`；执行者必须先完成同 SHA feature/personal CI，再进行生产预检与原子部署；生产当前未触碰 |
 
 ### P16T 候选实现与当前证据
 
