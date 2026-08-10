@@ -31,4 +31,6 @@
 2. **G1 临时保护审批**：用户回复“批准应用临时只读保护”。才允许 WorkBuddy 备份、验证并 reload Caddy，为该域名启用访问日志和只读 allowlist；不迁移数据库、不重启应用。
 3. **G2 生产发布审批**：P16S 通过、production audit high/critical 为 0 后，由父监督者报告新的精确候选提交号、CI、备份与回滚点；用户回复“批准提交 `<sha>` 推送并部署到 `ppt.ajjy-ai.site`”。才允许 push、生产备份、迁移、systemd/Caddy 切换和管理员交互式初始化。
 
+当前 G2 状态：`pending`。P16S 已通过父监督者门禁，候选为 `8d125d2d9afb213f449dbdc2d32c4939f5407441`；尚未收到该完整 SHA 的 G2 批准，P17 未创建。
+
 旧发布目录、旧 PM2 配置和历史备份的删除不属于 G0/G1/G2，始终需要新的独立授权。

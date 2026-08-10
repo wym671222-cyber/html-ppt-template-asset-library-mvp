@@ -7,7 +7,7 @@
     "implementationBranch": "feat/production-auth-hardening",
     "baselineCommit": "9c88b48aafd3bf2529cc31c5db9e346a915bf3aa"
   },
-  "workflowPhase": "executing",
+  "workflowPhase": "blocked",
   "plan": {
     "version": "2.1",
     "approved": true,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P16S",
-    "activePhaseThreadId": "019fe931-bd91-7ca0-9503-c0e8fcffe052",
+    "currentPhaseId": null,
+    "activePhaseThreadId": null,
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -162,15 +162,23 @@
       "id": "P16S",
       "title": "生产依赖安全修复",
       "objective": "在不改变产品能力的前提下消除生产依赖 high/critical 风险并重新形成可部署候选",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P16"],
       "successor": "P17",
       "threadId": "019fe931-bd91-7ca0-9503-c0e8fcffe052",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "8d125d2d9afb213f449dbdc2d32c4939f5407441",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to approval baseline 5746fde exactly one atomic commit across eight approved paths; tracked worktree clean",
+          "parent reproduced frozen install and production audit real exit 0 with 369 dependencies and zero findings at every severity",
+          "parent rerun: P16S/P12/P14/P16 24/24, full Vitest 35 files/779, shell 8/8, shared/API tsc, Web check and root adapter-node build passed",
+          "parent P16 rehearsal/local preflight and Chrome P15 2/2 plus P06-P09 10/10 passed; credential and forbidden-path scans were clean"
+        ]
+      }
     },
     {
       "id": "P17",
@@ -187,6 +195,6 @@
       "gate": {"result": "pending", "evidence": []}
     }
   ],
-  "blockedReason": null,
-  "updatedAt": "2026-08-10T09:03:13+08:00"
+  "blockedReason": "P16S passed with candidate 8d125d2d9afb213f449dbdc2d32c4939f5407441; P17 requires the user's separate exact-SHA G2 approval. No P17 task exists and no push, production migration, deployment, or server write is authorized.",
+  "updatedAt": "2026-08-10T09:54:03+08:00"
 }

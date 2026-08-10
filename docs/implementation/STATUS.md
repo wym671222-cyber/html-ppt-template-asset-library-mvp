@@ -2,14 +2,15 @@
 
 ## 生产化修复链 v2.1 当前状态（2026-08-10）
 
-- Workflow phase：`executing`
+- Workflow phase：`blocked`（等待用户单独批准 G2）
 - Plan version：`2.1`（已批准，2026-08-10T09:03:13+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P16 `passed`；P16S 唯一候选提交、工作区门禁与 staged-index 干净导出复验完成，待父监督者独立 gate；P17 pending 且未创建
+- 当前实现阶段：P11–P16S `passed`；P17 pending 且未创建
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`019fe931-bd91-7ca0-9503-c0e8fcffe052`
-- 下一安全动作：只允许父监督者独立复核候选 SHA 并协调状态/Git/handoff；不得创建 P17 或越过 G1/G2、push、服务器、生产数据边界。
+- 当前任务：无；P16S task `019fe931-bd91-7ca0-9503-c0e8fcffe052` 已交付并通过父级 gate
+- G2 候选：`8d125d2d9afb213f449dbdc2d32c4939f5407441`
+- 下一安全动作：等待用户明确回复“批准提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 推送并部署到 `ppt.ajjy-ai.site`”。在此之前不得创建 P17、push、访问或修改服务器/生产数据。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -19,8 +20,8 @@
 | P14 | passed | `5c2d13f5e15cda9840a459a6c46e6a041bb0beed` | `/root/p14_user_ownership_retry` | passed | 父级复跑 P14+P09 13/13、shared/API tsc、shell 8/8、root build 2/2；迁移阻断、A/B 隔离、恢复撤销与 fixed owner 修正已核验 |
 | P15 | passed | `45898624eb4f8935a7112210f5cb103ab21610fc` | `/root/p15_auth_frontend` | passed | 父级 HTTPS Chrome 2/2、P06–P09 10/10、全量 Vitest 771/771、shell 8/8、类型/构建与边界扫描通过；hydration/用例依赖修正后验收 |
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
-| P16S | candidate pending parent gate | 父级回读完整 SHA | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | pending | production audit 为 369 dependencies、所有 severity 0 且命令真实 exit 0；工作区全量回归及 staged-index 干净导出复验通过，待父级独立复核 |
-| P17 | pending | — | — | pending | 未创建；P16S 未通过且无 G2，禁止 push/迁移/部署 |
+| P16S | passed | `8d125d2d9afb213f449dbdc2d32c4939f5407441` | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | passed | 父级复现 audit 真实 exit 0/五档全 0、定向 24/24、全量 779、shell/type/build、rehearsal/preflight 与 Chrome 12/12；提交边界和凭据扫描通过 |
+| P17 | pending | — | — | pending | 未创建；等待完整 SHA 的单独 G2，禁止 push/迁移/部署 |
 
 ### P16S 候选实现与当前证据
 
@@ -36,7 +37,7 @@
 | 迁移与发布 | P12/P14/P16 定向 24/24 覆盖 5→7、6→7、7 no-op、完整 ledger 7 搭配 migration 6 trigger 的 wrong-ledger 无备份拒绝；P16 非 root rehearsal 与 local preflight 通过。 |
 | 边界 | 仅使用仓库 P03 fixture、隔离 SQLite/CAS、临时目录与空闲备用端口；未读取 sibling `02`，未读取/修改 `.workbuddy/`，未访问实际/生产 DB/CAS、服务器、Caddy/systemd/PM2 或 remote；无 push、G1/G2、`pnpm approve-builds`、audit ignore、降阈值或 `--force`。 |
 
-P16S 尚未修改 `CHAIN_STATE.json` 或创建 P17。唯一原子候选提交与 staged-index 干净复现均由本 handoff 交付；只有父监督者对该提交的独立复核也成立后，才可把完整 SHA 报告为 G2 候选。
+P16S 产品提交未修改 `CHAIN_STATE.json` 或创建 P17。父监督者已对完整提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 独立复核并通过；该 SHA 现在仅作为 G2 候选报告，尚无 push、生产迁移或部署权限。
 
 ### P16 交付候选与阻断事实
 
