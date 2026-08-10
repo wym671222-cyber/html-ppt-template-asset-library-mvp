@@ -7,7 +7,7 @@
     "implementationBranch": "feat/production-auth-hardening",
     "baselineCommit": "9c88b48aafd3bf2529cc31c5db9e346a915bf3aa"
   },
-  "workflowPhase": "blocked",
+  "workflowPhase": "executing",
   "plan": {
     "version": "2.1",
     "approved": true,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": null,
-    "activePhaseThreadId": null,
+    "currentPhaseId": "P17",
+    "activePhaseThreadId": "/root/p17_production_release",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -184,17 +184,17 @@
       "id": "P17",
       "title": "生产迁移切换与终局验收",
       "objective": "经独立生产审批后推送精确提交、迁移腾讯服务器并验证可靠性和权限终局",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 45,
       "dependsOn": ["P16S"],
       "successor": null,
-      "threadId": null,
+      "threadId": "/root/p17_production_release",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     }
   ],
-  "blockedReason": "P16S passed with candidate 8d125d2d9afb213f449dbdc2d32c4939f5407441; P17 requires the user's separate exact-SHA G2 approval. No P17 task exists and no push, production migration, deployment, or server write is authorized.",
-  "updatedAt": "2026-08-10T09:54:03+08:00"
+  "blockedReason": null,
+  "updatedAt": "2026-08-10T10:06:13+08:00"
 }
