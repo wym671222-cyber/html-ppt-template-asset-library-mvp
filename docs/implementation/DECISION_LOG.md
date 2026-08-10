@@ -14,19 +14,20 @@
 | D-010 | confirmed | 固定实现分支 `feat/production-auth-hardening`，基线 `9c88b48a...` | build-complex-project 单分支要求 | 全局 | 2026-08-09 |
 | D-011 | rejected | 保留 root PM2 与服务器内手工构建 | 已确认端口冲突、权限和不可复现问题 | P16–P17 | 2026-08-09 |
 | D-012 | rejected | 计划批准即自动 push/迁移/部署 | 外部效果必须精确审批 | P17 | 2026-08-09 |
-| D-013 | proposed | v2.1 新增 P16S，关闭 production audit high/critical 后才形成 P17 候选 | P16 独立复核确认 442 个 prod 依赖中有 21 high、0 critical；manifest/lock 修复属于 material scope change | P16S–P17 | 待用户批准 |
+| D-013 | confirmed | v2.1 新增 P16S，关闭 production audit high/critical 后才形成 P17 候选 | P16 独立复核确认 442 个 prod 依赖中有 21 high、0 critical；用户明确批准计划 v2.1 | P16S–P17 | 2026-08-10 |
 
 ## 审批记录
 
 - 历史批准版本：2.0
 - 历史批准声明：用户明确回复“批准计划 v2.0”
 - 历史批准时间：2026-08-09T23:50:11+08:00
-- 当前提案版本：2.1（未批准）
-- 当前所需声明：`批准计划 v2.1（新增 P16S 依赖安全修复阶段）`
+- 当前批准版本：2.1
+- 当前批准声明：用户明确回复“批准计划 v2.1”
+- 当前批准时间：2026-08-10T09:03:13+08:00
 
 ## 三层审批门
 
-1. **G0 计划审批**：v2.0 已授权并完成至 P16 工程提交；P16S 属于新增 material scope，只有用户回复“批准计划 v2.1（新增 P16S 依赖安全修复阶段）”后，才授权其本地 manifest/lock/直接适配、测试和单一原子提交。该批准不授权 push 或生产写操作。
+1. **G0 计划审批**：v2.0 已授权并完成至 P16 工程提交；用户现已批准 v2.1，授权 P16S 本地 manifest/lock/直接适配、测试和单一原子提交。该批准不授权 push 或生产写操作。
 2. **G1 临时保护审批**：用户回复“批准应用临时只读保护”。才允许 WorkBuddy 备份、验证并 reload Caddy，为该域名启用访问日志和只读 allowlist；不迁移数据库、不重启应用。
 3. **G2 生产发布审批**：P16S 通过、production audit high/critical 为 0 后，由父监督者报告新的精确候选提交号、CI、备份与回滚点；用户回复“批准提交 `<sha>` 推送并部署到 `ppt.ajjy-ai.site`”。才允许 push、生产备份、迁移、systemd/Caddy 切换和管理员交互式初始化。
 

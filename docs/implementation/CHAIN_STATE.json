@@ -7,12 +7,12 @@
     "implementationBranch": "feat/production-auth-hardening",
     "baselineCommit": "9c88b48aafd3bf2529cc31c5db9e346a915bf3aa"
   },
-  "workflowPhase": "awaiting_approval",
+  "workflowPhase": "executing",
   "plan": {
     "version": "2.1",
-    "approved": false,
-    "approvedVersion": null,
-    "approvedAt": null
+    "approved": true,
+    "approvedVersion": "2.1",
+    "approvedAt": "2026-08-10T09:03:13+08:00"
   },
   "contextPolicy": {
     "targetPercent": 50,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": null,
-    "activePhaseThreadId": null,
+    "currentPhaseId": "P16S",
+    "activePhaseThreadId": "019fe931-bd91-7ca0-9503-c0e8fcffe052",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -140,7 +140,7 @@
       "id": "P16",
       "title": "systemd 与原子发布工程",
       "objective": "完成非 root 服务、数据分离、Caddy、CI 和 WorkBuddy 可回滚发布包并演练",
-      "status": "blocked",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
@@ -149,12 +149,12 @@
       "threadId": "/root/p16_atomic_release",
       "commit": "81ed30c067138a2f9225a7e5da0e90a06717f573",
       "gate": {
-        "result": "blocked",
+        "result": "passed",
         "evidence": [
           "relative to supervisor baseline 1419afc3 exactly one amended atomic commit; tracked worktree clean",
           "parent rerun: P16/P12/P14 22/22, full Vitest 34 files/777, shell 8/8, shared/API tsc and root build passed",
           "parent non-root release rehearsal and local preflight passed; deployment defaults, read-only mode, exact Node and ledger-trigger findings were fixed",
-          "production audit reports 0 critical and 21 high across 442 production dependencies, so no deployable P17 candidate exists"
+          "production audit reports 0 critical and 21 high across 442 production dependencies; approved plan v2.1 assigns closure to successor P16S before any P17 candidate"
         ]
       }
     },
@@ -162,13 +162,13 @@
       "id": "P16S",
       "title": "生产依赖安全修复",
       "objective": "在不改变产品能力的前提下消除生产依赖 high/critical 风险并重新形成可部署候选",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P16"],
       "successor": "P17",
-      "threadId": null,
+      "threadId": "019fe931-bd91-7ca0-9503-c0e8fcffe052",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -187,6 +187,6 @@
       "gate": {"result": "pending", "evidence": []}
     }
   ],
-  "blockedReason": "P16 production audit found 21 high vulnerabilities. P16S changes manifest/lock and dependency acceptance scope, so plan v2.1 requires explicit user approval before implementation.",
-  "updatedAt": "2026-08-10T03:46:33+08:00"
+  "blockedReason": null,
+  "updatedAt": "2026-08-10T09:03:13+08:00"
 }
