@@ -2,16 +2,17 @@
 
 ## 生产化修复链 v2.2 当前状态（2026-08-10）
 
-- Workflow phase：`executing`（P16T）
+- Workflow phase：`blocked`（等待新候选完整 SHA 的 G2）
 - Plan version：`2.2`（已批准，2026-08-10T14:19:02+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P16S `passed`；P16T `in_progress`；P17 pending
+- 当前实现阶段：P11–P16T `passed`；P17 pending
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p16t_ci_stabilization`
-- G2 批准：用户于 2026-08-10T10:06:13+08:00 明确批准提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 推送并部署到 `ppt.ajjy-ai.site`
+- 当前任务：无；P16T worker 已停止并由父监督者独立验收
+- 上一轮 G2：用户于 2026-08-10T10:06:13+08:00 批准 `8d125d2d9afb213f449dbdc2d32c4939f5407441`，但发布分支 CI 红灯后在生产 preflight 前安全停止；该授权已关闭且不适用于新 SHA
+- 当前待批准候选：`72eadaa476a83b4a58f320149d7a5d0e0ad980ad`
 - 最小修复授权：用户明确批准仅修复 P13 bootstrap build-graph 测试的确定性超时，保持断言与覆盖不变；形成新候选 SHA 后重新请求 G2。
-- 下一安全动作：P16T 只在本地设置单测级 15 秒上限并复跑完整门禁；不得 push、访问服务器或沿用旧 G2。
+- 下一安全动作：只向用户报告新候选及父级证据并等待新的精确 G2；批准前不得 push、访问服务器或部署。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -22,7 +23,7 @@
 | P15 | passed | `45898624eb4f8935a7112210f5cb103ab21610fc` | `/root/p15_auth_frontend` | passed | 父级 HTTPS Chrome 2/2、P06–P09 10/10、全量 Vitest 771/771、shell 8/8、类型/构建与边界扫描通过；hydration/用例依赖修正后验收 |
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
 | P16S | passed | `8d125d2d9afb213f449dbdc2d32c4939f5407441` | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | passed | 父级复现 audit 真实 exit 0/五档全 0、定向 24/24、全量 779、shell/type/build、rehearsal/preflight 与 Chrome 12/12；提交边界和凭据扫描通过 |
-| P16T | in_progress | — | `/root/p16t_ci_stabilization` | pending | 仅允许单测级确定性时限；断言、真实 tsc 编译、覆盖、产品源码和 CI workflow 不变；不含 remote/生产权限 |
+| P16T | passed | `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` | `/root/p16t_ci_stabilization` | passed | 父级确认单提交/三路径/唯一单测级 15 秒差异；独立复跑 P13 三轮、全量 779、shell/type/build、audit 全 0、rehearsal/preflight 与 Chrome 12/12 通过 |
 | P17 | pending | — | `/root/p17_production_release` | pending | 首次尝试记录提交 `8932988…`；旧 SHA 已在 origin 两分支但 personal CI 重复红灯，生产未触碰；等待 P16T 新候选及新 G2 |
 
 ### P16T 候选实现与当前证据
@@ -37,7 +38,7 @@
 | staged-index 干净导出 | 从仅含功能改动的精确暂存索引导出到独立 `/tmp` 树，确认不含 `.workbuddy/`，fresh frozen install 通过。首次在 `svelte-kit sync` 前跑全量 Vitest 时 3 个 Web suite 因缺生成的 `.svelte-kit/tsconfig.json` 仅在收集阶段失败，其余 32 files/756 tests 与 P13 均通过；先执行 Web check/sync 后，同一导出树复现 P13 连续 3 次、全量 779、shell/type/build、audit、rehearsal/preflight 与 Chrome 12/12 全部通过。 |
 | 边界 | 只使用仓库 P03 fixture、隔离 SQLite/CAS、临时目录与备用端口；未读取/暂存/修改 `.workbuddy/`，未读取 sibling `02`，未访问实际/生产 DB/CAS、服务器、WorkBuddy、Caddy/systemd/PM2、remote 或 G1/G2；未运行 `pnpm approve-builds`。 |
 
-P16T worker 只形成一个本地原子候选提交并停止。父监督者必须独立核对完整 SHA、提交路径、门禁与 tracked-clean 状态；通过后才可向用户重新请求该新 SHA 的 G2，当前旧 SHA 的 G2 不适用于本候选。
+P16T worker 只形成一个本地原子候选提交并停止。父监督者已独立核对完整 SHA、单提交三路径边界、唯一测试语义差异、tracked-clean 状态，并复跑 P13 三轮、全量/构建/审计/发布演练/Chrome 门禁。新候选现仅等待精确 G2；当前旧 SHA 的 G2 不适用于本候选。
 
 ### P17 当前阻断（2026-08-10）
 
