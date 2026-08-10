@@ -2,13 +2,13 @@
 
 ## 生产化修复链 v2.2 当前状态（2026-08-10）
 
-- Workflow phase：`executing`（P17 gate blocked；等待父监督者协调）
+- Workflow phase：`blocked`（P17 生产通道）
 - Plan version：`2.2`（已批准，2026-08-10T14:19:02+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P16T `passed`；P17 `blocked`（生产连接通道不可用）
+- 当前实现阶段：P11–P16T `passed`；P17 `blocked`
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p17_production_release`
+- 当前任务：无；P17 执行者已在生产 preflight 前安全停止并交付阻断记录
 - 上一轮 G2：用户于 2026-08-10T10:06:13+08:00 批准 `8d125d2d9afb213f449dbdc2d32c4939f5407441`，但发布分支 CI 红灯后在生产 preflight 前安全停止；该授权已关闭且不适用于新 SHA
 - 当前 G2：用户于 2026-08-10T16:40:05+08:00 明确批准提交 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` 推送并部署到 `ppt.ajjy-ai.site`
 - 最小修复授权：用户明确批准仅修复 P13 bootstrap build-graph 测试的确定性超时，保持断言与覆盖不变；形成新候选 SHA 后重新请求 G2。
@@ -24,7 +24,7 @@
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
 | P16S | passed | `8d125d2d9afb213f449dbdc2d32c4939f5407441` | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | passed | 父级复现 audit 真实 exit 0/五档全 0、定向 24/24、全量 779、shell/type/build、rehearsal/preflight 与 Chrome 12/12；提交边界和凭据扫描通过 |
 | P16T | passed | `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` | `/root/p16t_ci_stabilization` | passed | 父级确认单提交/三路径/唯一单测级 15 秒差异；独立复跑 P13 三轮、全量 779、shell/type/build、audit 全 0、rehearsal/preflight 与 Chrome 12/12 通过 |
-| P17 | blocked | — | `/root/p17_production_release` | failed | origin 两分支均为新候选且 feature CI 31371260100、personal CI 31371448617 全绿；root/ubuntu SSH 均拒绝 publickey，WorkBuddy UI 无法可靠发起只读任务，生产未触碰 |
+| P17 | blocked | `8a389d54861648ea4c537a872e7ce831eb31bc6e` | `/root/p17_production_release` | blocked | `72eadaa…` 已推送到两 origin ref；CI 31371260100/31371448617 均绿；SSH publickey 拒绝且 WorkBuddy composer 无法可靠提交只读命令，未执行生产 preflight/备份/部署 |
 
 ### P17 v2.2 当前阻断（2026-08-10）
 

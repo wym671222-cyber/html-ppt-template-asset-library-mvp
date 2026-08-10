@@ -4,10 +4,11 @@
 
 P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。用户已批准并执行计划 v2.0/v2.1，P11–P16S 已通过父监督者门禁。首次 P17 在 production preflight 前因发布分支同 SHA CI 两次触发 P13 bootstrap 真实编译测试默认 5 秒超时而停止；用户于 2026-08-10 明确批准 v2.2，仅机械插入 P16T，保持断言与覆盖不变，只修复该确定性时限并形成新的本地候选 SHA。
 
-- 状态：`executing`（P17；G2 已批准精确候选，按门禁推送、CI、预检和部署）
+- 状态：`blocked`（P17 已完成远端 CI；生产 preflight 因无可审计连接通道停止）
 - 计划版本：`2.2`（已批准；2026-08-10T14:19:02+08:00）
 - 上一轮 G2 批准提交：`8d125d2d9afb213f449dbdc2d32c4939f5407441`（2026-08-10T10:06:13+08:00；因 CI 红灯未进入生产；不适用于新候选）
 - 当前 G2 批准提交：`72eadaa476a83b4a58f320149d7a5d0e0ad980ad`（2026-08-10T16:40:05+08:00；用户已批准推送并部署）
+- P17 当前结果：候选已非 force 推送到两个 origin ref，feature/personal CI 均全绿；root/ubuntu SSH 被 publickey 拒绝，WorkBuddy composer 无法可靠提交只读命令，生产未触碰。恢复可审计通道后从 production preflight 重启。
 - 仓库：`/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台`
 - 实现分支：`feat/production-auth-hardening`（批准后从基线创建）
 - 基线提交：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`

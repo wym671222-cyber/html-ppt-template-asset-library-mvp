@@ -41,4 +41,6 @@ G2 执行结果：两个 origin 分支已无 force 指向上述 SHA，但 person
 
 当前 G2 状态：`approved`。用户于 2026-08-10T16:40:05+08:00 明确批准“批准提交 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` 推送并部署到 `ppt.ajjy-ai.site`”。授权仅涵盖该精确 SHA；先推送并等待同 SHA CI 全绿，再执行生产 preflight、备份、迁移、原子切换和终局验收；不允许 force push、删除旧 release/PM2/备份或输出凭据。
 
+当前 P17 执行结果：两个 origin ref 已精确指向 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad`，feature CI `31371260100` 与 personal CI `31371448617` 均成功；root/ubuntu 只读 SSH 均被 `publickey` 拒绝，WorkBuddy composer 无法可靠提交只读命令，因此 P17 在 production preflight 前 `blocked`。未执行服务器、WorkBuddy agent、备份、迁移、部署、Caddy/systemd/PM2、DB/CAS 或管理员操作。恢复可审计通道后从只读 preflight 重启。
+
 旧发布目录、旧 PM2 配置和历史备份的删除不属于 G0/G1/G2，始终需要新的独立授权。
