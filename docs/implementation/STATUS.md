@@ -2,15 +2,15 @@
 
 ## 生产化修复链 v2.1 当前状态（2026-08-10）
 
-- Workflow phase：`executing`（P17 gate blocked；等待父监督者协调）
+- Workflow phase：`blocked`（P17 CI gate；父监督者已协调）
 - Plan version：`2.1`（已批准，2026-08-10T09:03:13+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
 - 当前实现阶段：P11–P16S `passed`；P17 `blocked`（GitHub personal 分支同 SHA CI 重复失败）
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
-- 当前任务：`/root/p17_production_release`
+- 当前任务：无；P17 task `/root/p17_production_release` 已安全停止并交付阻断记录
 - G2 批准：用户于 2026-08-10T10:06:13+08:00 明确批准提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 推送并部署到 `ppt.ajjy-ai.site`
-- 下一安全动作：父监督者协调 CI 阻断并请求新的明确授权；P17 不得继续生产 preflight、备份、迁移、切换或验收。两个远端分支已经无 force 指向获批产品 SHA，生产服务器仍未触碰。
+- 下一安全动作：等待用户授权最小测试稳定性修复；只允许保留原断言并为实际 TypeScript 编译设置确定性的显式时限，复跑全量与两分支 CI，形成新候选 SHA 后重新请求精确 G2。P17 不得继续生产 preflight、备份、迁移、切换或验收。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -21,7 +21,7 @@
 | P15 | passed | `45898624eb4f8935a7112210f5cb103ab21610fc` | `/root/p15_auth_frontend` | passed | 父级 HTTPS Chrome 2/2、P06–P09 10/10、全量 Vitest 771/771、shell 8/8、类型/构建与边界扫描通过；hydration/用例依赖修正后验收 |
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
 | P16S | passed | `8d125d2d9afb213f449dbdc2d32c4939f5407441` | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | passed | 父级复现 audit 真实 exit 0/五档全 0、定向 24/24、全量 779、shell/type/build、rehearsal/preflight 与 Chrome 12/12；提交边界和凭据扫描通过 |
-| P17 | blocked | — | `/root/p17_production_release` | failed | origin 两个目标分支均为获批 `8d125d2…`；feature CI 31349030940 通过，personal CI 31349153227 的原 run 与一次 failed-job 重跑均在同一 P13 bootstrap build-graph 测试 5 秒超时，未继续任何生产操作 |
+| P17 | blocked | `89329887425fb3e4d3bcfb4bb946ad48209fdd83` | `/root/p17_production_release` | blocked | origin 两个目标分支均为获批 `8d125d2…`；feature CI 31349030940 通过，personal CI 31349153227 的原 run 与一次 failed-job 重跑均在同一 P13 bootstrap build-graph 测试 5 秒超时；父级独立复核后确认未继续任何生产操作 |
 
 ### P17 当前阻断（2026-08-10）
 

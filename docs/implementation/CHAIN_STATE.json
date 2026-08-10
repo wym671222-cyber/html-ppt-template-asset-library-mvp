@@ -7,7 +7,7 @@
     "implementationBranch": "feat/production-auth-hardening",
     "baselineCommit": "9c88b48aafd3bf2529cc31c5db9e346a915bf3aa"
   },
-  "workflowPhase": "executing",
+  "workflowPhase": "blocked",
   "plan": {
     "version": "2.1",
     "approved": true,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P17",
-    "activePhaseThreadId": "/root/p17_production_release",
+    "currentPhaseId": null,
+    "activePhaseThreadId": null,
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -184,17 +184,25 @@
       "id": "P17",
       "title": "生产迁移切换与终局验收",
       "objective": "经独立生产审批后推送精确提交、迁移腾讯服务器并验证可靠性和权限终局",
-      "status": "in_progress",
+      "status": "blocked",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 45,
       "dependsOn": ["P16S"],
       "successor": null,
       "threadId": "/root/p17_production_release",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "89329887425fb3e4d3bcfb4bb946ad48209fdd83",
+      "gate": {
+        "result": "blocked",
+        "evidence": [
+          "origin feature and personal refs were updated without force to approved product SHA 8d125d2d9afb213f449dbdc2d32c4939f5407441",
+          "feature CI run 31349030940 succeeded for the approved SHA",
+          "personal CI run 31349153227 attempts 1 and 2 failed the same P13 bootstrap build-graph test at the default 5000 ms timeout",
+          "parent independently verified both remote refs and GitHub run conclusions; no production preflight, WorkBuddy, server, database, Caddy or systemd action occurred"
+        ]
+      }
     }
   ],
-  "blockedReason": null,
-  "updatedAt": "2026-08-10T10:06:13+08:00"
+  "blockedReason": "P17 cannot continue because the personal release branch CI failed twice on tests/p13-auth-approval.test.ts:354 at the default 5000 ms timeout. The approved product SHA is already on both origin branches, but production was not accessed. A minimal deterministic test-timeout repair would create a new candidate SHA and requires user authorization plus a new exact-SHA G2 before deployment.",
+  "updatedAt": "2026-08-10T10:18:45+08:00"
 }
