@@ -5,11 +5,11 @@
 - Workflow phase：`executing`
 - Plan version：`2.1`（已批准，2026-08-10T09:03:13+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P16 `passed`；P16S `in_progress`；P17 pending 且未创建
+- 当前实现阶段：P11–P16 `passed`；P16S 唯一候选提交、工作区门禁与 staged-index 干净导出复验完成，待父监督者独立 gate；P17 pending 且未创建
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`019fe931-bd91-7ca0-9503-c0e8fcffe052`
-- 下一安全动作：新窗口只实施 P16S 本地 dependency remediation、测试和单一原子提交；不得创建 P17，不得越过 G1/G2、push、服务器或生产数据边界。
+- 下一安全动作：只允许父监督者独立复核候选 SHA 并协调状态/Git/handoff；不得创建 P17 或越过 G1/G2、push、服务器、生产数据边界。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -19,8 +19,24 @@
 | P14 | passed | `5c2d13f5e15cda9840a459a6c46e6a041bb0beed` | `/root/p14_user_ownership_retry` | passed | 父级复跑 P14+P09 13/13、shared/API tsc、shell 8/8、root build 2/2；迁移阻断、A/B 隔离、恢复撤销与 fixed owner 修正已核验 |
 | P15 | passed | `45898624eb4f8935a7112210f5cb103ab21610fc` | `/root/p15_auth_frontend` | passed | 父级 HTTPS Chrome 2/2、P06–P09 10/10、全量 Vitest 771/771、shell 8/8、类型/构建与边界扫描通过；hydration/用例依赖修正后验收 |
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
-| P16S | in_progress | — | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | pending | 只修复生产依赖并要求 audit high=0、critical=0；无生产或 remote 权限 |
+| P16S | candidate pending parent gate | 父级回读完整 SHA | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | pending | production audit 为 369 dependencies、所有 severity 0 且命令真实 exit 0；工作区全量回归及 staged-index 干净导出复验通过，待父级独立复核 |
 | P17 | pending | — | — | pending | 未创建；P16S 未通过且无 G2，禁止 push/迁移/部署 |
+
+### P16S 候选实现与当前证据
+
+| 范围 | 当前已验证结果 |
+|---|---|
+| 直接依赖 | `drizzle-orm` 固定到 patched `^0.45.2`；`drizzle-kit` 升级到移除 gel 直接依赖的 `^0.31.10`。`@hono/node-server` 固定到 patched `^2.0.5`（lock 为 2.1.0），Node `>=20`/Hono 4 peer 与项目目标匹配，既有 `serve` 使用无需适配。Svelte/SvelteKit 分别固定到 `^5.56.8`/`^2.70.2`，使 runtime peer 图使用 patched devalue。账号、Owner、导出、恢复、migration SQL/journal/ledger 和部署配置未改。 |
+| 退役邮件链 | 未挂载的 CUNY 邮件入口改为稳定 fail-closed 占位，移除 `nodemailer`、`@aws-sdk/client-ses` 与类型包；四个历史发送函数均只拒绝，不初始化 transport、读取邮件配置或访问网络。 |
+| 传递依赖 | lock 在既有直接范围内刷新 lodash、xmldom、AWS XML、Hono、form-data、TipTap/linkify、PostCSS/nanoid、brace-expansion 等 patched 图。gel 最新仍声明 `shell-quote ^1.8.1`，且 Drizzle optional peer 会自动安装 gel；因此仅用证据化 `gel>shell-quote=1.10.0` 窄 override，版本仍满足父范围且高于 advisory patched `>=1.9.0`。没有其他 override。 |
+| 生产审计 | `npx -y pnpm@9.15.0 audit --prod --audit-level high --json` 真实 exit 0；JSON 回读 369 production dependencies，info/low/moderate/high/critical 全部为 0。未降阈值、未 ignore、未用 `--force`。 |
+| 全量回归 | frozen install 通过；Vitest 35 files/779 tests、shell 8/8、shared/API TypeScript、Web check 0 errors/9 个既有 warnings、Web build 和 root API/Web 2/2 build 通过。 |
+| staged-index 干净导出 | 从精确暂存索引导出到独立 `/tmp` 目录，确认不含 `.workbuddy/`；fresh frozen install、production audit、P16S/P12/P14/P16 24/24、root build 2/2、P16 rehearsal 与 local preflight 全部通过。 |
+| 身份与浏览器 | P15 隔离 HTTPS Chrome 2/2；P06–P09 Chrome 10/10。注册审批、强制改密、A/B 私有 Presentation/Export、断网 ZIP 与隔离恢复旅程保持通过。 |
+| 迁移与发布 | P12/P14/P16 定向 24/24 覆盖 5→7、6→7、7 no-op、完整 ledger 7 搭配 migration 6 trigger 的 wrong-ledger 无备份拒绝；P16 非 root rehearsal 与 local preflight 通过。 |
+| 边界 | 仅使用仓库 P03 fixture、隔离 SQLite/CAS、临时目录与空闲备用端口；未读取 sibling `02`，未读取/修改 `.workbuddy/`，未访问实际/生产 DB/CAS、服务器、Caddy/systemd/PM2 或 remote；无 push、G1/G2、`pnpm approve-builds`、audit ignore、降阈值或 `--force`。 |
+
+P16S 尚未修改 `CHAIN_STATE.json` 或创建 P17。唯一原子候选提交与 staged-index 干净复现均由本 handoff 交付；只有父监督者对该提交的独立复核也成立后，才可把完整 SHA 报告为 G2 候选。
 
 ### P16 交付候选与阻断事实
 
