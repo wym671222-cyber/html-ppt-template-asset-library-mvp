@@ -1,11 +1,11 @@
 # HTML 模板平台实施总计划
 
-## 生产化修复扩展 v2.1（已批准执行）
+## 生产化修复扩展 v2.2（已批准执行）
 
-P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。用户已批准并执行计划 v2.0，P11–P15 已通过父监督者门禁；P16 发布工程已实现并通过功能演练，但生产依赖审计发现 21 个 high，原范围不能安全形成 P17 候选。用户于 2026-08-10 明确批准 v2.1，仅基于该证据新增 P16S 依赖安全阶段，不做同类项目研究。
+P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。用户已批准并执行计划 v2.0/v2.1，P11–P16S 已通过父监督者门禁。首次 P17 在 production preflight 前因发布分支同 SHA CI 两次触发 P13 bootstrap 真实编译测试默认 5 秒超时而停止；用户于 2026-08-10 明确批准 v2.2，仅机械插入 P16T，保持断言与覆盖不变，只修复该确定性时限并形成新的本地候选 SHA。
 
-- 状态：`blocked`（P17 GitHub release-branch CI 重复失败；生产未触碰）
-- 计划版本：`2.1`（已批准；2026-08-10T09:03:13+08:00）
+- 状态：`executing`（P16T；只形成新本地候选，不 push/部署）
+- 计划版本：`2.2`（已批准；2026-08-10T14:19:02+08:00）
 - G2 批准提交：`8d125d2d9afb213f449dbdc2d32c4939f5407441`（2026-08-10T10:06:13+08:00；因 CI 红灯未进入生产；任何修复后的新 SHA 需重新精确批准）
 - 仓库：`/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台`
 - 实现分支：`feat/production-auth-hardening`（批准后从基线创建）
@@ -37,8 +37,9 @@ P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。�
 | P14 | 用户数据归属与恢复边界迁移 | Presentation/Export 私有化与恢复更新 | `gpt-5.6-sol` | xhigh | 50% | P13 | P15 |
 | P15 | 登录审批与个人资产前端 | 中文身份 UI、路由门、管理员页与 E2E | `gpt-5.6-terra` | high | 45% | P14 | P16 |
 | P16 | systemd 与原子发布工程 | 非 root 服务、数据分离、CI/WorkBuddy 发布演练 | `gpt-5.6-sol` | xhigh | 50% | P15 | P16S |
-| P16S | 生产依赖安全修复 | 关闭 prod high/critical 并重建可部署候选 | `gpt-5.6-sol` | xhigh | 50% | P16 | P17 |
-| P17 | 生产迁移切换与终局验收 | 精确提交推送、生产迁移、切换和最终验收 | `gpt-5.6-sol` | xhigh | 45% | P16S | 无 |
+| P16S | 生产依赖安全修复 | 关闭 prod high/critical 并重建可部署候选 | `gpt-5.6-sol` | xhigh | 50% | P16 | P16T |
+| P16T | CI 确定性修复与候选重建 | 保留真实编译断言，仅修复测试时限并形成新本地候选 | `gpt-5.6-sol` | xhigh | 20% | P16S | P17 |
+| P17 | 生产迁移切换与终局验收 | 精确提交推送、生产迁移、切换和最终验收 | `gpt-5.6-sol` | xhigh | 45% | P16T | 无 |
 
 ### P11 — 可复现构建与故障止险基线
 
@@ -120,9 +121,19 @@ P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。�
 - 禁止：生产/实际 DB/CAS、服务器、Caddy/systemd/PM2、remote/push、G1/G2、真实 sibling 资产、功能扩张或审计豁免。
 - 回滚：revert P16S commit 并恢复其 lock/manifests；不触碰任何生产状态。
 
+### P16T — CI 确定性修复与候选重建（v2.2 机械插入，已批准）
+
+- 目标：保留 `tests/p13-auth-approval.test.ts` 对标准 API TypeScript build graph 和 `dist/auth/bootstrap-admin.js` 的真实编译/产物断言，仅为该单测设置明确、确定性的独立时限，形成新的本地候选 SHA。
+- 允许范围：上述唯一测试、STATUS 与 `handoffs/P16T.md`；不得修改产品源码、CI workflow、构建命令、断言内容或覆盖范围。
+- 实现边界：推荐用 Vitest 单测级第三参数设置 15 秒上限；禁止 skip、retry、全局放宽、mock `tsc`、删除真实编译或缩减断言。
+- 验证：P13 文件至少连续 3 次通过；全量 Vitest/shell/type/Web/root build；production audit 真实 exit 0/全 severity 0；P16 rehearsal/preflight；P15 2/2 与 P06–P09 10/10 Chrome；干净导出复现。
+- 完成门：一个原子 P16T commit、tracked clean、无凭据/禁止路径、`handoffs/P16T.md`；父监督者独立复核后报告新完整 SHA 并重新请求 G2。
+- 禁止：任何 remote/push、服务器、WorkBuddy、生产 DB/CAS、Caddy/systemd/PM2、管理员操作或沿用旧 SHA 的 G2。
+- 回滚：revert P16T commit；远端仍保留旧获批 SHA，不做 force 回退。
+
 ### P17 — 生产迁移切换与终局验收
 
-- 前置审批：P16S 必须通过并由父监督者报告新的候选完整 SHA；随后必须获得 G2，批准语句包含该完整 SHA。没有精确 SHA 不执行任何 push 或生产写操作。
+- 前置审批：P16T 必须通过并由父监督者报告新的候选完整 SHA；随后必须获得新的 G2，批准语句包含该完整 SHA。没有精确 SHA 不执行任何 push 或生产写操作。
 - 发布顺序：push `feat/production-auth-hardening` → 等待该 SHA CI 全绿 → 无 force 地将远端 `personal/asset-library-mvp` 快进到同一 SHA → WorkBuddy 只读 preflight → 开启维护/只读 → 备份并记录 DB/CAS/Caddy/systemd/commit 哈希 → 部署 release → 迁移 → 交互式创建唯一管理员 → 启动 systemd → Caddy validate/reload → 公网 smoke → 移除临时匿名 allowlist但保留应用只读开关可回退。
 - preflight：DNS/TLS、磁盘、端口、Docker bridge、Caddy 配置、线上 commit、DB quick/FK/5 migrations、业务计数、现有备份、无未知表；Presentation/Item/Export 非零立即阻断。
 - 验收：20 次冷启动 CSS/JS/API 全 200 且 MIME 正确；注册/审批/登录/强制改密；A/B 隔离；admin-only recovery；401/403/404/Origin 负向；systemd/主机重启恢复；无 `EADDRINUSE`；进程非 root；DB 权限正确；Caddy 日志可定位失败且无凭据。
@@ -142,7 +153,8 @@ P01–P10 及其“本地 MVP 完成后停止”结论保持为历史事实。�
 | P15 | Web hooks/layout/BFF、现有旧 auth pages、P14 interfaces、Playwright configs | Web auth routes/components/stores/hooks、P15 E2E/tests/docs | `pnpm --filter @slide-maker/web check`; `pnpm --filter @slide-maker/web build`; `node_modules/.bin/playwright test --config=playwright.p15.config.ts` |
 | P16 | env/data paths、migrator startup、adapter-node build、现有 Caddy/PM2 read-only snapshot | ops/systemd/caddy/workbuddy、CI、runtime paths/cache、P16 tests/docs | `bash tests/p16-release-rehearsal.sh`; `bash ops/workbuddy/preflight.sh --target local`; clean-clone frozen build; secret scan; Caddy validate |
 | P16S | manifests/lock、prod audit dependency paths、active composition root、P16 handoff | manifests/lock、依赖直接适配、退役入口最小清理、P16S tests/docs | frozen install；`pnpm audit --prod --audit-level high`；全量门；P15/P06 Chrome；P16 rehearsal/preflight |
-| P17 | P16S handoff/approved SHA、线上只读 preflight、G2 approval record | 仅发布记录、STATUS/CHAIN_STATE/P17 handoff；产品源码冻结 | `bash ops/workbuddy/preflight.sh --target 119.29.241.146`; `bash ops/workbuddy/deploy.sh --target production --commit <approved-sha> --approved-commit <approved-sha>`; `bash ops/workbuddy/smoke.sh --origin https://ppt.ajjy-ai.site`; rollback drill/readback |
+| P16T | P17 blocker、P13 bootstrap build-graph test、旧/新 G2 边界 | 唯一 P13 测试时限、P16T tests/docs | P13 连续 3 次；全量门；audit；P16 rehearsal/preflight；P15/P06 Chrome；干净导出 |
+| P17 | P16T handoff/新批准 SHA、线上只读 preflight、新 G2 approval record | 仅发布记录、STATUS/CHAIN_STATE/P17 handoff；产品源码冻结 | `bash ops/workbuddy/preflight.sh --target 119.29.241.146`; `bash ops/workbuddy/deploy.sh --target production --commit <approved-sha> --approved-commit <approved-sha>`; `bash ops/workbuddy/smoke.sh --origin https://ppt.ajjy-ai.site`; rollback drill/readback |
 
 公共全量门：`node_modules/.bin/vitest run`、`bash tests/run_all.sh`、shared/API TypeScript、Web check/build、适用的真实 Chrome E2E、`git diff --check`。每次 commit 前必须 `git diff --cached --check` 并确认 staged paths 不含 `.workbuddy/`、生产数据、凭据或 sibling 真实资产。
 

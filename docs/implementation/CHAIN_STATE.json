@@ -7,12 +7,12 @@
     "implementationBranch": "feat/production-auth-hardening",
     "baselineCommit": "9c88b48aafd3bf2529cc31c5db9e346a915bf3aa"
   },
-  "workflowPhase": "blocked",
+  "workflowPhase": "executing",
   "plan": {
-    "version": "2.1",
+    "version": "2.2",
     "approved": true,
-    "approvedVersion": "2.1",
-    "approvedAt": "2026-08-10T09:03:13+08:00"
+    "approvedVersion": "2.2",
+    "approvedAt": "2026-08-10T14:19:02+08:00"
   },
   "contextPolicy": {
     "targetPercent": 50,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": null,
-    "activePhaseThreadId": null,
+    "currentPhaseId": "P16T",
+    "activePhaseThreadId": "/root/p16t_ci_stabilization",
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -167,7 +167,7 @@
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P16"],
-      "successor": "P17",
+      "successor": "P16T",
       "threadId": "019fe931-bd91-7ca0-9503-c0e8fcffe052",
       "commit": "8d125d2d9afb213f449dbdc2d32c4939f5407441",
       "gate": {
@@ -181,28 +181,34 @@
       }
     },
     {
+      "id": "P16T",
+      "title": "CI 确定性修复与候选重建",
+      "objective": "保持 P13 bootstrap 真实编译断言与覆盖不变，仅设置确定性测试时限并形成新的本地候选 SHA",
+      "status": "in_progress",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 20,
+      "dependsOn": ["P16S"],
+      "successor": "P17",
+      "threadId": "/root/p16t_ci_stabilization",
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
+    },
+    {
       "id": "P17",
       "title": "生产迁移切换与终局验收",
       "objective": "经独立生产审批后推送精确提交、迁移腾讯服务器并验证可靠性和权限终局",
-      "status": "blocked",
+      "status": "pending",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 45,
-      "dependsOn": ["P16S"],
+      "dependsOn": ["P16T"],
       "successor": null,
       "threadId": "/root/p17_production_release",
-      "commit": "89329887425fb3e4d3bcfb4bb946ad48209fdd83",
-      "gate": {
-        "result": "blocked",
-        "evidence": [
-          "origin feature and personal refs were updated without force to approved product SHA 8d125d2d9afb213f449dbdc2d32c4939f5407441",
-          "feature CI run 31349030940 succeeded for the approved SHA",
-          "personal CI run 31349153227 attempts 1 and 2 failed the same P13 bootstrap build-graph test at the default 5000 ms timeout",
-          "parent independently verified both remote refs and GitHub run conclusions; no production preflight, WorkBuddy, server, database, Caddy or systemd action occurred"
-        ]
-      }
+      "commit": null,
+      "gate": {"result": "pending", "evidence": []}
     }
   ],
-  "blockedReason": "P17 cannot continue because the personal release branch CI failed twice on tests/p13-auth-approval.test.ts:354 at the default 5000 ms timeout. The approved product SHA is already on both origin branches, but production was not accessed. A minimal deterministic test-timeout repair would create a new candidate SHA and requires user authorization plus a new exact-SHA G2 before deployment.",
-  "updatedAt": "2026-08-10T10:18:45+08:00"
+  "blockedReason": null,
+  "updatedAt": "2026-08-10T14:19:02+08:00"
 }
