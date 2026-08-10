@@ -2,17 +2,17 @@
 
 ## 生产化修复链 v2.2 当前状态（2026-08-10）
 
-- Workflow phase：`executing`（P17）
+- Workflow phase：`executing`（P17 gate blocked；等待父监督者协调）
 - Plan version：`2.2`（已批准，2026-08-10T14:19:02+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P16T `passed`；P17 `in_progress`
+- 当前实现阶段：P11–P16T `passed`；P17 `blocked`（生产连接通道不可用）
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`/root/p17_production_release`
 - 上一轮 G2：用户于 2026-08-10T10:06:13+08:00 批准 `8d125d2d9afb213f449dbdc2d32c4939f5407441`，但发布分支 CI 红灯后在生产 preflight 前安全停止；该授权已关闭且不适用于新 SHA
 - 当前 G2：用户于 2026-08-10T16:40:05+08:00 明确批准提交 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` 推送并部署到 `ppt.ajjy-ai.site`
 - 最小修复授权：用户明确批准仅修复 P13 bootstrap build-graph 测试的确定性超时，保持断言与覆盖不变；形成新候选 SHA 后重新请求 G2。
-- 下一安全动作：P17 仅对上述精确 SHA 执行 push；等待同 SHA CI 全绿后，运行线上预检、备份、原子部署与 smoke/readback；任何门禁失败即停止。
+- 下一安全动作：父监督者向用户报告生产连接阻断；恢复可审计的 WorkBuddy/SSH 服务器通道后，从生产只读 preflight 重新开始。不得猜测凭据、绕过连接门或直接部署。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -24,7 +24,16 @@
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
 | P16S | passed | `8d125d2d9afb213f449dbdc2d32c4939f5407441` | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | passed | 父级复现 audit 真实 exit 0/五档全 0、定向 24/24、全量 779、shell/type/build、rehearsal/preflight 与 Chrome 12/12；提交边界和凭据扫描通过 |
 | P16T | passed | `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` | `/root/p16t_ci_stabilization` | passed | 父级确认单提交/三路径/唯一单测级 15 秒差异；独立复跑 P13 三轮、全量 779、shell/type/build、audit 全 0、rehearsal/preflight 与 Chrome 12/12 通过 |
-| P17 | in_progress | — | `/root/p17_production_release` | pending | 新 G2 已批准精确 SHA `72eadaa…`；执行者必须先完成同 SHA feature/personal CI，再进行生产预检与原子部署；生产当前未触碰 |
+| P17 | blocked | — | `/root/p17_production_release` | failed | origin 两分支均为新候选且 feature CI 31371260100、personal CI 31371448617 全绿；root/ubuntu SSH 均拒绝 publickey，WorkBuddy UI 无法可靠发起只读任务，生产未触碰 |
+
+### P17 v2.2 当前阻断（2026-08-10）
+
+- 已以精确 refspec、普通非 force push 将 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` 依次更新到 `origin/feat/production-auth-hardening` 和 `origin/personal/asset-library-mvp`；没有 push 父级状态 HEAD、upstream、tag 或其他 ref。
+- feature CI run `31371260100` 与 personal CI run `31371448617` 都在该完整 SHA 上成功，均覆盖 frozen install、build、type、tests、release rehearsal 和 Chrome E2E。
+- 对 `root@119.29.241.146` 与 `ubuntu@119.29.241.146` 的非交互、短超时、只读 SSH 探测均被 `publickey` 拒绝；没有建立服务器会话，也没有尝试密码、私钥读取或其他绕过。
+- 按用户要求转用已存在的 WorkBuddy“部署项目到轻量服务器并配置域名”任务。Computer Use 只读确认历史任务与既有服务器连接说明可见，但任务 composer 的发送控件无法可靠启用；一次输入注入触发 WorkBuddy 自带的可恢复 DOM 错误，点击其“重置输入框”后恢复。没有消息提交给 WorkBuddy agent，更没有服务器命令执行。
+- 因无法从可信通道取得 `bash ops/workbuddy/preflight.sh --target 119.29.241.146` 的现场证据，P17 必须在任何生产访问、备份、部署或停机之前停止。Caddy、systemd、PM2、DB/CAS、管理员、服务和网站均未由本次 P17 改动。
+- 当前远端 Git/CI 外部效果无需回滚；不得 force 回退。恢复通道后必须从精确候选 checkout 的只读生产 preflight 重新开始，并重新确认现场未漂移。
 
 ### P16T 候选实现与当前证据
 
