@@ -2,15 +2,15 @@
 
 ## 生产化修复链 v2.1 当前状态（2026-08-10）
 
-- Workflow phase：`executing`（P17）
+- Workflow phase：`executing`（P17 gate blocked；等待父监督者协调）
 - Plan version：`2.1`（已批准，2026-08-10T09:03:13+08:00）
 - 历史批准版本：`2.0`（2026-08-09T23:50:11+08:00）
-- 当前实现阶段：P11–P16S `passed`；P17 `in_progress`
+- 当前实现阶段：P11–P16S `passed`；P17 `blocked`（GitHub personal 分支同 SHA CI 重复失败）
 - 实现分支：`feat/production-auth-hardening`
 - 基线：`9c88b48aafd3bf2529cc31c5db9e346a915bf3aa`
 - 当前任务：`/root/p17_production_release`
 - G2 批准：用户于 2026-08-10T10:06:13+08:00 明确批准提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 推送并部署到 `ppt.ajjy-ai.site`
-- 下一安全动作：P17 仅按计划执行精确 SHA push/CI、WorkBuddy 只读 preflight、备份、迁移、原子切换和终局验收；现场门禁失败即停止，不删除旧 release/PM2/备份。
+- 下一安全动作：父监督者协调 CI 阻断并请求新的明确授权；P17 不得继续生产 preflight、备份、迁移、切换或验收。两个远端分支已经无 force 指向获批产品 SHA，生产服务器仍未触碰。
 
 | 阶段 | 状态 | Commit | Task | Gate | 当前证据 |
 |---|---|---|---|---|---|
@@ -21,7 +21,16 @@
 | P15 | passed | `45898624eb4f8935a7112210f5cb103ab21610fc` | `/root/p15_auth_frontend` | passed | 父级 HTTPS Chrome 2/2、P06–P09 10/10、全量 Vitest 771/771、shell 8/8、类型/构建与边界扫描通过；hydration/用例依赖修正后验收 |
 | P16 | passed | `81ed30c067138a2f9225a7e5da0e90a06717f573` | `/root/p16_atomic_release` | passed | 父级定向 22/22、全量 777、shell/type/build、rehearsal/preflight 通过；v2.1 将 prod audit high 关闭门移交 P16S |
 | P16S | passed | `8d125d2d9afb213f449dbdc2d32c4939f5407441` | `019fe931-bd91-7ca0-9503-c0e8fcffe052` | passed | 父级复现 audit 真实 exit 0/五档全 0、定向 24/24、全量 779、shell/type/build、rehearsal/preflight 与 Chrome 12/12；提交边界和凭据扫描通过 |
-| P17 | in_progress | — | `/root/p17_production_release` | pending | G2 已按完整 SHA 批准；先推送 feature 分支并等待 CI，再快进个人发布分支和执行生产 preflight |
+| P17 | blocked | — | `/root/p17_production_release` | failed | origin 两个目标分支均为获批 `8d125d2…`；feature CI 31349030940 通过，personal CI 31349153227 的原 run 与一次 failed-job 重跑均在同一 P13 bootstrap build-graph 测试 5 秒超时，未继续任何生产操作 |
+
+### P17 当前阻断（2026-08-10）
+
+- 已按精确 refspec 将获批产品提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 推到新的 `origin/feat/production-auth-hardening`；没有推送本地父级状态提交、upstream、tag 或其他 ref。
+- feature 分支 CI run `31349030940` 在同一完整 SHA 上通过 build、type、tests、发布演练和 Chrome E2E 后，`origin/personal/asset-library-mvp` 由 `9c88b48aafd3bf2529cc31c5db9e346a915bf3aa` 无 force 快进到同一产品 SHA。
+- personal 分支自动触发 CI run `31349153227`。原 run 与一次 failed-job 重跑均在 `tests/p13-auth-approval.test.ts:354` 的 bootstrap CLI build-graph 测试触发默认 5000 ms 超时；失败耗时约 6.5 秒，其他已执行测试通过，后续 release rehearsal/Chrome 因前置失败未运行。
+- 同一 run 连续两次红灯不满足 P17 的“等待该 SHA CI 全绿”门。P17 禁止修改产品源码且 G2 仅批准该完整产品 SHA，因此本阶段不能把测试修复塞入已批准候选，也不能以重复重跑掩盖不稳定门禁。
+- 生产 `119.29.241.146`、`ppt.ajjy-ai.site`、WorkBuddy、Caddy、systemd、PM2、数据库、CAS、管理员和服务均未访问或修改；没有维护窗口、停机或生产回滚需求。
+- 交接见 `docs/implementation/handoffs/P17.md`。父监督者应把机器状态与本阻断协调后，向用户提出最小的同阶段恢复/新候选审批，不得将当前 P17 标记为通过或 complete。
 
 ### P16S 候选实现与当前证据
 
