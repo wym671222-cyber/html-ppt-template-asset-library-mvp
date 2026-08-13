@@ -21,7 +21,7 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P02",
+    "currentPhaseId": "P03",
     "activePhaseThreadId": "current-parent",
     "terminalPhaseId": "P04"
   },
@@ -75,27 +75,36 @@
       "id": "P02",
       "title": "加密备份与恢复",
       "objective": "交付管理员异地加密备份、隔离恢复和安全激活",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P01"],
       "successor": "P03",
       "threadId": "current-parent",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "64c6fbb3b968322a93859158602d11a9c04a6d3e",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "controlled recovery ZIP export/import validates declared paths, hashes, migrations, SQLite and CAS",
+          "browser-only PBKDF2-SHA-256 and AES-256-GCM .pba round-trip rejects wrong passwords and tampering",
+          "restore remains isolated; exact confirmation stages startup-only activation with rollback copy",
+          "full Vitest 38 files/794 tests, root build and shell 8/8 passed",
+          "production audit exited zero with every severity zero"
+        ]
+      }
     },
     {
       "id": "P03",
       "title": "管理员模板导入",
       "objective": "通过管理员显式上传导入 html-template/v1 包并生成预览",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P02"],
       "successor": "P04",
-      "threadId": null,
+      "threadId": "current-parent",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -115,5 +124,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T07:06:43+08:00"
+  "updatedAt": "2026-08-14T07:17:48+08:00"
 }
