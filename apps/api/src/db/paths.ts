@@ -5,12 +5,23 @@ const dbDirectory = dirname(fileURLToPath(import.meta.url))
 const developmentDataRoot = resolve(dbDirectory, '../../data')
 const productionDataRoot = '/var/lib/html-ppt'
 
+function pocketBayDataRoot(): string {
+  const value = process.env.POCKETBAY_DATA_DIR ?? '/data'
+  if (!isAbsolute(value) || normalize(value) !== value) throw new Error('POCKETBAY_DATA_DIR must be a normalized absolute path')
+  return value
+}
+
 export function resolveDataRoot(value: string | undefined, nodeEnvironment = process.env.NODE_ENV): string {
   if (value === undefined || value === '') {
     if (nodeEnvironment === 'production') throw new Error(`ASSET_LIBRARY_DATA_ROOT must be exactly ${productionDataRoot} in production`)
     return developmentDataRoot
   }
   if (!isAbsolute(value) || normalize(value) !== value) throw new Error('ASSET_LIBRARY_DATA_ROOT must be a normalized absolute path')
+  if (nodeEnvironment === 'production' && process.env.POCKETBAY_RUNTIME === 'true') {
+    const allowedRoot = pocketBayDataRoot()
+    if (value !== allowedRoot) throw new Error(`ASSET_LIBRARY_DATA_ROOT must be exactly ${allowedRoot} in PocketBay production`)
+    return value
+  }
   if (nodeEnvironment === 'production' && value !== productionDataRoot) {
     throw new Error(`ASSET_LIBRARY_DATA_ROOT must be exactly ${productionDataRoot} in production`)
   }

@@ -13,9 +13,25 @@ import { createAdminMiddleware } from './middleware/admin.js'
 export const LOOPBACK_HOST = '127.0.0.1'
 export const PRODUCTION_APP_ORIGIN = 'https://ppt.ajjy-ai.site'
 export const TEST_APP_ORIGINS = Object.freeze(['http://127.0.0.1:5173', 'http://localhost:5173'])
+const POCKETBAY_ORIGIN_PATTERN = /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.pocketbay\.app$/
 
 function isLoopbackHostname(value: string): boolean {
   return value === '127.0.0.1' || value === 'localhost'
+}
+
+export function isPocketBayOrigin(origin: string): boolean {
+  try {
+    const parsed = new URL(origin)
+    return parsed.origin === origin
+      && !parsed.username
+      && !parsed.password
+      && parsed.pathname === '/'
+      && !parsed.search
+      && !parsed.hash
+      && POCKETBAY_ORIGIN_PATTERN.test(parsed.origin)
+  } catch {
+    return false
+  }
 }
 
 function isPermittedConfiguredOrigin(origin: string): boolean {
@@ -93,6 +109,7 @@ export function createApp(options: {
   const allowedOrigins = options.allowedOrigins ?? TEST_APP_ORIGINS
   if (allowedOrigins.length === 0 || allowedOrigins.some((origin) => !isPermittedConfiguredOrigin(origin))) throw new Error('Allowed application Origin is invalid')
   const allowedOriginSet = new Set(allowedOrigins)
+  const pocketBayRuntime = process.env.POCKETBAY_RUNTIME === 'true'
   const readOnly = options.readOnly ?? false
   const readiness = options.readiness ?? (() => undefined)
   const unavailableAuth = async (context: { header(name: string, value: string): void; json(value: { error: string }, status: 503): Response }) => {
@@ -110,7 +127,8 @@ export function createApp(options: {
 
     const origin = context.req.header('origin')
     const writeRequest = WRITE_METHODS.has(context.req.method)
-    if ((origin && !allowedOriginSet.has(origin)) || (writeRequest && !origin)) {
+    const originAllowed = origin !== undefined && (allowedOriginSet.has(origin) || (pocketBayRuntime && isPocketBayOrigin(origin)))
+    if ((origin && !originAllowed) || (writeRequest && !origin)) {
       if (auth) auth.recordFailure('security.origin', 'request', 'ORIGIN_REJECTED')
       return context.json({ error: 'Exact Origin required' }, 403)
     }

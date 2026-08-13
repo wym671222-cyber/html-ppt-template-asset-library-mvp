@@ -18,6 +18,7 @@
     "seed:admin": "pnpm --filter @slide-maker/api seed:admin",
     "audit:a11y": "node scripts/a11y-theme-audit.mjs",
     "start": "tsx apps/api/src/index.ts",
+    "start:pocketbay": "node ops/pocketbay/start.mjs",
     "api:dev": "pnpm --filter @slide-maker/api dev",
     "api:bedrock": "AI_PROVIDER=bedrock pnpm --filter @slide-maker/api dev",
     "api:anthropic": "AI_PROVIDER=anthropic pnpm --filter @slide-maker/api dev",

@@ -12,7 +12,23 @@ export function apiBaseUrl(): string {
   return parsed.origin
 }
 
-export function writeOrigin(): string {
+function isPocketBayOrigin(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.origin === value
+      && parsed.protocol === 'https:'
+      && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.pocketbay\.app$/.test(parsed.hostname)
+      && parsed.pathname === '/'
+      && !parsed.username
+      && !parsed.password
+      && !parsed.search
+      && !parsed.hash
+  } catch {
+    return false
+  }
+}
+
+function configuredOrigin(): string {
   const value = env.ORIGIN ?? 'http://127.0.0.1:5173'
   const parsed = new URL(value)
   if (value === 'https://ppt.ajjy-ai.site') return value
@@ -20,10 +36,20 @@ export function writeOrigin(): string {
   throw new Error('ORIGIN must be the production Origin or an explicit loopback Origin')
 }
 
-function browserWriteOrigin(): string {
-  const value = env.P15_BROWSER_ORIGIN ?? writeOrigin()
+export function writeOrigin(event?: Pick<RequestEvent, 'url'>): string {
+  if (env.POCKETBAY_RUNTIME === 'true' && event) {
+    const value = event.url.origin
+    if (isPocketBayOrigin(value)) return value
+    throw new Error('PocketBay requests must use an https://*.pocketbay.app Origin')
+  }
+  return configuredOrigin()
+}
+
+function browserWriteOrigin(event: Pick<RequestEvent, 'url'>): string {
+  const value = env.POCKETBAY_RUNTIME === 'true' ? writeOrigin(event) : (env.P15_BROWSER_ORIGIN ?? configuredOrigin())
   const parsed = new URL(value)
   if (value === 'https://ppt.ajjy-ai.site') return value
+  if (env.POCKETBAY_RUNTIME === 'true' && isPocketBayOrigin(value)) return value
   if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && ['127.0.0.1', 'localhost'].includes(parsed.hostname) && parsed.pathname === '/' && !parsed.search && !parsed.hash && !parsed.username && !parsed.password) return value
   throw new Error('P15_BROWSER_ORIGIN must be the production Origin or an explicit loopback test Origin')
 }
@@ -39,14 +65,14 @@ function clientAddress(event: RequestEvent): string {
 }
 
 async function writeBody(event: RequestEvent): Promise<string | Response> {
-  const rejected = validateBrowserWrite(event.request.headers, browserWriteOrigin())
+  const rejected = validateBrowserWrite(event.request.headers, browserWriteOrigin(event))
   if (rejected) return rejected
   return readBoundedBody(event.request.body)
 }
 
 function apiHeaders(event: RequestEvent, method: string): Headers {
   // `trustedApiHeaders` creates a new list: no browser forwarding header survives.
-  return trustedApiHeaders(event.request.headers, clientAddress(event), method, writeOrigin())
+  return trustedApiHeaders(event.request.headers, clientAddress(event), method, writeOrigin(event))
 }
 
 export async function forwardJson(event: RequestEvent, pathname: string): Promise<Response> {
