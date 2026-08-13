@@ -21,7 +21,7 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P01",
+    "currentPhaseId": "P02",
     "activePhaseThreadId": "current-parent",
     "terminalPhaseId": "P04"
   },
@@ -52,27 +52,36 @@
       "id": "P01",
       "title": "生产安全加固",
       "objective": "精确 Origin、关闭注册并从常规生产配置移除管理员 bootstrap",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 45,
       "dependsOn": ["P00"],
       "successor": "P02",
       "threadId": "current-parent",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "7658bd0dce934d1e6ad3344c2c36d042e45a29b1",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "exact configured PocketBay Origin enforced by API and Web BFF",
+          "public registration disabled across API, route and login UI",
+          "bootstrap is inert without a complete explicit input and clears its environment",
+          "targeted 25/25 and full Vitest 37 files/790 tests passed under Node 22",
+          "root build, shell 8/8 and production audit all severities zero passed"
+        ]
+      }
     },
     {
       "id": "P02",
       "title": "加密备份与恢复",
       "objective": "交付管理员异地加密备份、隔离恢复和安全激活",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P01"],
       "successor": "P03",
-      "threadId": null,
+      "threadId": "current-parent",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -106,5 +115,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T06:55:36+08:00"
+  "updatedAt": "2026-08-14T07:06:43+08:00"
 }
