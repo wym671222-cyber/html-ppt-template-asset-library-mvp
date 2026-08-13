@@ -10,19 +10,21 @@ export const handle: Handle = async ({ event, resolve }) => {
   const healthRoute = event.url.pathname === '/api/health/live' || event.url.pathname === '/api/health/ready'
   const presentationRoute = event.url.pathname === '/api/presentations' || event.url.pathname.startsWith('/api/presentations/')
   const recoveryRoute = event.url.pathname === '/api/recovery' || event.url.pathname.startsWith('/api/recovery/')
+  const templateImportRoute = event.url.pathname === '/api/template-imports' || event.url.pathname.startsWith('/api/template-imports/')
   const authRoute = event.url.pathname === '/api/auth' || event.url.pathname.startsWith('/api/auth/')
   const adminRoute = event.url.pathname === '/api/admin' || event.url.pathname.startsWith('/api/admin/')
   const publicPage = ['/login', '/register', '/pending', '/change-password'].includes(event.url.pathname)
   const businessPage = event.url.pathname === '/' || event.url.pathname === '/admin'
   // Only the P09 asset-library root and its exact catalog/presentation/export/recovery proxies, and
   // generated app assets are active. Legacy routes remain unreachable history.
-  if (!businessPage && !publicPage && !event.url.pathname.startsWith('/_app/') && !catalogRoute && !healthRoute && !presentationRoute && !recoveryRoute && !authRoute && !adminRoute) {
+  if (!businessPage && !publicPage && !event.url.pathname.startsWith('/_app/') && !catalogRoute && !healthRoute && !presentationRoute && !recoveryRoute && !templateImportRoute && !authRoute && !adminRoute) {
     return new Response('Not found', { status: 404 })
   }
   if (catalogRoute && event.request.method !== 'GET') return new Response('Method not allowed', { status: 405 })
   if (healthRoute && event.request.method !== 'GET' && event.request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 })
   if (presentationRoute && !['GET', 'POST', 'PATCH', 'DELETE'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
   if (recoveryRoute && !['GET', 'POST'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
+  if (templateImportRoute && !['GET', 'POST'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
   if (authRoute && !['GET', 'POST'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
   if (adminRoute && !['GET', 'POST'].includes(event.request.method)) return new Response('Method not allowed', { status: 405 })
 

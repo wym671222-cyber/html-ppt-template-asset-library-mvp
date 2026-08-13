@@ -7,7 +7,7 @@ import { chromium } from '@playwright/test'
 import {
   assertValidTemplatePackage,
   type TemplatePackageSource,
-} from '../../../../packages/shared/src/template-package.js'
+} from '@slide-maker/shared'
 
 const PREVIEW_CSP = "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'none'; base-uri 'none'; frame-ancestors 'none'"
 const FORBIDDEN_HTML = /<(?:script|iframe|frame|object|embed|form|base)\b|<meta\b[^>]*\bhttp-equiv\s*=|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|srcset|target|action|formaction|download)\s*=/i
@@ -189,10 +189,13 @@ export class SecurePreviewRenderer {
           '--disable-component-update',
           '--disable-default-apps',
           '--disable-extensions',
+          '--disable-dev-shm-usage',
           '--disable-sync',
           '--metrics-recording-only',
           '--no-default-browser-check',
           '--no-first-run',
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
         ],
       })
       const context = await browser.newContext({

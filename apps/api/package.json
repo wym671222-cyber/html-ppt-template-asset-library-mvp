@@ -22,6 +22,7 @@
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.7.0",
+    "jszip": "^3.10.1",
     "mammoth": "^1.7.2",
     "openai": "^4.80.0",
     "pdf-parse": "^1.1.1",

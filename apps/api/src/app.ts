@@ -9,6 +9,7 @@ import { createAuthRouter } from './routes/auth.js'
 import { createAdminRouter } from './routes/admin.js'
 import { createBusinessAuthMiddleware, type AuthVariables } from './middleware/auth.js'
 import { createAdminMiddleware } from './middleware/admin.js'
+import { MAX_TEMPLATE_ZIP_BYTES, TemplateImportError, TemplateImportService } from './templates/template-import.js'
 
 export const LOOPBACK_HOST = '127.0.0.1'
 export const PRODUCTION_APP_ORIGIN = 'https://ppt.ajjy-ai.site'
@@ -65,10 +66,10 @@ async function jsonBody(context: { req: { text(): Promise<string> } }): Promise<
   return parsed as Record<string, unknown>
 }
 
-async function boundedBinaryBody(request: Request, maxBytes: number): Promise<Uint8Array> {
+async function boundedBinaryBody(request: Request, maxBytes: number, invalid: (message: string) => Error): Promise<Uint8Array> {
   const contentLength = request.headers.get('content-length')
-  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) || Number(contentLength) > maxBytes)) throw new RecoveryRequestError('Recovery archive size is invalid', 400)
-  if (!request.body) throw new RecoveryRequestError('Recovery archive is missing', 400)
+  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) || Number(contentLength) > maxBytes)) throw invalid('Binary request size is invalid')
+  if (!request.body) throw invalid('Binary request body is missing')
   const reader = request.body.getReader()
   const chunks: Uint8Array[] = []
   let size = 0
@@ -79,12 +80,12 @@ async function boundedBinaryBody(request: Request, maxBytes: number): Promise<Ui
       size += next.value.byteLength
       if (size > maxBytes) {
         await reader.cancel()
-        throw new RecoveryRequestError('Recovery archive size is invalid', 400)
+        throw invalid('Binary request size is invalid')
       }
       chunks.push(next.value)
     }
   } finally { reader.releaseLock() }
-  if (size < 22) throw new RecoveryRequestError('Recovery archive size is invalid', 400)
+  if (size < 22) throw invalid('Binary request size is invalid')
   const content = new Uint8Array(size)
   let offset = 0
   for (const chunk of chunks) { content.set(chunk, offset); offset += chunk.byteLength }
@@ -108,6 +109,11 @@ function recoveryError(context: { json(value: { error: string }, status: 400 | 4
   return context.json({ error: 'Local recovery request failed' }, 500)
 }
 
+function templateImportError(context: { json(value: { error: string }, status: 400 | 404 | 409 | 500): Response }, error: unknown): Response {
+  if (error instanceof TemplateImportError) return context.json({ error: error.message }, error.status)
+  return context.json({ error: 'Template import request failed' }, 500)
+}
+
 function assertOnlyKeys(body: Record<string, unknown>, keys: readonly string[]): void {
   if (Object.keys(body).sort().join(',') !== [...keys].sort().join(',')) throw new ExportRequestError(`JSON request body must contain only ${keys.join(' and ')}`)
 }
@@ -121,6 +127,7 @@ export function createApp(options: {
   presentations?: PresentationRepository
   exports?: PresentationExportRepository
   recovery?: LocalRecoveryService
+  templateImports?: TemplateImportService
   auth?: AuthApplicationService
   allowedOrigins?: readonly string[]
   registrationEnabled?: boolean
@@ -132,6 +139,7 @@ export function createApp(options: {
   const presentations = options.presentations
   const exports = options.exports
   const recovery = options.recovery
+  const templateImports = options.templateImports
   const auth = options.auth
   const allowedOrigins = options.allowedOrigins ?? TEST_APP_ORIGINS
   if (allowedOrigins.length === 0 || allowedOrigins.some((origin) => !isPermittedConfiguredOrigin(origin))) throw new Error('Allowed application Origin is invalid')
@@ -146,6 +154,8 @@ export function createApp(options: {
   const businessAuth = auth ? createBusinessAuthMiddleware(auth, 'business.access') : unavailableAuth
   const recoveryAuth = auth ? createBusinessAuthMiddleware(auth, 'recovery.access') : unavailableAuth
   const recoveryAdmin = auth ? createAdminMiddleware(auth, 'recovery.access') : unavailableAuth
+  const templateImportAuth = auth ? createBusinessAuthMiddleware(auth, 'template-import.access') : unavailableAuth
+  const templateImportAdmin = auth ? createAdminMiddleware(auth, 'template-import.access') : unavailableAuth
 
   app.use('*', async (context, next) => {
     const host = context.req.header('host') ?? new URL(context.req.url).host
@@ -203,6 +213,8 @@ export function createApp(options: {
   app.use('/api/presentations/*', businessAuth)
   app.use('/api/recovery', recoveryAuth, recoveryAdmin)
   app.use('/api/recovery/*', recoveryAuth, recoveryAdmin)
+  app.use('/api/template-imports', templateImportAuth, templateImportAdmin)
+  app.use('/api/template-imports/*', templateImportAuth, templateImportAdmin)
   app.get('/api/owner', (context) => context.json({ owner: getOwnerContext(context.get('auth').user.id) }))
   app.get('/api/catalog', (context) => {
     if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)
@@ -328,7 +340,7 @@ export function createApp(options: {
     if (new URL(context.req.url).search) return context.json({ error: 'Recovery query parameters are not accepted' }, 400)
     if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/zip') return context.json({ error: 'Recovery archive Content-Type must be application/zip' }, 400)
     try {
-      const content = await boundedBinaryBody(context.req.raw, MAX_RECOVERY_ARCHIVE_BYTES)
+      const content = await boundedBinaryBody(context.req.raw, MAX_RECOVERY_ARCHIVE_BYTES, (message) => new RecoveryRequestError(message, 400))
       return context.json({ backup: recovery.importBackupArchive(content) }, 201)
     } catch (error) { return recoveryError(context, error) }
   })
@@ -349,6 +361,21 @@ export function createApp(options: {
       assertOnlyRecoveryKeys(body, ['expectedManifestSha256', 'confirmation'])
       return context.json({ activation: recovery.stageActivation(context.req.param('backupId'), body.expectedManifestSha256, body.confirmation) }, 202)
     } catch (error) { return recoveryError(context, error) }
+  })
+  app.post('/api/template-imports', async (context) => {
+    if (!templateImports) return context.json({ error: 'Template import service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Template import does not accept query parameters' }, 400)
+    if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/zip') return context.json({ error: 'Template import Content-Type must be application/zip' }, 400)
+    try {
+      const content = await boundedBinaryBody(context.req.raw, MAX_TEMPLATE_ZIP_BYTES, (message) => new TemplateImportError(message, 400))
+      return context.json({ import: await templateImports.importZip(content) }, 202)
+    } catch (error) { return templateImportError(context, error) }
+  })
+  app.get('/api/template-imports/:jobId', (context) => {
+    if (!templateImports) return context.json({ error: 'Template import service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Template import does not accept query parameters' }, 400)
+    try { return context.json({ job: templateImports.job(context.req.param('jobId')) }) }
+    catch (error) { return templateImportError(context, error) }
   })
   app.patch('/api/presentations/:presentationId', async (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)

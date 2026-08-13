@@ -5,7 +5,7 @@ import {
   assertValidTemplatePackage,
   type TemplatePackageManifest,
   type TemplatePackageSource,
-} from '../../../../packages/shared/src/template-package.js'
+} from '@slide-maker/shared'
 
 export type SimulatedTemplateVersion = {
   id: string
@@ -37,6 +37,25 @@ function digestPackage(source: TemplatePackageSource): string {
   return createHash('sha256').update(serializeTemplatePackage(source)).digest('hex')
 }
 
+export function adaptTemplatePackageSource(source: TemplatePackageSource, packageRoot = '[uploaded]'): SimulatedTemplateAdapterResult {
+  assertValidTemplatePackage(source)
+  const sourceDigest = digestPackage(source)
+  return {
+    asset: { id: source.manifest.id, title: source.manifest.title, summary: source.manifest.summary, category: source.manifest.category, tags: source.manifest.tags },
+    version: {
+      id: `${source.manifest.id}-v${source.manifest.version}`,
+      assetId: source.manifest.id,
+      versionNumber: source.manifest.version,
+      contractVersion: source.manifest.contractVersion,
+      sourceDigest,
+      contentObjectDigest: null,
+      slotSchema: { slots: source.manifest.slots },
+    },
+    package: { root: packageRoot, entry: source.manifest.entry, files: [...source.manifest.files] },
+    source,
+  }
+}
+
 export function adaptSimulatedTemplatePackage(rootDir: string): SimulatedTemplateAdapterResult {
   const root = resolve(rootDir)
   const manifest = readJson(join(root, 'manifest.json'))
@@ -46,20 +65,5 @@ export function adaptSimulatedTemplatePackage(rootDir: string): SimulatedTemplat
     return [file, readFileSync(filePath, 'utf8')]
   }))
   const source: TemplatePackageSource = { manifest, files }
-  assertValidTemplatePackage(source)
-  const sourceDigest = digestPackage(source)
-  return {
-    asset: { id: manifest.id, title: manifest.title, summary: manifest.summary, category: manifest.category, tags: manifest.tags },
-    version: {
-      id: `${manifest.id}-v${manifest.version}`,
-      assetId: manifest.id,
-      versionNumber: manifest.version,
-      contractVersion: manifest.contractVersion,
-      sourceDigest,
-      contentObjectDigest: null,
-      slotSchema: { slots: manifest.slots },
-    },
-    package: { root, entry: manifest.entry, files: [...manifest.files] },
-    source,
-  }
+  return adaptTemplatePackageSource(source, root)
 }

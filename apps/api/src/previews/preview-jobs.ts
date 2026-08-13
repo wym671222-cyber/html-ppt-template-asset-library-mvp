@@ -1,5 +1,5 @@
 import type BetterSqlite3 from 'better-sqlite3'
-import type { TemplatePackageSource } from '../../../../packages/shared/src/template-package.js'
+import type { TemplatePackageSource } from '@slide-maker/shared'
 import { LocalContentStore, type StoredContentObject } from '../assets/content-store.js'
 import { serializeTemplatePackage } from '../templates/simulated-adapter.js'
 import { LocalJobRepository } from '../jobs/local-jobs.js'
