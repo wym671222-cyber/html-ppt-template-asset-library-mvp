@@ -21,7 +21,7 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P03",
+    "currentPhaseId": "P04",
     "activePhaseThreadId": "current-parent",
     "terminalPhaseId": "P04"
   },
@@ -98,31 +98,40 @@
       "id": "P03",
       "title": "管理员模板导入",
       "objective": "通过管理员显式上传导入 html-template/v1 包并生成预览",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P02"],
       "successor": "P04",
       "threadId": "current-parent",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "530e37bd48ab331cca9c70c2f1f2db0535dd2fe2",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "administrator-only 5 MiB ZIP import enforces exact html-template/v1 manifest and HTML/CSS allowlist",
+          "CAS registration and deterministic preview Job are idempotent and remain hidden until a complete PNG pair",
+          "single-concurrency worker uses isolated Chromium and production image installs system Chromium plus CJK fonts",
+          "targeted import and preview tests 20/20; full Vitest 39 files/798 tests passed",
+          "root build, shell 8/8 and production audit every severity zero passed"
+        ]
+      }
     },
     {
       "id": "P04",
       "title": "受控上线与终局验收",
       "objective": "通过全量门禁并部署到现有 PocketBay 项目完成线上验收",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P03"],
       "successor": null,
-      "threadId": null,
+      "threadId": "current-parent",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T07:17:48+08:00"
+  "updatedAt": "2026-08-14T07:27:23+08:00"
 }
