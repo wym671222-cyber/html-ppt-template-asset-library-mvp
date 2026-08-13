@@ -21,7 +21,7 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P00",
+    "currentPhaseId": "P01",
     "activePhaseThreadId": "current-parent",
     "terminalPhaseId": "P04"
   },
@@ -30,27 +30,35 @@
       "id": "P00",
       "title": "固化最小适配基线",
       "objective": "提交当前 Docker、PocketBay 启动器、/data 和动态 Origin 最小适配",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "high",
       "estimatedContextPercent": 30,
       "dependsOn": [],
       "successor": "P01",
       "threadId": "current-parent",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "b30967fb02da1cc770425bb68017f448e430a7d9",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "PocketBay adapter tests 6/6 passed under Node 24",
+          "full Vitest 36 files/785 tests passed under declared Node 22 ABI",
+          "shared/API typecheck, Web check/build, root build and shell 8/8 passed",
+          "Docker daemon was unavailable locally; image build remains a PB04 platform gate"
+        ]
+      }
     },
     {
       "id": "P01",
       "title": "生产安全加固",
       "objective": "精确 Origin、关闭注册并从常规生产配置移除管理员 bootstrap",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 45,
       "dependsOn": ["P00"],
       "successor": "P02",
-      "threadId": null,
+      "threadId": "current-parent",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -98,5 +106,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T06:42:08+08:00"
+  "updatedAt": "2026-08-14T06:55:36+08:00"
 }
