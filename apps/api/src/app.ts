@@ -38,7 +38,7 @@ function isPermittedConfiguredOrigin(origin: string): boolean {
   try {
     const parsed = new URL(origin)
     if (parsed.origin !== origin || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) return false
-    return parsed.origin === PRODUCTION_APP_ORIGIN || (parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname))
+    return parsed.origin === PRODUCTION_APP_ORIGIN || isPocketBayOrigin(origin) || (parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname))
   } catch {
     return false
   }
@@ -97,6 +97,7 @@ export function createApp(options: {
   recovery?: LocalRecoveryService
   auth?: AuthApplicationService
   allowedOrigins?: readonly string[]
+  registrationEnabled?: boolean
   readOnly?: boolean
   readiness?: ReadinessCheck
 } = {}): Hono<AuthVariables> {
@@ -109,7 +110,7 @@ export function createApp(options: {
   const allowedOrigins = options.allowedOrigins ?? TEST_APP_ORIGINS
   if (allowedOrigins.length === 0 || allowedOrigins.some((origin) => !isPermittedConfiguredOrigin(origin))) throw new Error('Allowed application Origin is invalid')
   const allowedOriginSet = new Set(allowedOrigins)
-  const pocketBayRuntime = process.env.POCKETBAY_RUNTIME === 'true'
+  const registrationEnabled = options.registrationEnabled ?? true
   const readOnly = options.readOnly ?? false
   const readiness = options.readiness ?? (() => undefined)
   const unavailableAuth = async (context: { header(name: string, value: string): void; json(value: { error: string }, status: 503): Response }) => {
@@ -127,7 +128,7 @@ export function createApp(options: {
 
     const origin = context.req.header('origin')
     const writeRequest = WRITE_METHODS.has(context.req.method)
-    const originAllowed = origin !== undefined && (allowedOriginSet.has(origin) || (pocketBayRuntime && isPocketBayOrigin(origin)))
+    const originAllowed = origin !== undefined && allowedOriginSet.has(origin)
     if ((origin && !originAllowed) || (writeRequest && !origin)) {
       if (auth) auth.recordFailure('security.origin', 'request', 'ORIGIN_REJECTED')
       return context.json({ error: 'Exact Origin required' }, 403)
@@ -166,7 +167,7 @@ export function createApp(options: {
     }
   })
   if (auth) {
-    app.route('/api/auth', createAuthRouter(auth))
+    app.route('/api/auth', createAuthRouter(auth, { registrationEnabled }))
     app.route('/api/admin', createAdminRouter(auth))
   }
   app.use('/api/owner', businessAuth)

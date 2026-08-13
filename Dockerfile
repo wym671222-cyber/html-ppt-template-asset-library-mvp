@@ -20,6 +20,8 @@ ENV NODE_ENV=production
 ENV POCKETBAY_RUNTIME=true
 ENV POCKETBAY_DATA_DIR=/data
 ENV ASSET_LIBRARY_DATA_ROOT=/data
+ENV POCKETBAY_PUBLIC_ORIGIN=https://html-ppt-template-asset-library.pocketbay.app
+ENV REGISTRATION_ENABLED=false
 
 EXPOSE 3000
 

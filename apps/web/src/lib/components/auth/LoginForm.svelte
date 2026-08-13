@@ -5,6 +5,8 @@
   import { base } from '$app/paths';
   import { onMount } from 'svelte';
 
+  let { registrationEnabled = true }: { registrationEnabled?: boolean } = $props();
+
   let username = $state('');
   let password = $state('');
   let error = $state('');
@@ -68,9 +70,11 @@
       {loading ? '正在登录…' : '登录'}
     </button>
 
-    <p class="form-footer">
-      还没有账号？<a href="{base}/register">注册</a>
-    </p>
+    {#if registrationEnabled}
+      <p class="form-footer">
+        还没有账号？<a href="{base}/register">注册</a>
+      </p>
+    {/if}
   </div>
 </form>
 

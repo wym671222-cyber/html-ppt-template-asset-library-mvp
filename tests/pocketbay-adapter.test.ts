@@ -41,27 +41,20 @@ describe('PocketBay adapter boundaries', () => {
     }
   })
 
-  it('accepts PocketBay preflight origins only while the runtime flag is active', async () => {
-    const previousRuntime = process.env.POCKETBAY_RUNTIME
-    try {
-      process.env.POCKETBAY_RUNTIME = 'true'
-      const app = createApp()
-      const accepted = await app.request('http://127.0.0.1/api/health', {
-        method: 'OPTIONS',
-        headers: { Origin: 'https://demo.pocketbay.app' },
-      })
-      expect(accepted.status).toBe(204)
-      expect(accepted.headers.get('access-control-allow-origin')).toBe('https://demo.pocketbay.app')
+  it('accepts only the configured PocketBay preflight Origin', async () => {
+    const app = createApp({ allowedOrigins: ['https://demo.pocketbay.app'] })
+    const accepted = await app.request('http://127.0.0.1/api/health', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://demo.pocketbay.app' },
+    })
+    expect(accepted.status).toBe(204)
+    expect(accepted.headers.get('access-control-allow-origin')).toBe('https://demo.pocketbay.app')
 
-      const rejected = await app.request('http://127.0.0.1/api/health', {
-        method: 'OPTIONS',
-        headers: { Origin: 'https://demo.pocketbay.app.evil.example' },
-      })
-      expect(rejected.status).toBe(403)
-    } finally {
-      if (previousRuntime === undefined) delete process.env.POCKETBAY_RUNTIME
-      else process.env.POCKETBAY_RUNTIME = previousRuntime
-    }
+    const rejected = await app.request('http://127.0.0.1/api/health', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://other-project.pocketbay.app' },
+    })
+    expect(rejected.status).toBe(403)
   })
 
   it('keeps the container single-process boundary and excludes local state', () => {

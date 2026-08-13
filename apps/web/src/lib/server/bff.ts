@@ -29,6 +29,12 @@ function isPocketBayOrigin(value: string): boolean {
 }
 
 function configuredOrigin(): string {
+  if (env.POCKETBAY_RUNTIME === 'true') {
+    const pocketBayOrigin = env.POCKETBAY_PUBLIC_ORIGIN
+    if (!pocketBayOrigin || !isPocketBayOrigin(pocketBayOrigin)) throw new Error('POCKETBAY_PUBLIC_ORIGIN must be one exact PocketBay project Origin')
+    if (env.ORIGIN !== pocketBayOrigin) throw new Error('ORIGIN must match POCKETBAY_PUBLIC_ORIGIN in PocketBay production')
+    return pocketBayOrigin
+  }
   const value = env.ORIGIN ?? 'http://127.0.0.1:5173'
   const parsed = new URL(value)
   if (value === 'https://ppt.ajjy-ai.site') return value
@@ -37,19 +43,17 @@ function configuredOrigin(): string {
 }
 
 export function writeOrigin(event?: Pick<RequestEvent, 'url'>): string {
-  if (env.POCKETBAY_RUNTIME === 'true' && event) {
-    const value = event.url.origin
-    if (isPocketBayOrigin(value)) return value
-    throw new Error('PocketBay requests must use an https://*.pocketbay.app Origin')
+  const expected = configuredOrigin()
+  if (env.POCKETBAY_RUNTIME === 'true' && event && event.url.origin !== expected) {
+    throw new Error('PocketBay request Origin does not match POCKETBAY_PUBLIC_ORIGIN')
   }
-  return configuredOrigin()
+  return expected
 }
 
 function browserWriteOrigin(event: Pick<RequestEvent, 'url'>): string {
   const value = env.POCKETBAY_RUNTIME === 'true' ? writeOrigin(event) : (env.P15_BROWSER_ORIGIN ?? configuredOrigin())
   const parsed = new URL(value)
   if (value === 'https://ppt.ajjy-ai.site') return value
-  if (env.POCKETBAY_RUNTIME === 'true' && isPocketBayOrigin(value)) return value
   if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && ['127.0.0.1', 'localhost'].includes(parsed.hostname) && parsed.pathname === '/' && !parsed.search && !parsed.hash && !parsed.username && !parsed.password) return value
   throw new Error('P15_BROWSER_ORIGIN must be the production Origin or an explicit loopback test Origin')
 }

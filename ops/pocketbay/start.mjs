@@ -7,6 +7,7 @@ const rootPath = decodeURIComponent(root.pathname)
 const port = Number(process.env.PORT)
 const apiPort = Number(process.env.POCKETBAY_API_PORT ?? 3001)
 const dataRoot = process.env.POCKETBAY_DATA_DIR ?? '/data'
+const publicOrigin = process.env.POCKETBAY_PUBLIC_ORIGIN
 const adminConfigPath = process.env.POCKETBAY_ADMIN_CONFIG_PATH ?? `${rootPath}/ops/pocketbay/admin-bootstrap.conf`
 
 function validPort(value) {
@@ -16,6 +17,9 @@ function validPort(value) {
 if (!validPort(port)) throw new Error('PocketBay requires a numeric PORT environment variable')
 if (!validPort(apiPort) || apiPort === port) throw new Error('POCKETBAY_API_PORT must be a distinct valid port')
 if (!/^\//.test(dataRoot)) throw new Error('POCKETBAY_DATA_DIR must be an absolute path')
+if (!publicOrigin || !/^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.pocketbay\.app$/.test(publicOrigin)) {
+  throw new Error('POCKETBAY_PUBLIC_ORIGIN must be one exact PocketBay project Origin')
+}
 
 function readAdminBootstrapConfig(path) {
   if (!existsSync(path)) return {}
@@ -47,14 +51,13 @@ const common = {
   POCKETBAY_RUNTIME: 'true',
   POCKETBAY_DATA_DIR: dataRoot,
   ASSET_LIBRARY_DATA_ROOT: dataRoot,
-  ORIGIN: 'https://ppt.ajjy-ai.site',
+  ORIGIN: publicOrigin,
+  POCKETBAY_PUBLIC_ORIGIN: publicOrigin,
+  REGISTRATION_ENABLED: process.env.REGISTRATION_ENABLED ?? 'false',
   ...adminBootstrap,
 }
 
 const webEnvironment = { ...common }
-// SvelteKit must derive the public PocketBay origin from the forwarded Host.
-// The API keeps the fixed production Origin above for its own env contract.
-delete webEnvironment.ORIGIN
 webEnvironment.PROTOCOL_HEADER = 'x-forwarded-proto'
 webEnvironment.HOST_HEADER = 'x-forwarded-host'
 

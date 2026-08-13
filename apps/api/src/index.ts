@@ -8,28 +8,13 @@ import { migrateDatabase } from './db/migrate.js'
 import { LOCAL_CONTENT_STORE_PATH, LOCAL_DATABASE_PATH, LOCAL_RECOVERY_BACKUP_PATH, LOCAL_RECOVERY_DRILL_PATH } from './db/paths.js'
 import { LocalRecoveryService } from './recovery/local-recovery.js'
 import { env } from './env.js'
-import { AuthApiError, AuthApplicationService, bootstrapAdministrator } from './auth/service.js'
+import { AuthApplicationService } from './auth/service.js'
+import { bootstrapPocketBayAdministrator } from './auth/pocketbay-bootstrap.js'
 
 migrateDatabase()
 const { sqlite } = await import('./db/index.js')
 
-async function bootstrapPocketBayAdministrator(): Promise<void> {
-  if (process.env.POCKETBAY_RUNTIME !== 'true') return
-  const username = process.env.POCKETBAY_ADMIN_USERNAME?.trim()
-  const password = process.env.POCKETBAY_ADMIN_PASSWORD
-  if (!username && !password) return
-  if (!username || !password) throw new Error('PocketBay administrator bootstrap requires both username and password')
-  try {
-    await bootstrapAdministrator(sqlite, { username, password })
-  } catch (error) {
-    if (!(error instanceof AuthApiError) || error.code !== 'ADMIN_ALREADY_EXISTS') throw error
-  } finally {
-    delete process.env.POCKETBAY_ADMIN_USERNAME
-    delete process.env.POCKETBAY_ADMIN_PASSWORD
-  }
-}
-
-await bootstrapPocketBayAdministrator()
+await bootstrapPocketBayAdministrator(sqlite)
 const contentStore = new LocalContentStore()
 const app = createApp({
   catalog: new AssetLibraryCatalog(sqlite, contentStore),
@@ -43,6 +28,7 @@ const app = createApp({
   }),
   auth: new AuthApplicationService(sqlite),
   allowedOrigins: [env.appOrigin],
+  registrationEnabled: env.registrationEnabled,
   readOnly: env.appReadOnly,
   readiness: () => {
     sqlite.prepare('SELECT 1').get()
