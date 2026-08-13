@@ -4,7 +4,8 @@
   import FilterRail from '$lib/components/library/FilterRail.svelte'
   import { loadCatalog, type CatalogResponse } from '$lib/asset-library'
   import { addTemplate, copyItem, createPresentation, createPresentationExport, deleteItem, loadPresentationExports, loadPresentations, moveItem, renamePresentation, reviseOverrides, safeExportUrl, type Presentation, type PresentationExport } from '$lib/presentations'
-  import { createLocalBackup, loadRecoveryOverview, runIsolatedRestore, safeBackupManifestUrl, type RecoveryBackup, type RecoveryOverview } from '$lib/recovery'
+  import { createLocalBackup, loadRecoveryOverview, runIsolatedRestore, safeBackupManifestUrl, stageRecoveryActivation, type RecoveryBackup, type RecoveryOverview } from '$lib/recovery'
+  import { downloadEncryptedRecoveryBackup, importEncryptedRecoveryBackup } from '$lib/recovery-encryption'
   import { api } from '$lib/api'
   import { goto } from '$app/navigation'
 
@@ -35,6 +36,8 @@
   let recoveryError = $state('')
   let recoveryNotice = $state('')
   let recoveryStatus: HTMLElement | undefined = $state()
+  let recoveryPassphrase = $state('')
+  let recoveryImportFile: File | null = $state(null)
 
   const requestKey = $derived(JSON.stringify({ search, category, tags: [...selectedTags].sort(), retry }))
   const selectedItem = $derived(catalog?.items.find((item) => item.id === selectedId) ?? null)
@@ -217,6 +220,55 @@
       recoveryError = cause instanceof Error ? cause.message : '隔离恢复演练失败'
     } finally { recoveryLoading = false }
   }
+
+  async function downloadEncryptedBackup(backup: RecoveryBackup): Promise<void> {
+    if (recoveryLoading) return
+    recoveryLoading = true
+    recoveryError = ''
+    recoveryNotice = ''
+    try {
+      await downloadEncryptedRecoveryBackup(backup, recoveryPassphrase)
+      recoveryPassphrase = ''
+      recoveryNotice = '加密备份已下载；请将 .pba 文件与口令分开保存在异地。'
+      requestAnimationFrame(() => recoveryStatus?.focus())
+    } catch (cause) {
+      recoveryError = cause instanceof Error ? cause.message : '加密备份下载失败'
+    } finally { recoveryLoading = false }
+  }
+
+  async function importEncryptedBackup(): Promise<void> {
+    if (recoveryLoading || !recoveryImportFile) return
+    recoveryLoading = true
+    recoveryError = ''
+    recoveryNotice = ''
+    try {
+      const backup = await importEncryptedRecoveryBackup(recoveryImportFile, recoveryPassphrase)
+      recovery = await loadRecoveryOverview()
+      recoveryImportFile = null
+      recoveryPassphrase = ''
+      recoveryNotice = `加密备份已解密、导入并回读：${backup.objectCount} 个受控对象。请继续执行隔离恢复演练。`
+      requestAnimationFrame(() => recoveryStatus?.focus())
+    } catch (cause) {
+      recoveryError = cause instanceof Error ? cause.message : '加密备份导入失败'
+    } finally { recoveryLoading = false }
+  }
+
+  async function prepareRecoveryActivation(backup: RecoveryBackup): Promise<void> {
+    if (recoveryLoading || !backup.restored) return
+    const expected = `ACTIVATE ${backup.id}`
+    const confirmation = window.prompt(`此操作会在下次容器重启时切换到已验证备份。\n请输入：${expected}`)
+    if (confirmation === null) return
+    recoveryLoading = true
+    recoveryError = ''
+    recoveryNotice = ''
+    try {
+      await stageRecoveryActivation(backup, confirmation)
+      recoveryNotice = '恢复激活已安全暂存。当前数据尚未切换；请在 PocketBay 控制台重启容器，启动前会再次校验并保留回滚副本。'
+      requestAnimationFrame(() => recoveryStatus?.focus())
+    } catch (cause) {
+      recoveryError = cause instanceof Error ? cause.message : '恢复激活准备失败'
+    } finally { recoveryLoading = false }
+  }
 </script>
 
 <svelte:head>
@@ -334,7 +386,7 @@
         {/if}
         {#if data.user.role === 'admin'}<section class="recovery-panel" aria-labelledby="recovery-heading" aria-busy={recoveryLoading}>
           <header>
-            <div><h3 id="recovery-heading">备份与恢复演练</h3><p>显式 SHA-256 清单 · 全新隔离目录 · 不覆盖原状态</p></div>
+            <div><h3 id="recovery-heading">加密备份与恢复演练</h3><p>AES-256-GCM 浏览器加密 · 显式 SHA-256 清单 · 先恢复到隔离目录</p></div>
             <button type="button" disabled={!recovery || recoveryLoading} onclick={() => { void backupCurrentState() }}>{recoveryLoading ? '正在校验…' : '生成备份清单'}</button>
           </header>
           {#if recoveryLoading && !recovery}
@@ -343,6 +395,12 @@
             <div class="recovery-error" role="alert"><p>{recoveryError}</p><button type="button" onclick={() => { void refreshRecovery() }}>重新检查</button></div>
           {:else if recovery}
             <p class="recovery-summary">{recovery.migrationCount} 条 migration · {recovery.objectCount} 个对象 · {recovery.derivativeCount} 个派生物 · 状态 <code>{recovery.stateSha256.slice(0, 12)}…</code></p>
+            <div class="recovery-encryption">
+              <label>备份口令 <input type="password" bind:value={recoveryPassphrase} minlength="14" maxlength="200" autocomplete="new-password" placeholder="至少 14 个字符" /></label>
+              <label>导入 .pba <input type="file" accept=".pba,application/x-pocketbay-backup" onchange={(event) => { recoveryImportFile = (event.currentTarget as HTMLInputElement).files?.[0] ?? null }} /></label>
+              <button type="button" disabled={!recoveryImportFile || recoveryPassphrase.length < 14 || recoveryLoading} onclick={() => { void importEncryptedBackup() }}>解密并导入</button>
+              <p>口令只在当前浏览器内用于加解密，不会发送到服务端；请与备份文件分开保管。</p>
+            </div>
             {#if recovery.backups.length === 0}
               <p class="recovery-empty">暂无备份清单。恢复只会写入新的本机隔离目录。</p>
             {:else}
@@ -350,7 +408,7 @@
                 {#each recovery.backups as backup}
                   <li>
                     <span>{backup.objectCount} 对象 · {backup.presentationCount} 汇报 · {backup.exportCount} 导出</span>
-                    <div><a href={safeBackupManifestUrl(backup.manifestUrl)}>Manifest</a><button type="button" disabled={backup.restored || recoveryLoading} onclick={() => { void restoreBackup(backup) }}>{backup.restored ? '恢复已验证' : '隔离恢复演练'}</button></div>
+                    <div><a href={safeBackupManifestUrl(backup.manifestUrl)}>Manifest</a><button type="button" disabled={recoveryPassphrase.length < 14 || recoveryLoading} onclick={() => { void downloadEncryptedBackup(backup) }}>加密下载</button><button type="button" disabled={backup.restored || recoveryLoading} onclick={() => { void restoreBackup(backup) }}>{backup.restored ? '恢复已验证' : '隔离恢复演练'}</button><button type="button" disabled={!backup.restored || recoveryLoading} onclick={() => { void prepareRecoveryActivation(backup) }}>准备重启激活</button></div>
                   </li>
                 {/each}
               </ul>
@@ -436,6 +494,10 @@
   .recovery-panel h3 { font-size: 14px; }
   .recovery-panel header p, .recovery-empty, .recovery-summary, .recovery-notice { margin-top: 4px; color: #637289; font-size: 12px; }
   .recovery-summary code { color: #0b356f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .recovery-encryption { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) auto; align-items: end; gap: 8px; margin-top: 10px; }
+  .recovery-encryption label { display: grid; gap: 4px; color: #45556d; font-size: 12px; font-weight: 700; }
+  .recovery-encryption input { min-width: 0; border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px; font: inherit; }
+  .recovery-encryption p { grid-column: 1 / -1; color: #637289; font-size: 11px; }
   .recovery-list { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
   .recovery-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; border: 1px solid #e2d8b8; border-radius: 6px; background: #fff; color: #45556d; font-size: 12px; }
   .recovery-list li div { display: flex; align-items: center; gap: 8px; }

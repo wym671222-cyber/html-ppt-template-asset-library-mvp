@@ -3,7 +3,7 @@ import { AssetLibraryCatalog, CatalogRequestError, parseCatalogQuery } from './a
 import { getOwnerContext } from './owner.js'
 import { PresentationRepository, PresentationRequestError } from './presentations/presentation-repository.js'
 import { ExportRequestError, PresentationExportRepository } from './presentation-exports/presentation-export-repository.js'
-import { LocalRecoveryService, RecoveryRequestError } from './recovery/local-recovery.js'
+import { LocalRecoveryService, MAX_RECOVERY_ARCHIVE_BYTES, RecoveryRequestError } from './recovery/local-recovery.js'
 import { AuthApplicationService } from './auth/service.js'
 import { createAuthRouter } from './routes/auth.js'
 import { createAdminRouter } from './routes/admin.js'
@@ -63,6 +63,32 @@ async function jsonBody(context: { req: { text(): Promise<string> } }): Promise<
     throw new PresentationRequestError('Owner identity is derived from the authenticated session')
   }
   return parsed as Record<string, unknown>
+}
+
+async function boundedBinaryBody(request: Request, maxBytes: number): Promise<Uint8Array> {
+  const contentLength = request.headers.get('content-length')
+  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) || Number(contentLength) > maxBytes)) throw new RecoveryRequestError('Recovery archive size is invalid', 400)
+  if (!request.body) throw new RecoveryRequestError('Recovery archive is missing', 400)
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      size += next.value.byteLength
+      if (size > maxBytes) {
+        await reader.cancel()
+        throw new RecoveryRequestError('Recovery archive size is invalid', 400)
+      }
+      chunks.push(next.value)
+    }
+  } finally { reader.releaseLock() }
+  if (size < 22) throw new RecoveryRequestError('Recovery archive size is invalid', 400)
+  const content = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) { content.set(chunk, offset); offset += chunk.byteLength }
+  return content
 }
 
 function presentationError(context: { json(value: { error: string }, status: 400 | 404 | 409 | 500): Response }, error: unknown): Response {
@@ -284,6 +310,28 @@ export function createApp(options: {
     if (new URL(context.req.url).search) return context.json({ error: 'Recovery query parameters are not accepted' }, 400)
     try { return context.json(recovery.readBackupManifest(context.req.param('backupId'))) } catch (error) { return recoveryError(context, error) }
   })
+  app.get('/api/recovery/backups/:backupId/archive', (context) => {
+    if (!recovery) return context.json({ error: 'Recovery service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Recovery query parameters are not accepted' }, 400)
+    try {
+      const content = recovery.readBackupArchive(context.req.param('backupId'))
+      context.header('Content-Type', 'application/zip')
+      context.header('Content-Length', String(content.byteLength))
+      context.header('Content-Disposition', `attachment; filename="${context.req.param('backupId')}.zip"`)
+      context.header('Cache-Control', 'no-store')
+      context.header('X-Content-Type-Options', 'nosniff')
+      return context.body(new Uint8Array(content))
+    } catch (error) { return recoveryError(context, error) }
+  })
+  app.post('/api/recovery/backups/import', async (context) => {
+    if (!recovery) return context.json({ error: 'Recovery service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Recovery query parameters are not accepted' }, 400)
+    if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/zip') return context.json({ error: 'Recovery archive Content-Type must be application/zip' }, 400)
+    try {
+      const content = await boundedBinaryBody(context.req.raw, MAX_RECOVERY_ARCHIVE_BYTES)
+      return context.json({ backup: recovery.importBackupArchive(content) }, 201)
+    } catch (error) { return recoveryError(context, error) }
+  })
   app.post('/api/recovery/backups/:backupId/restore', async (context) => {
     if (!recovery) return context.json({ error: 'Recovery service unavailable' }, 503)
     if (new URL(context.req.url).search) return context.json({ error: 'Recovery query parameters are not accepted' }, 400)
@@ -291,6 +339,15 @@ export function createApp(options: {
       const body = await jsonBody(context)
       assertOnlyRecoveryKeys(body, ['expectedManifestSha256'])
       return context.json({ restore: recovery.restoreBackup(context.req.param('backupId'), body.expectedManifestSha256) }, 201)
+    } catch (error) { return recoveryError(context, error) }
+  })
+  app.post('/api/recovery/backups/:backupId/activate', async (context) => {
+    if (!recovery) return context.json({ error: 'Recovery service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Recovery query parameters are not accepted' }, 400)
+    try {
+      const body = await jsonBody(context)
+      assertOnlyRecoveryKeys(body, ['expectedManifestSha256', 'confirmation'])
+      return context.json({ activation: recovery.stageActivation(context.req.param('backupId'), body.expectedManifestSha256, body.confirmation) }, 202)
     } catch (error) { return recoveryError(context, error) }
   })
   app.patch('/api/presentations/:presentationId', async (context) => {

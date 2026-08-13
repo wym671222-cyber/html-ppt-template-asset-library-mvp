@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private'
 import type { RequestEvent } from '@sveltejs/kit'
-import { normalizedClientAddress, readBoundedBody, trustedApiHeaders, validateBrowserWrite } from './bff-boundary.js'
+import { normalizedClientAddress, readBoundedBinaryBody, readBoundedBody, trustedApiHeaders, validateBrowserBinaryWrite, validateBrowserWrite } from './bff-boundary.js'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
 
@@ -96,6 +96,21 @@ export async function forwardJson(event: RequestEvent, pathname: string): Promis
   if (retryAfter) headers.set('Retry-After', retryAfter)
   if (response.status === 204) return new Response(null, { status: 204, headers })
   return new Response(await response.arrayBuffer(), { status: response.status, headers })
+}
+
+export async function forwardBinary(event: RequestEvent, pathname: string, mediaType: string, maxBytes: number): Promise<Response> {
+  const rejected = validateBrowserBinaryWrite(event.request.headers, browserWriteOrigin(event), mediaType, maxBytes)
+  if (rejected) return rejected
+  const body = await readBoundedBinaryBody(event.request.body, maxBytes)
+  if (body instanceof Response) return body
+  const headers = apiHeaders(event, 'POST')
+  headers.set('Content-Type', mediaType)
+  const copy = new Uint8Array(body.byteLength)
+  copy.set(body)
+  const response = await fetch(new URL(pathname, apiBaseUrl()), { method: 'POST', headers, body: new Blob([copy.buffer], { type: mediaType }), redirect: 'error' })
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+  if (!contentType.startsWith('application/json')) return Response.json({ error: '本机服务返回了无效响应' }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
+  return new Response(await response.arrayBuffer(), { status: response.status, headers: JSON_HEADERS })
 }
 
 export async function forwardArtifact(event: RequestEvent, pathname: string, kind: 'png' | 'html' | 'zip'): Promise<Response> {

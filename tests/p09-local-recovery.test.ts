@@ -150,6 +150,29 @@ describe('P09 auditable local backup manifest', () => {
       expect(sourceFingerprint(state)).toBe(before)
     } finally { rmSync(state.directory, { recursive: true, force: true }) }
   })
+
+  it('round-trips one bounded controlled ZIP into a fresh backup root', async () => {
+    const state = await backedUpFixture()
+    try {
+      const archive = state.service.readBackupArchive(state.backup.id)
+      const entries = readStoredZip(archive, { maxEntries: 5_002, maxBytes: 128 * 1024 * 1024 })
+      expect(entries.has('backup-manifest.json')).toBe(true)
+      expect(entries.has('database/asset-library.db')).toBe(true)
+      expect([...entries.keys()].sort()).toEqual(['backup-manifest.json', 'database/asset-library.db', ...state.readback.manifest.objects.map((object) => object.relativePath)].sort())
+
+      const importedRoot = join(state.directory, 'imported-backups')
+      const imported = new LocalRecoveryService({
+        databasePath: state.databasePath,
+        contentRoot: state.contentRoot,
+        backupRoot: importedRoot,
+        restoreRoot: join(state.directory, 'imported-restores'),
+      })
+      const summary = imported.importBackupArchive(archive)
+      expect(summary).toMatchObject({ id: state.backup.id, manifestSha256: state.backup.manifestSha256, archiveUrl: `/api/recovery/backups/${state.backup.id}/archive` })
+      expect(imported.importBackupArchive(archive)).toEqual(summary)
+      expect(imported.restoreBackup(summary.id, summary.manifestSha256)).toMatchObject({ backupId: summary.id })
+    } finally { rmSync(state.directory, { recursive: true, force: true }) }
+  })
 })
 
 describe('P09 isolated restore and fixture-only replay', () => {
@@ -209,6 +232,29 @@ describe('P09 isolated restore and fixture-only replay', () => {
       const before = hashFile(databasePath)
       expect(() => state.service.restoreBackup(state.backup.id, state.backup.manifestSha256)).toThrow(/never overwrites/)
       expect(hashFile(databasePath)).toBe(before)
+    } finally { rmSync(state.directory, { recursive: true, force: true }) }
+  })
+
+  it('stages an exact confirmation and atomically activates only on startup with a rollback copy', async () => {
+    const state = await backedUpFixture()
+    try {
+      const restored = state.service.restoreBackup(state.backup.id, state.backup.manifestSha256)
+      const changed = new Database(state.databasePath)
+      try { changed.prepare('UPDATE presentations SET name = ? WHERE id = ?').run('changed-after-backup', state.presentation.id) } finally { changed.close() }
+      expect(() => state.service.stageActivation(state.backup.id, state.backup.manifestSha256, state.backup.id)).toThrow(/exactly ACTIVATE/)
+      const staged = state.service.stageActivation(state.backup.id, state.backup.manifestSha256, `ACTIVATE ${state.backup.id}`)
+      expect(staged).toMatchObject({ backupId: state.backup.id, stateSha256: restored.stateSha256, restartRequired: true })
+
+      const applied = state.service.applyPendingActivation()
+      expect(applied).toMatchObject({ id: staged.id, backupId: state.backup.id, stateSha256: restored.stateSha256 })
+      const activated = new Database(state.databasePath, { readonly: true, fileMustExist: true })
+      try {
+        expect(activated.prepare('SELECT name FROM presentations WHERE id = ?').get(state.presentation.id)).toEqual({ name: 'P09 Recovery Fixture' })
+        expect(activated.prepare('SELECT count(*) AS count FROM sessions').get()).toEqual({ count: 0 })
+      } finally { activated.close() }
+      expect(existsSync(join(state.directory, 'source/recovery-rollbacks', staged.id, 'asset-library.db'))).toBe(true)
+      expect(existsSync(join(state.directory, 'source/recovery-rollbacks', staged.id, 'activation-report.json'))).toBe(true)
+      expect(state.service.applyPendingActivation()).toBeNull()
     } finally { rmSync(state.directory, { recursive: true, force: true }) }
   })
 })
@@ -318,8 +364,16 @@ describe('P09 recovery negative and security boundaries', () => {
       expect(created.status).toBe(201)
       const backup = (await created.json() as { backup: { id: string; manifestSha256: string } }).backup
       expect((await app.request(`${root}/backups/${backup.id}/manifest`)).status).toBe(200)
+      const archiveResponse = await app.request(`${root}/backups/${backup.id}/archive`)
+      expect(archiveResponse.status).toBe(200)
+      expect(archiveResponse.headers.get('content-type')).toBe('application/zip')
+      const archive = Buffer.from(await archiveResponse.arrayBuffer())
+      expect((await app.request(`${root}/backups/import`, { method: 'POST', headers: { ...origin, 'content-type': 'text/plain' }, body: archive })).status).toBe(400)
+      expect((await app.request(`${root}/backups/import`, { method: 'POST', headers: { ...origin, 'content-type': 'application/zip' }, body: archive })).status).toBe(201)
       expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: '0'.repeat(64) }) })).status).toBe(409)
       expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(201)
+      expect((await app.request(`${root}/backups/${backup.id}/activate`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256, confirmation: backup.id }) })).status).toBe(400)
+      expect((await app.request(`${root}/backups/${backup.id}/activate`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256, confirmation: `ACTIVATE ${backup.id}` }) })).status).toBe(202)
       expect((await app.request(`${root}/backups/${backup.id}/restore`, { method: 'POST', headers: origin, body: JSON.stringify({ expectedManifestSha256: backup.manifestSha256 }) })).status).toBe(409)
       for (const path of ['/api/preview', '/api/export', '/api/search']) expect((await app.request(`http://127.0.0.1:3001${path}`)).status).toBe(404)
     } finally { rmSync(state.directory, { recursive: true, force: true }) }

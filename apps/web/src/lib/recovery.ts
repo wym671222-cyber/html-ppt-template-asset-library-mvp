@@ -8,6 +8,7 @@ export type RecoveryBackup = Readonly<{
   presentationCount: number
   exportCount: number
   manifestUrl: string
+  archiveUrl: string
   restored: boolean
 }>
 
@@ -34,7 +35,15 @@ export type RecoveryRestore = Readonly<{
   exportCount: number
 }>
 
-type RecoveryPayload = { error?: string; recovery?: RecoveryOverview; backup?: RecoveryBackup; restore?: RecoveryRestore }
+export type RecoveryActivation = Readonly<{
+  id: string
+  backupId: string
+  stateSha256: string
+  stagedAt: number
+  restartRequired: true
+}>
+
+type RecoveryPayload = { error?: string; recovery?: RecoveryOverview; backup?: RecoveryBackup; restore?: RecoveryRestore; activation?: RecoveryActivation }
 
 async function request(path: string, method = 'GET', body?: Record<string, unknown>): Promise<RecoveryPayload> {
   const response = await fetch(path, { method, credentials: 'include', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
@@ -61,8 +70,20 @@ export async function runIsolatedRestore(backup: RecoveryBackup): Promise<Recove
   return payload.restore
 }
 
+export async function stageRecoveryActivation(backup: RecoveryBackup, confirmation: string): Promise<RecoveryActivation> {
+  const payload = await request(`/api/recovery/backups/${backup.id}/activate`, 'POST', { expectedManifestSha256: backup.manifestSha256, confirmation })
+  if (!payload.activation || payload.activation.restartRequired !== true) throw new Error('恢复激活响应不符合契约')
+  return payload.activation
+}
+
 const MANIFEST_URL = /^\/api\/recovery\/backups\/backup-[a-z0-9-]+\/manifest$/
+const ARCHIVE_URL = /^\/api\/recovery\/backups\/backup-[a-z0-9-]+\/archive$/
 export function safeBackupManifestUrl(value: string): string {
   if (!MANIFEST_URL.test(value)) throw new Error('恢复服务返回了不安全的清单地址')
+  return value
+}
+
+export function safeBackupArchiveUrl(value: string): string {
+  if (!ARCHIVE_URL.test(value)) throw new Error('恢复服务返回了不安全的归档地址')
   return value
 }

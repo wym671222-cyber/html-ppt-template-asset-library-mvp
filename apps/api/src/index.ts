@@ -11,6 +11,14 @@ import { env } from './env.js'
 import { AuthApplicationService } from './auth/service.js'
 import { bootstrapPocketBayAdministrator } from './auth/pocketbay-bootstrap.js'
 
+const recovery = new LocalRecoveryService({
+  databasePath: LOCAL_DATABASE_PATH,
+  contentRoot: LOCAL_CONTENT_STORE_PATH,
+  backupRoot: LOCAL_RECOVERY_BACKUP_PATH,
+  restoreRoot: LOCAL_RECOVERY_DRILL_PATH,
+})
+const appliedRecovery = recovery.applyPendingActivation()
+if (appliedRecovery) console.log(JSON.stringify({ event: 'recovery_activation_applied', id: appliedRecovery.id, backupId: appliedRecovery.backupId }))
 migrateDatabase()
 const { sqlite } = await import('./db/index.js')
 
@@ -20,12 +28,7 @@ const app = createApp({
   catalog: new AssetLibraryCatalog(sqlite, contentStore),
   presentations: new PresentationRepository(sqlite),
   exports: new PresentationExportRepository(sqlite, contentStore),
-  recovery: new LocalRecoveryService({
-    databasePath: LOCAL_DATABASE_PATH,
-    contentRoot: LOCAL_CONTENT_STORE_PATH,
-    backupRoot: LOCAL_RECOVERY_BACKUP_PATH,
-    restoreRoot: LOCAL_RECOVERY_DRILL_PATH,
-  }),
+  recovery,
   auth: new AuthApplicationService(sqlite),
   allowedOrigins: [env.appOrigin],
   registrationEnabled: env.registrationEnabled,
