@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto'
 import type BetterSqlite3 from 'better-sqlite3'
+import { AuditEventWriter } from '../auth/audit.js'
 import { serializeTemplatePackage, type SimulatedTemplateAdapterResult } from '../templates/simulated-adapter.js'
 import { LocalContentStore, type StoredContentObject } from './content-store.js'
 
 type Database = BetterSqlite3.Database
+
+const ASSET_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 export type RegisteredTemplate = Readonly<{
   assetId: string
@@ -16,6 +19,18 @@ export type RegisteredTemplate = Readonly<{
 export type RegisterTemplateOptions = Readonly<{
   promote?: boolean
 }>
+
+export type RetiredTemplate = Readonly<{
+  assetId: string
+  status: 'retired'
+  alreadyRetired: boolean
+}>
+
+export class TemplateRetireError extends Error {
+  constructor(readonly status: 400 | 404, message: string) {
+    super(message)
+  }
+}
 
 function tagId(label: string): string {
   return `tag-${createHash('sha256').update(label, 'utf8').digest('hex')}`
@@ -73,6 +88,26 @@ export class AssetCatalogRepository {
       }
       if (promote) this.promoteNewestVersion(template.version.id, template.version.versionNumber, now)
       return { assetId: template.asset.id, versionId: template.version.id, sourceDigest: template.version.sourceDigest, contentObject, created: true }
+    })()
+  }
+
+  retire(assetId: string): RetiredTemplate {
+    if (!ASSET_ID.test(assetId)) throw new TemplateRetireError(400, 'Template asset id is invalid')
+    return this.database.transaction(() => {
+      const asset = this.database.prepare('SELECT status FROM template_assets WHERE id = ?').get(assetId) as { status: 'active' | 'retired' } | undefined
+      if (!asset) throw new TemplateRetireError(404, 'Template asset not found')
+      const alreadyRetired = asset.status === 'retired'
+      if (!alreadyRetired) {
+        this.database.prepare("UPDATE template_assets SET status = 'retired', updated_at = ? WHERE id = ? AND status = 'active'").run(Date.now(), assetId)
+      }
+      new AuditEventWriter(this.database).record({
+        action: 'admin.template_retire',
+        entityType: 'template_asset',
+        entityId: assetId,
+        result: 'success',
+        diagnostic: alreadyRetired ? 'ALREADY_RETIRED' : 'TEMPLATE_RETIRED',
+      })
+      return { assetId, status: 'retired' as const, alreadyRetired }
     })()
   }
 

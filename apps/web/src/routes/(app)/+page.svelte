@@ -198,6 +198,8 @@
   }
 
   async function logout(): Promise<void> { try { await api.p15Logout() } finally { await goto('/login') } }
+  function closeDetail(): void { detailOpen = false; detailItem = null }
+  function handleRetired(): void { closeDetail(); retry += 1 }
 
   function pageNumbers(): number[] {
     const total = pageCount
@@ -275,7 +277,7 @@
       <footer><button type="button" disabled={!selectedPresentation?.items.length || presentationBusy} onclick={() => { void clearPresentation() }}>清空</button><button class="export-button" type="button" disabled={!selectedPresentation?.items.length || exportLoading} onclick={() => { void exportPresentation() }}>{exportLoading ? '正在生成…' : '生成 HTML / ZIP ↓'}</button></footer>
     </aside>
   </main>
-  <AssetDetail item={detailItem} open={detailOpen} onClose={() => { detailOpen = false }} />
+  <AssetDetail item={detailItem} open={detailOpen} isAdmin={data.user.role === 'admin'} onClose={closeDetail} onRetired={handleRetired} />
 </div>
 
 <style>

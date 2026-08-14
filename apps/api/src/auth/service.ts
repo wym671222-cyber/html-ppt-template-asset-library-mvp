@@ -20,6 +20,7 @@ export type AuthAction =
   | 'admin.user_approve'
   | 'admin.user_disable'
   | 'admin.user_reset_password'
+  | 'admin.template_retire'
   | 'auth.bootstrap_admin'
   | 'security.origin'
   | 'business.access'

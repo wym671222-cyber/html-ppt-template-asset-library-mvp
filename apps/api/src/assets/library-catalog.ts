@@ -7,6 +7,7 @@ import {
   InteractiveTemplateRuntimeError,
   type CompiledInteractiveTemplateRuntime,
 } from '../templates/interactive-template-runtime.js'
+import { AssetCatalogRepository, type RetiredTemplate } from './catalog-repository.js'
 import { LocalContentStore } from './content-store.js'
 
 type Database = BetterSqlite3.Database
@@ -46,6 +47,12 @@ export type CatalogItem = Readonly<{
     number: number
     status: 'verified' | 'available'
     contractVersion: string
+    isCurrent: true
+  }
+  runtime: null | {
+    mode: 'sandboxed-js'
+    viewport: { width: 1920; height: 1080 }
+    url: string
   }
   derivative: {
     rendererVersion: string
@@ -238,7 +245,15 @@ export class AssetLibraryCatalog {
       summary: row.summary,
       category: row.category,
       tags: (this.database.prepare('SELECT t.label FROM template_asset_tags at JOIN tags t ON t.id = at.tag_id WHERE at.asset_id = ? ORDER BY t.label COLLATE NOCASE ASC, t.id ASC LIMIT 100').all(row.id) as { label: string }[]).map(({ label }) => label),
-      version: { id: row.version_id, number: row.version_number, status: row.version_status, contractVersion: row.contract_version },
+      version: { id: row.version_id, number: row.version_number, status: row.version_status, contractVersion: row.contract_version, isCurrent: true as const },
+      runtime: row.contract_version === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
+        && isAllowlistedInteractiveTemplateDigest(row.source_digest)
+        ? {
+            mode: 'sandboxed-js' as const,
+            viewport: { width: 1920 as const, height: 1080 as const },
+            url: `/api/catalog/assets/${encodeURIComponent(row.id)}/runtime`,
+          }
+        : null,
       derivative: {
         rendererVersion: row.renderer_version,
         previewUrl: `/api/catalog/assets/${encodeURIComponent(row.id)}/preview`,
@@ -390,5 +405,9 @@ export class AssetLibraryCatalog {
       if (error instanceof InteractiveTemplateRuntimeError) throw new CatalogRequestError('Interactive runtime package verification failed', 409)
       throw error
     }
+  }
+
+  retire(assetId: string): RetiredTemplate {
+    return new AssetCatalogRepository(this.database, this.contentStore).retire(assetId)
   }
 }

@@ -9,6 +9,12 @@ export type CatalogItem = Readonly<{
     number: number
     status: 'verified' | 'available'
     contractVersion: string
+    isCurrent: true
+  }
+  runtime: null | {
+    mode: 'sandboxed-js'
+    viewport: { width: 1920; height: 1080 }
+    url: string
   }
   derivative: {
     rendererVersion: string
@@ -41,9 +47,15 @@ export type CatalogFilters = Readonly<{
 }>
 
 const DERIVATIVE_URL = /^\/api\/catalog\/assets\/[a-z0-9]+(?:-[a-z0-9]+)*\/(?:preview|thumbnail)$/
+const RUNTIME_URL = /^\/api\/catalog\/assets\/[a-z0-9]+(?:-[a-z0-9]+)*\/runtime$/
 
 export function safeDerivativeUrl(value: string): string {
   if (!DERIVATIVE_URL.test(value)) throw new Error('Catalog returned an unsafe derivative URL')
+  return value
+}
+
+export function safeRuntimeUrl(value: string): string {
+  if (!RUNTIME_URL.test(value)) throw new Error('Catalog returned an unsafe interactive runtime URL')
   return value
 }
 
@@ -69,6 +81,7 @@ export async function loadCatalog(filters: CatalogFilters, signal?: AbortSignal)
   for (const item of body.items) {
     safeDerivativeUrl(item.derivative.previewUrl)
     safeDerivativeUrl(item.derivative.thumbnailUrl)
+    if (item.runtime !== null) safeRuntimeUrl(item.runtime.url)
   }
   return body
 }

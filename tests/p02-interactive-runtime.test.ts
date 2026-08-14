@@ -245,6 +245,16 @@ describe('P02 active/current/allowlisted runtime API boundary', () => {
       new PreviewArtifactRepository(current.database as never).recordRender({ templateVersionId: current.v2.versionId, sourceDigest: allowlistedV2Digest, preview, thumbnail, render })
       expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(current.v2.assetId)).toEqual({ current_version_id: current.v2.versionId })
 
+      const detail = await current.app.request('http://127.0.0.1:3001/api/catalog')
+      expect(await detail.json()).toMatchObject({
+        items: [{
+          id: current.v2.assetId,
+          version: { id: current.v2.versionId, number: 2, status: 'verified', contractVersion: 'html-template/v2', isCurrent: true },
+          runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 }, url: `/api/catalog/assets/${current.v2.assetId}/runtime` },
+          derivative: { previewUrl: `/api/catalog/assets/${current.v2.assetId}/preview`, thumbnailUrl: `/api/catalog/assets/${current.v2.assetId}/thumbnail` },
+        }],
+      })
+
       const response = await current.app.request(path)
       expect(response.status).toBe(200)
       for (const [name, value] of Object.entries(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)) expect(response.headers.get(name)).toBe(value)

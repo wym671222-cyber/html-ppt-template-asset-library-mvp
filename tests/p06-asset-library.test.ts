@@ -13,7 +13,7 @@ import { TemplatePreviewJobWorker, TEMPLATE_PREVIEW_JOB_TYPE, type PreviewRender
 import type { SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
 import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
-import { catalogQuery, safeDerivativeUrl } from '../apps/web/src/lib/asset-library.js'
+import { catalogQuery, safeDerivativeUrl, safeRuntimeUrl } from '../apps/web/src/lib/asset-library.js'
 
 type SQLite = {
   pragma(statement: string, options?: { simple: true }): unknown
@@ -90,8 +90,10 @@ describe('P06 bounded deterministic catalog query', () => {
   it('builds same-origin queries and rejects untrusted derivative URLs', () => {
     expect(catalogQuery({ search: ' quarterly ', category: 'report/quarterly', tags: ['simulated', 'brief'] })).toBe('/api/catalog?search=quarterly&category=report%2Fquarterly&tags=brief%2Csimulated')
     expect(safeDerivativeUrl('/api/catalog/assets/simulated-quarterly-brief/preview')).toContain('/preview')
+    expect(safeRuntimeUrl('/api/catalog/assets/simulated-quarterly-brief/runtime')).toContain('/runtime')
     for (const value of ['https://example.test/a.png', 'file:///tmp/a.png', 'blob:http://127.0.0.1/id', '/api/catalog/assets/' + 'a'.repeat(64)]) {
       expect(() => safeDerivativeUrl(value)).toThrow(/unsafe/)
+      expect(() => safeRuntimeUrl(value)).toThrow(/unsafe/)
     }
   })
 })
@@ -214,7 +216,9 @@ describe('P06 schema and Web execution boundary', () => {
       'apps/web/src/lib/asset-library.ts',
     ]
     const source = paths.map((path) => readFileSync(join(process.cwd(), path), 'utf8')).join('\n')
-    expect(source).not.toMatch(/<iframe|srcdoc|\{@html|innerHTML|blob:|createObjectURL|file:\/\//i)
+    expect(source).toContain('{#if open && item}')
+    expect(source).toContain('sandbox="allow-scripts"')
+    expect(source).not.toMatch(/allow-same-origin|srcdoc|\{@html|innerHTML|blob:|createObjectURL|file:\/\//i)
     expect(source).not.toMatch(/https?:\/\//i)
   })
 })

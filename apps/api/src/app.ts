@@ -5,6 +5,7 @@ import {
   TEMPLATE_RUNTIME_SESSION_HEADER,
   TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS,
 } from '@slide-maker/shared'
+import { TemplateRetireError } from './assets/catalog-repository.js'
 import { AssetLibraryCatalog, CatalogRequestError, parseCatalogQuery } from './assets/library-catalog.js'
 import { getOwnerContext } from './owner.js'
 import { PresentationRepository, PresentationRequestError } from './presentations/presentation-repository.js'
@@ -132,6 +133,11 @@ function templateImportError(context: { json(value: { error: string }, status: 4
   return context.json({ error: 'Template import request failed' }, 500)
 }
 
+function templateRetireError(context: { json(value: { error: string }, status: 400 | 404 | 500): Response }, error: unknown): Response {
+  if (error instanceof TemplateRetireError) return context.json({ error: error.message }, error.status)
+  return context.json({ error: 'Template retirement failed' }, 500)
+}
+
 function assertOnlyKeys(body: Record<string, unknown>, keys: readonly string[]): void {
   if (Object.keys(body).sort().join(',') !== [...keys].sort().join(',')) throw new ExportRequestError(`JSON request body must contain only ${keys.join(' and ')}`)
 }
@@ -174,6 +180,7 @@ export function createApp(options: {
   const recoveryAdmin = auth ? createAdminMiddleware(auth, 'recovery.access') : unavailableAuth
   const templateImportAuth = auth ? createBusinessAuthMiddleware(auth, 'template-import.access') : unavailableAuth
   const templateImportAdmin = auth ? createAdminMiddleware(auth, 'template-import.access') : unavailableAuth
+  const templateRetireAdmin = auth ? createAdminMiddleware(auth, 'admin.template_retire') : unavailableAuth
 
   app.use('*', async (context, next) => {
     const host = context.req.header('host') ?? new URL(context.req.url).host
@@ -233,6 +240,7 @@ export function createApp(options: {
   app.use('/api/recovery/*', recoveryAuth, recoveryAdmin)
   app.use('/api/template-imports', templateImportAuth, templateImportAdmin)
   app.use('/api/template-imports/*', templateImportAuth, templateImportAdmin)
+  app.use('/api/admin/templates/*', businessAuth, templateRetireAdmin)
   app.get('/api/owner', (context) => context.json({ owner: getOwnerContext(context.get('auth').user.id) }))
   app.get('/api/catalog', (context) => {
     if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)
@@ -274,6 +282,19 @@ export function createApp(options: {
     } catch (error) {
       if (error instanceof CatalogRequestError) return context.json({ error: error.message }, error.status)
       return context.json({ error: 'Derivative read failed' }, 500)
+    }
+  })
+  app.post('/api/admin/templates/:assetId/retire', async (context) => {
+    if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Template retirement does not accept query parameters' }, 400)
+    if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/json') return context.json({ error: 'Template retirement Content-Type must be application/json' }, 400)
+    try {
+      const body = await jsonBody(context)
+      if (Object.keys(body).length !== 0) throw new TemplateRetireError(400, 'Template retirement request body must be empty')
+      return context.json({ template: catalog.retire(context.req.param('assetId')) })
+    } catch (error) {
+      if (error instanceof TemplateRetireError && auth) auth.recordFailure('admin.template_retire', context.get('auth').user.id, error.status === 404 ? 'TEMPLATE_NOT_FOUND' : 'INVALID_REQUEST')
+      return templateRetireError(context, error)
     }
   })
   app.get('/api/presentations', (context) => {
