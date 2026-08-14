@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P04",
-    "activePhaseThreadId": "01a000d0-a46a-7e00-bb94-fbf9f548477f",
+    "currentPhaseId": "P05",
+    "activePhaseThreadId": "01a000e9-37c1-7361-914f-9d40d844a6ac",
     "terminalPhaseId": "P07"
   },
   "phases": [
@@ -122,27 +122,36 @@
       "id": "P04",
       "title": "导出协议 v3",
       "objective": "修复 v1 data-image 并实现 v1/v2 离线交互导出",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "max",
       "estimatedContextPercent": 50,
       "dependsOn": ["P03"],
       "successor": "P05",
       "threadId": "01a000d0-a46a-7e00-bb94-fbf9f548477f",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "1045dd6752657add984d4a89504ef9aa357697fa",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination b9229270b2c28a6ed52a98d7ac6c5f393aa79d67 exactly one atomic P04 implementation commit 1045dd6752657add984d4a89504ef9aa357697fa; worker did not modify CHAIN_STATE, create P05, touch production or forbidden real asset directories; worktree retained only .workbuddy/",
+          "parent review verified v3 manifest/package with fixed Presentation revision and TemplateVersion identity, self-contained index plus per-slide sandbox=allow-scripts iframe, digest-deduplicated thumbnails, v1 legal data:image preservation with MIME/signature/base64/2 MiB validation, v2 allowlist-bound opaque supervisor/inner runtime with offline CSP and slot snapshot, and historical v2 read verification",
+          "parent Node 22.23.2 and pnpm 9.15.0 targeted P08/P09/P02/P14/P15 rerun passed 5 files and 36 tests; P08 verbose evidence passed 10/10 including real Chromium v1/v2 file/offline tests with no https requests",
+          "parent full Vitest regression passed 42 files and 822 tests; shared/API builds passed; Web check passed with 0 errors and 9 pre-existing warnings; Web build passed; shell suites passed 8/8; official validator passed",
+          "all P04 contract negatives remained enforced: external/file/blob/javascript/parent/active references, malformed or signature-mismatched data:image, stale/cross-owner/revision/tampered/partial inputs fail before export persistence with controlled hashes and ZIP allowlist re-verification"
+        ]
+      }
     },
     {
       "id": "P05",
       "title": "十二组件与迁移演练",
       "objective": "生成十二个 v2 包并在隔离 DB/CAS 演练晋升和退役",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-terra",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P04"],
       "successor": "P06",
-      "threadId": null,
+      "threadId": "01a000e9-37c1-7361-914f-9d40d844a6ac",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -176,5 +185,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T23:07:57+08:00"
+  "updatedAt": "2026-08-14T23:34:36+08:00"
 }
