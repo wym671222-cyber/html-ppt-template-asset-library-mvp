@@ -160,7 +160,9 @@
           "the authoritative Release 264 import record recovered the twelve production component IDs without reading either forbidden source directory",
           "the only bounded repair candidate 9fee3a4c uses the twelve exact production asset IDs and passes its automated suite, but its D3 test dispatches only pointerdown and an auxiliary zoom button while runtime marks starDragged on any pointerdown instead of proving a drag gesture",
           "the same candidate replaces the Three.js orbit drag and Interact.js composer drag acceptance with auxiliary orbit-spin and layout-nudge button clicks, so Chrome assertions prove state-marker changes rather than the approved drag interactions",
-          "the worker handoff calls these real D3, Three.js and Interact interactions despite the test code bypassing their drag handlers; this is a semantic gate failure after the single allowed bounded repair, so P06, push and P07 production work must not start"
+          "the worker handoff calls these real D3, Three.js and Interact interactions despite the test code bypassing their drag handlers; this is a semantic gate failure after the single allowed bounded repair, so P06, push and P07 production work must not start",
+          "parent read-only diagnosis repeated three times on Node 22 and real Chrome: the existing 300x150 outer iframe clips all three gesture targets and records zero events, while the unchanged packages at 960x540 perform real D3 drag and wheel zoom, Three WebGL drag and Interact drag with zero HTTP requests",
+          "the technical recovery is now bounded to an explicit 960x540 Chrome test viewport, true mouse-drag and wheel assertions, removal of the pointerdown and auxiliary-button probes, digest refresh and full P05/P06 rerun; workflow remains blocked because the approved protocol forbids a second repair without new authorization"
         ]
       }
     },
@@ -206,6 +208,6 @@
       }
     }
   ],
-  "blockedReason": "P05 failed its parent gate after the single allowed bounded repair: candidate 9fee3a4c changed the required D3, Three.js and Interact drag acceptance into pointerdown or auxiliary-button state changes. The automated tests pass but do not prove the approved drag interactions. P06, push, PocketBay backup, migration, deployment and retire operations are stopped pending a newly approved plan or explicit authorization to reopen P05 with a revised test and packaging design.",
-  "updatedAt": "2026-08-15T01:58:51+08:00"
+  "blockedReason": "P05 failed its parent gate after the single allowed bounded repair. A three-run read-only Chrome diagnosis now proves the underlying D3, Three.js and Interact handlers work when the outer test iframe is 960x540; the former failures came from the default 300x150 iframe clipping every gesture target. Recovery is technically bounded to correcting the test viewport and true gesture assertions, removing the auxiliary probes, refreshing digests and rerunning P05/P06. The workflow still requires a newly approved plan or explicit authorization to reopen P05 because v2.0 permits only one bounded repair. P06, push, PocketBay backup, migration, deployment and retire operations remain stopped.",
+  "updatedAt": "2026-08-15T02:05:28+08:00"
 }

@@ -15,6 +15,14 @@
 - 父级代码审查确认：`tests/p05-interactive-fixtures.test.ts` 对 D3 仅派发 `pointerdown` 后点击 `star-zoom`，运行时代码又在任意 `pointerdown` 上直接设置 `data-star-dragged=true`；Three.js 只点击 `orbit-spin`；Interact.js 只点击 `layout-nudge`。这些断言绕过了三类真实拖动处理器，不能满足 P05 完成门禁。
 - 这是自动流转协议允许的唯一 bounded repair；因此 P05=`failed`、gate=`failed`、workflow=`blocked`。未启动 P06，未推送新候选，未触碰生产 DB/CAS/PocketBay 或两个真实来源目录。
 
+### P05 blocked 后只读诊断
+
+- 父级在 Node `22.23.2` 和真实 Chrome 上构造未改仓库的临时差分环，分别以当前测试默认 `300×150` 和产品比例 `960×540` 装载同一 `compileInteractiveTemplateRuntime` 输出，连续重复三次。
+- `300×150` 下，D3 圆点边界位于约 `(395,370)`，Three canvas 顶部约 `y=211`，Interact 卡片顶部约 `y=227`，均超出外层 iframe 可视区；三项捕获到的 pointer/mouse 事件均为 `0`，状态不变。
+- `960×540` 下，三次结果完全一致：D3 圆点从 `400,210` 变为约 `451.69,235.85`，滚轮缩放为约 `1.3947`；Three WebGL 进入 `ready` 且角度为 `2.10`；Interact 位移为 `46,26`。三项均捕获真实按下、带按钮移动、释放事件，HTTP(S) 请求为 `0`。
+- 结论：真实库和 drag handler 没有架构性失效；根因是 P05 Chrome 测试未给外层 iframe 指定尺寸，随后用辅助按钮掩盖了裁剪问题。最小恢复边界已经确定，但 v2.0 只允许一次 bounded repair，仍需新批准计划或明确授权重开 P05。
+- 完整复现与建议见 `diagnostics/P05-real-drag.md`；本轮没有修改产品源码、测试、白名单或依赖，也没有触碰生产和两个真实来源目录。
+
 ## 阶段账本
 
 | 阶段 | 状态 | 提交 | 线程 | 门禁 | 证据 |
@@ -31,7 +39,7 @@
 ## 阻塞与不确定性
 
 - P00–P04 仍通过；P02 的 self-frame navigation 缺口与 P04 的 v1 `data:image` 导出回归均保持闭环。
-- P05 唯一有界修复已使用十二个生产资产 ID 和七类固定运行库，但其 D3/Three/Interact 测试分别用 `pointerdown`/`star-zoom`、`orbit-spin`、`layout-nudge` 直接触发状态，未证明真实拖动；自动测试全绿不能覆盖这一语义缺口。
+- P05 唯一有界修复已使用十二个生产资产 ID 和七类固定运行库，但其 D3/Three/Interact 测试分别用 `pointerdown`/`star-zoom`、`orbit-spin`、`layout-nudge` 直接触发状态，未证明真实拖动。只读差分诊断已证明根因是默认 `300×150` iframe 裁剪，且 `960×540` 下真实拖拽稳定可用；流程授权仍是当前 blocker。
 - Release 264 的已审计导入记录已恢复十二项标题到精确 assetId 映射；三个合同续签 retire ID 仍为 `html-4d353ff9f58e974d4e8a`、`html-ef7410b3f4732cb7df31`、`html-221e1002d8e216bfefde`。既有 v1 PresentationItem 验收目标仍须在生产唤醒和认证只读查询后固定。
 - PocketBay 控制会话可读，项目身份为 `html-ppt-template-asset-library`、Release 264；连续真实访问仍为 HTTP 204 且控制面为 sleeping。未执行备份、部署、导入、晋升、退役或任何 DB/CAS 写入。
 - 保存项目列表没有该子仓库条目；父监督器挂载到 `HTML - PPT` 本地项目，但 prompt 和链状态固定子仓库路径。
