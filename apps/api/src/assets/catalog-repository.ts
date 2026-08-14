@@ -13,6 +13,10 @@ export type RegisteredTemplate = Readonly<{
   created: boolean
 }>
 
+export type RegisterTemplateOptions = Readonly<{
+  promote?: boolean
+}>
+
 function tagId(label: string): string {
   return `tag-${createHash('sha256').update(label, 'utf8').digest('hex')}`
 }
@@ -24,7 +28,8 @@ function sameJson(left: string, right: unknown): boolean {
 export class AssetCatalogRepository {
   constructor(private readonly database: Database, private readonly contentStore: LocalContentStore) {}
 
-  registerTemplate(template: SimulatedTemplateAdapterResult): RegisteredTemplate {
+  registerTemplate(template: SimulatedTemplateAdapterResult, options: RegisterTemplateOptions = {}): RegisteredTemplate {
+    const promote = options.promote ?? true
     const contentObject = this.contentStore.put(serializeTemplatePackage(template.source), 'application/vnd.html-template-package+json')
     if (contentObject.digest !== template.version.sourceDigest) throw new Error('CAS digest does not match P03 source digest')
 
@@ -54,7 +59,7 @@ export class AssetCatalogRepository {
           && sameJson(version.slot_schema, template.version.slotSchema)
           && version.status === 'verified'
         if (!matches) throw new Error('Template version id conflicts with immutable catalog content')
-        if (!asset?.current_version_id) throw new Error('Existing template asset has no immutable current version')
+        if (promote) this.promoteNewestVersion(template.version.id, template.version.versionNumber, now)
         return { assetId: template.asset.id, versionId: template.version.id, sourceDigest: template.version.sourceDigest, contentObject, created: false }
       }
 
@@ -66,8 +71,25 @@ export class AssetCatalogRepository {
         this.database.prepare('INSERT OR IGNORE INTO tags (id, label, created_at) VALUES (?, ?, ?)').run(id, label, now)
         this.database.prepare('INSERT OR IGNORE INTO template_asset_tags (asset_id, tag_id) VALUES (?, ?)').run(template.asset.id, id)
       }
-      this.database.prepare('UPDATE template_assets SET current_version_id = ?, updated_at = ? WHERE id = ?').run(template.version.id, now, template.asset.id)
+      if (promote) this.promoteNewestVersion(template.version.id, template.version.versionNumber, now)
       return { assetId: template.asset.id, versionId: template.version.id, sourceDigest: template.version.sourceDigest, contentObject, created: true }
     })()
+  }
+
+  private promoteNewestVersion(versionId: string, versionNumber: number, now: number): void {
+    this.database.prepare(`
+      UPDATE template_assets
+      SET current_version_id = ?, updated_at = ?
+      WHERE id = (SELECT asset_id FROM template_versions WHERE id = ?)
+        AND current_version_id IS NOT ?
+        AND (
+          current_version_id IS NULL
+          OR EXISTS (
+            SELECT 1 FROM template_versions current
+            WHERE current.id = template_assets.current_version_id
+              AND current.version_number < ?
+          )
+        )
+    `).run(versionId, now, versionId, versionId, versionNumber)
   }
 }

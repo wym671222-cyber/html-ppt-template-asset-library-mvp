@@ -1,4 +1,9 @@
 export const TEMPLATE_PACKAGE_CONTRACT_VERSION = 'html-template/v1' as const
+export const INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION = 'html-template/v2' as const
+
+export type TemplatePackageContractVersion =
+  | typeof TEMPLATE_PACKAGE_CONTRACT_VERSION
+  | typeof INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
 
 export type TemplateSlotType = 'text' | 'color'
 
@@ -10,8 +15,7 @@ export interface TemplateSlotDefinition {
   default?: string
 }
 
-export interface TemplatePackageManifest {
-  contractVersion: typeof TEMPLATE_PACKAGE_CONTRACT_VERSION
+interface TemplatePackageManifestBase {
   id: string
   version: number
   title: string
@@ -23,6 +27,25 @@ export interface TemplatePackageManifest {
   slots: TemplateSlotDefinition[]
 }
 
+export interface StaticTemplatePackageManifest extends TemplatePackageManifestBase {
+  contractVersion: typeof TEMPLATE_PACKAGE_CONTRACT_VERSION
+}
+
+export interface InteractiveTemplatePackageManifest extends TemplatePackageManifestBase {
+  contractVersion: typeof INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
+  runtime: {
+    mode: 'sandboxed-js'
+    viewport: {
+      width: 1920
+      height: 1080
+    }
+  }
+}
+
+export type TemplatePackageManifest =
+  | StaticTemplatePackageManifest
+  | InteractiveTemplatePackageManifest
+
 export interface TemplatePackageSource {
   manifest: TemplatePackageManifest
   files: Readonly<Record<string, string>>
@@ -31,6 +54,12 @@ export interface TemplatePackageSource {
 export interface TemplatePackageValidationError {
   field: string
   message: string
+}
+
+export function isInteractiveTemplatePackageManifest(
+  manifest: TemplatePackageManifest,
+): manifest is InteractiveTemplatePackageManifest {
+  return manifest.contractVersion === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
 }
 
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{1,63}$/
@@ -71,7 +100,25 @@ function validateSlot(slot: unknown, index: number): TemplatePackageValidationEr
 export function validateTemplatePackage(source: TemplatePackageSource): TemplatePackageValidationError[] {
   const { manifest, files } = source
   const errors: TemplatePackageValidationError[] = []
-  if (manifest.contractVersion !== TEMPLATE_PACKAGE_CONTRACT_VERSION) errors.push({ field: 'contractVersion', message: `must be ${TEMPLATE_PACKAGE_CONTRACT_VERSION}` })
+  if (manifest.contractVersion !== TEMPLATE_PACKAGE_CONTRACT_VERSION && manifest.contractVersion !== INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) {
+    errors.push({ field: 'contractVersion', message: `must be ${TEMPLATE_PACKAGE_CONTRACT_VERSION} or ${INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION}` })
+  }
+  if (manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION && 'runtime' in manifest) {
+    errors.push({ field: 'runtime', message: 'is available only for html-template/v2' })
+  }
+  if (manifest.contractVersion === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) {
+    const runtime = manifest.runtime
+    if (!isRecord(runtime) || Object.keys(runtime).sort().join(',') !== 'mode,viewport' || runtime.mode !== 'sandboxed-js') {
+      errors.push({ field: 'runtime', message: 'must contain only mode=sandboxed-js and viewport' })
+    }
+    const viewport = isRecord(runtime) && runtime.viewport
+    if (!isRecord(viewport)
+      || Object.keys(viewport).sort().join(',') !== 'height,width'
+      || viewport.width !== 1920
+      || viewport.height !== 1080) {
+      errors.push({ field: 'runtime.viewport', message: 'must be exactly 1920x1080' })
+    }
+  }
   if (!SAFE_ID.test(manifest.id)) errors.push({ field: 'id', message: 'must be a lowercase kebab-case identifier' })
   if (!Number.isInteger(manifest.version) || manifest.version < 1) errors.push({ field: 'version', message: 'must be a positive integer' })
   for (const field of ['title', 'summary'] as const) {
@@ -94,7 +141,12 @@ export function validateTemplatePackage(source: TemplatePackageSource): Template
     for (const match of entry.matchAll(/data-template-slot=["']([^"']+)["']/g)) {
       if (!slotIds.has(match[1])) errors.push({ field: 'entry', message: `unknown slot binding: ${match[1]}` })
     }
-    if (/<script\b/i.test(entry) || /(?:src|href)=["'](?:https?:|\/\/|file:)/i.test(entry)) errors.push({ field: 'entry', message: 'simulated v1 packages cannot contain scripts or external URLs' })
+    if ((manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION && /<script\b/i.test(entry))
+      || /(?:src|href)=["'](?:https?:|\/\/|file:)/i.test(entry)) {
+      errors.push({ field: 'entry', message: manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION
+        ? 'simulated v1 packages cannot contain scripts or external URLs'
+        : 'template packages cannot contain external URLs' })
+    }
   }
   return errors
 }

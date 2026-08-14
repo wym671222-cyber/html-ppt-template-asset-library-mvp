@@ -112,10 +112,79 @@ export class PreviewArtifactRepository {
   }): void {
     const securityDiagnostic = JSON.stringify(input.render.diagnostic)
     this.database.transaction(() => {
+      this.assertRenderSourceMatchesVersion(input.templateVersionId, input.sourceDigest)
       for (const object of [input.preview, input.thumbnail]) this.registerContentObject(object)
       this.registerDerivative(input.templateVersionId, 'preview', input.sourceDigest, input.preview.digest, input.render.rendererVersion, securityDiagnostic)
       this.registerDerivative(input.templateVersionId, 'thumbnail', input.sourceDigest, input.thumbnail.digest, input.render.rendererVersion, securityDiagnostic)
+      this.promoteAfterCompleteRender(input.templateVersionId, input.sourceDigest, input.render.rendererVersion)
     })()
+  }
+
+  private assertRenderSourceMatchesVersion(templateVersionId: string, sourceDigest: string): void {
+    const version = this.database.prepare('SELECT source_digest, content_object_digest, status FROM template_versions WHERE id = ?').get(templateVersionId) as Pick<TemplateVersionRow, 'source_digest' | 'content_object_digest' | 'status'> | undefined
+    if (!version || !['verified', 'available'].includes(version.status)) throw new PreviewPolicyError('Preview render target requires a verified TemplateVersion')
+    if (!version.content_object_digest || version.source_digest !== sourceDigest || version.content_object_digest !== sourceDigest) {
+      throw new PreviewPolicyError('Preview render source digest does not match the TemplateVersion content object')
+    }
+  }
+
+  private promoteAfterCompleteRender(templateVersionId: string, sourceDigest: string, rendererVersion: string): void {
+    this.database.prepare(`
+      UPDATE template_assets
+      SET current_version_id = ?, updated_at = ?
+      WHERE id = (
+        SELECT asset_id FROM template_versions
+        WHERE id = ?
+          AND status IN ('verified', 'available')
+          AND source_digest = ?
+          AND content_object_digest = ?
+      )
+        AND current_version_id IS NOT ?
+        AND EXISTS (
+          SELECT 1
+          FROM template_preview_derivatives preview
+          JOIN template_preview_derivatives thumbnail
+            ON thumbnail.template_version_id = preview.template_version_id
+            AND thumbnail.source_digest = preview.source_digest
+            AND thumbnail.renderer_version = preview.renderer_version
+            AND thumbnail.kind = 'thumbnail'
+          WHERE preview.template_version_id = ?
+            AND preview.source_digest = ?
+            AND preview.renderer_version = ?
+            AND preview.kind = 'preview'
+        )
+        AND EXISTS (
+          SELECT 1 FROM template_versions candidate
+          WHERE candidate.id = ?
+            AND candidate.status IN ('verified', 'available')
+            AND candidate.source_digest = ?
+            AND candidate.content_object_digest = ?
+        )
+        AND (
+          current_version_id IS NULL
+          OR EXISTS (
+            SELECT 1
+            FROM template_versions current, template_versions candidate
+            WHERE current.id = template_assets.current_version_id
+              AND candidate.id = ?
+              AND candidate.version_number > current.version_number
+          )
+        )
+    `).run(
+      templateVersionId,
+      Date.now(),
+      templateVersionId,
+      sourceDigest,
+      sourceDigest,
+      templateVersionId,
+      templateVersionId,
+      sourceDigest,
+      rendererVersion,
+      templateVersionId,
+      sourceDigest,
+      sourceDigest,
+      templateVersionId,
+    )
   }
 
   private registerContentObject(object: StoredContentObject): void {

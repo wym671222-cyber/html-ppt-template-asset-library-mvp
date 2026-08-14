@@ -1,11 +1,18 @@
 import { createHash } from 'node:crypto'
 import type BetterSqlite3 from 'better-sqlite3'
 import JSZip, { type JSZipObject } from 'jszip'
-import type { TemplatePackageManifest, TemplatePackageSource } from '@slide-maker/shared'
+import {
+  INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION,
+  TEMPLATE_PACKAGE_CONTRACT_VERSION,
+  type TemplatePackageManifest,
+  type TemplatePackageSource,
+} from '@slide-maker/shared'
 import { AssetCatalogRepository } from '../assets/catalog-repository.js'
 import { LocalJobRepository, type LocalJob } from '../jobs/local-jobs.js'
 import { TEMPLATE_PREVIEW_JOB_TYPE, parseTemplatePreviewJobInput } from '../previews/preview-jobs.js'
 import { assertSafePreviewPackage } from '../previews/secure-preview.js'
+import { isAllowlistedInteractiveTemplateDigest } from './interactive-template-allowlist.js'
+import { assertSafeInteractiveTemplatePackage } from './interactive-template-policy.js'
 import { adaptTemplatePackageSource, type SimulatedTemplateAdapterResult } from './simulated-adapter.js'
 
 type Database = BetterSqlite3.Database
@@ -172,7 +179,10 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[], 
 
 function assertManifestShape(value: unknown): asserts value is TemplatePackageManifest {
   if (!isRecord(value)) throw new TemplateImportError('Template manifest must be one JSON object', 400)
-  exactKeys(value, ['contractVersion', 'id', 'version', 'title', 'summary', 'category', 'tags', 'entry', 'files', 'slots'], 'Template manifest')
+  const commonKeys = ['contractVersion', 'id', 'version', 'title', 'summary', 'category', 'tags', 'entry', 'files', 'slots']
+  if (value.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION) exactKeys(value, commonKeys, 'Template manifest')
+  else if (value.contractVersion === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) exactKeys(value, [...commonKeys, 'runtime'], 'Template manifest')
+  else throw new TemplateImportError('Template manifest contractVersion must be html-template/v1 or html-template/v2', 400)
   if (!Array.isArray(value.files) || value.files.some((file) => typeof file !== 'string')) throw new TemplateImportError('Template manifest files must be a string array', 400)
   if (!Array.isArray(value.tags) || value.tags.some((tag) => typeof tag !== 'string')) throw new TemplateImportError('Template manifest tags must be a string array', 400)
   if (!Array.isArray(value.slots)) throw new TemplateImportError('Template manifest slots must be an array', 400)
@@ -239,13 +249,26 @@ export async function parseUploadedTemplateZip(content: Uint8Array): Promise<Sim
   if (manifest.files.length > MAX_TEMPLATE_FILES) throw new TemplateImportError(`Template manifest is limited to ${MAX_TEMPLATE_FILES} files`, 400)
   const actualNames = files.map((entry) => entry.name).filter((name) => name !== 'manifest.json').sort()
   if (JSON.stringify(actualNames) !== JSON.stringify([...manifest.files].sort())) throw new TemplateImportError('Template ZIP files must exactly match manifest.files', 400)
-  if (actualNames.some((name) => !/\.(?:html|css)$/.test(name))) throw new TemplateImportError('Template ZIP accepts only HTML and CSS files', 400)
+  const allowedExtension = manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION ? /\.(?:html|css)$/ : /\.(?:html|css|js)$/
+  if (actualNames.some((name) => !allowedExtension.test(name))) {
+    throw new TemplateImportError(manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION
+      ? 'html-template/v1 ZIP accepts only HTML and CSS files'
+      : 'html-template/v2 ZIP accepts only HTML, CSS and JavaScript files', 400)
+  }
   const sourceFiles: Record<string, string> = {}
   for (const name of manifest.files) sourceFiles[name] = await readUtf8(zip.file(name)!, MAX_TEMPLATE_FILE_BYTES)
   const source: TemplatePackageSource = { manifest, files: sourceFiles }
-  try { assertSafePreviewPackage(source) }
+  try {
+    if (manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION) assertSafePreviewPackage(source)
+    else assertSafeInteractiveTemplatePackage(source)
+  }
   catch (error) { throw new TemplateImportError(error instanceof Error ? error.message : 'Template package violates preview policy', 400) }
-  return adaptTemplatePackageSource(source)
+  const template = adaptTemplatePackageSource(source)
+  if (manifest.contractVersion === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
+    && !isAllowlistedInteractiveTemplateDigest(template.version.sourceDigest)) {
+    throw new TemplateImportError('html-template/v2 normalized package SHA-256 is not in the reviewed allowlist', 400)
+  }
+  return template
 }
 
 function previewJobId(template: SimulatedTemplateAdapterResult): string {
@@ -276,7 +299,11 @@ export class TemplateImportService {
     try {
       return this.database.transaction(() => {
         let registered
-        try { registered = this.catalog.registerTemplate(template) }
+        try {
+          registered = this.catalog.registerTemplate(template, {
+            promote: template.version.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION,
+          })
+        }
         catch (error) { throw new TemplateImportError(error instanceof Error ? error.message : 'Template catalog registration failed', 409) }
         const id = previewJobId(template)
         const snapshot = { templateVersionId: registered.versionId, contentObjectDigest: registered.contentObject.digest }

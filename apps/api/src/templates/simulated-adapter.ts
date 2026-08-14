@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import {
   assertValidTemplatePackage,
+  isInteractiveTemplatePackageManifest,
   type TemplatePackageManifest,
   type TemplatePackageSource,
 } from '@slide-maker/shared'
@@ -28,8 +29,48 @@ function readJson(path: string): TemplatePackageManifest {
   return JSON.parse(readFileSync(path, 'utf8')) as TemplatePackageManifest
 }
 
+function compareText(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
+}
+
+export function normalizeTemplatePackageSource(source: TemplatePackageSource): TemplatePackageSource {
+  if (!isInteractiveTemplatePackageManifest(source.manifest)) return source
+  const manifest: TemplatePackageManifest = {
+    contractVersion: source.manifest.contractVersion,
+    id: source.manifest.id,
+    version: source.manifest.version,
+    title: source.manifest.title,
+    summary: source.manifest.summary,
+    category: source.manifest.category,
+    tags: [...source.manifest.tags].sort(compareText),
+    entry: source.manifest.entry,
+    files: [...source.manifest.files].sort(compareText),
+    slots: [...source.manifest.slots]
+      .sort((left, right) => compareText(left.id, right.id))
+      .map((slot) => ({
+        id: slot.id,
+        type: slot.type,
+        required: slot.required,
+        ...(slot.maxLength === undefined ? {} : { maxLength: slot.maxLength }),
+        ...(slot.default === undefined ? {} : { default: slot.default }),
+      })),
+    runtime: {
+      mode: 'sandboxed-js',
+      viewport: { width: 1920, height: 1080 },
+    },
+  }
+  return {
+    manifest,
+    files: Object.fromEntries(manifest.files.map((file) => [file, source.files[file]])),
+  }
+}
+
 export function serializeTemplatePackage(source: TemplatePackageSource): Buffer {
-  const canonical = JSON.stringify({ manifest: source.manifest, files: Object.fromEntries(Object.entries(source.files).sort(([a], [b]) => a.localeCompare(b))) })
+  const normalized = normalizeTemplatePackageSource(source)
+  const files = Object.entries(normalized.files).sort(([left], [right]) => isInteractiveTemplatePackageManifest(normalized.manifest)
+    ? compareText(left, right)
+    : left.localeCompare(right))
+  const canonical = JSON.stringify({ manifest: normalized.manifest, files: Object.fromEntries(files) })
   return Buffer.from(canonical, 'utf8')
 }
 
@@ -39,20 +80,21 @@ function digestPackage(source: TemplatePackageSource): string {
 
 export function adaptTemplatePackageSource(source: TemplatePackageSource, packageRoot = '[uploaded]'): SimulatedTemplateAdapterResult {
   assertValidTemplatePackage(source)
-  const sourceDigest = digestPackage(source)
+  const normalized = normalizeTemplatePackageSource(source)
+  const sourceDigest = digestPackage(normalized)
   return {
-    asset: { id: source.manifest.id, title: source.manifest.title, summary: source.manifest.summary, category: source.manifest.category, tags: source.manifest.tags },
+    asset: { id: normalized.manifest.id, title: normalized.manifest.title, summary: normalized.manifest.summary, category: normalized.manifest.category, tags: normalized.manifest.tags },
     version: {
-      id: `${source.manifest.id}-v${source.manifest.version}`,
-      assetId: source.manifest.id,
-      versionNumber: source.manifest.version,
-      contractVersion: source.manifest.contractVersion,
+      id: `${normalized.manifest.id}-v${normalized.manifest.version}`,
+      assetId: normalized.manifest.id,
+      versionNumber: normalized.manifest.version,
+      contractVersion: normalized.manifest.contractVersion,
       sourceDigest,
       contentObjectDigest: null,
-      slotSchema: { slots: source.manifest.slots },
+      slotSchema: { slots: normalized.manifest.slots },
     },
-    package: { root: packageRoot, entry: source.manifest.entry, files: [...source.manifest.files] },
-    source,
+    package: { root: packageRoot, entry: normalized.manifest.entry, files: [...normalized.manifest.files] },
+    source: normalized,
   }
 }
 

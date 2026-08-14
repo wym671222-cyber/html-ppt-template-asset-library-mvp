@@ -9,7 +9,7 @@ import { LocalContentStore } from '../apps/api/src/assets/content-store.js'
 import { AssetLibraryCatalog } from '../apps/api/src/assets/library-catalog.js'
 import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { LocalJobRepository } from '../apps/api/src/jobs/local-jobs.js'
-import { TemplatePreviewJobWorker, type PreviewRenderer } from '../apps/api/src/previews/preview-jobs.js'
+import { PreviewArtifactRepository, TemplatePreviewJobWorker, type PreviewRenderer } from '../apps/api/src/previews/preview-jobs.js'
 import type { SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
 import { parseUploadedTemplateZip, TemplateImportService, validateUploadedTemplateHtml } from '../apps/api/src/templates/template-import.js'
 import { createTrustedTestAuth, seedTestUser, testOwner, TEST_MEMBER_ID } from './p14-test-support.js'
@@ -27,6 +27,7 @@ const Database = requireFromApi('better-sqlite3') as new (path: string) => SQLit
 const JSZip = requireFromApi('jszip') as ZipConstructor
 const fixtureRoot = join(process.cwd(), 'fixtures/p03-simulated-template')
 const onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+const allowlistedV2Digest = 'fb0e964ed926db0c20bb1706044db6e1c52b5ee65dea7d20ae0a3699611e1490'
 
 function htmlBody(html: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -45,6 +46,36 @@ async function fixtureZip(change?: (manifest: Record<string, unknown>, files: Re
   const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'manifest.json'), 'utf8')) as Record<string, unknown>
   const names = manifest.files as string[]
   const files = Object.fromEntries(names.map((name) => [name, readFileSync(join(fixtureRoot, name), 'utf8')]))
+  change?.(manifest, files)
+  const zip = new JSZip()
+  zip.file('manifest.json', JSON.stringify(manifest))
+  for (const [name, content] of Object.entries(files)) zip.file(name, content)
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+}
+
+async function interactiveFixtureZip(change?: (manifest: Record<string, unknown>, files: Record<string, string>) => void): Promise<Buffer> {
+  const manifest: Record<string, unknown> = {
+    contractVersion: 'html-template/v2',
+    id: 'simulated-quarterly-brief',
+    version: 2,
+    title: 'Simulated Quarterly Brief',
+    summary: 'A repository-local fixture for validating the v1 HTML template package contract.',
+    category: 'report/quarterly',
+    tags: ['simulated', 'quarterly', 'brief'],
+    entry: 'index.html',
+    files: ['styles.css', 'runtime.js', 'index.html'],
+    slots: [
+      { id: 'title', type: 'text', required: true, maxLength: 120 },
+      { id: 'subtitle', type: 'text', required: false, default: 'Repository-local simulation', maxLength: 200 },
+      { id: 'accent-color', type: 'color', required: false, default: '#2563eb' },
+    ],
+    runtime: { viewport: { height: 1080, width: 1920 }, mode: 'sandboxed-js' },
+  }
+  const files: Record<string, string> = {
+    'index.html': `<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head><body><main data-template-slot="accent-color"><h1 data-template-slot="title">Interactive fixture</h1><p data-template-slot="subtitle">Repository-local simulation</p><img alt="" src="data:image/png;base64,${onePixelPng}"><button id="advance" type="button">Advance</button></main><script src="runtime.js"></script></body></html>`,
+    'runtime.js': `document.querySelector('#advance')?.addEventListener('click', () => document.body.toggleAttribute('data-advanced'))`,
+    'styles.css': 'body{margin:0} button{cursor:pointer}',
+  }
   change?.(manifest, files)
   const zip = new JSZip()
   zip.file('manifest.json', JSON.stringify(manifest))
@@ -101,6 +132,52 @@ describe('PocketBay administrator template import', () => {
     }))).rejects.toThrow(/only HTML and CSS/)
   })
 
+  it('accepts only normalized allowlisted html-template/v2 ZIPs and rejects unsafe package inputs', async () => {
+    const parsed = await parseUploadedTemplateZip(await interactiveFixtureZip())
+    expect(parsed.version).toMatchObject({
+      id: 'simulated-quarterly-brief-v2',
+      contractVersion: 'html-template/v2',
+      sourceDigest: allowlistedV2Digest,
+    })
+    expect(parsed.source.manifest).toMatchObject({ runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 } } })
+    expect(parsed.package.files).toEqual(['index.html', 'runtime.js', 'styles.css'])
+
+    const reordered = await parseUploadedTemplateZip(await interactiveFixtureZip((manifest) => {
+      manifest.tags = [...(manifest.tags as string[])].reverse()
+      manifest.files = [...(manifest.files as string[])].reverse()
+      manifest.slots = [...(manifest.slots as Record<string, unknown>[])]
+        .reverse()
+        .map((slot) => Object.fromEntries(Object.entries(slot).reverse()))
+      const entries = Object.entries(manifest).reverse()
+      for (const key of Object.keys(manifest)) delete manifest[key]
+      Object.assign(manifest, Object.fromEntries(entries))
+    }))
+    expect(reordered.version.sourceDigest).toBe(allowlistedV2Digest)
+
+    await expect(parseUploadedTemplateZip(await interactiveFixtureZip((manifest) => {
+      manifest.runtime = { mode: 'sandboxed-js', viewport: { width: 1280, height: 720 } }
+    }))).rejects.toThrow(/1920x1080/)
+    await expect(parseUploadedTemplateZip(await interactiveFixtureZip((_manifest, files) => {
+      files['index.html'] = '<!doctype html><html><body><script src="missing.js"></script></body></html>'
+    }))).rejects.toThrow(/declared package resource/)
+    await expect(parseUploadedTemplateZip(await interactiveFixtureZip((_manifest, files) => {
+      files['runtime.js'] = `import './missing.js'`
+    }))).rejects.toThrow(/declared package resource/)
+    await expect(parseUploadedTemplateZip(await interactiveFixtureZip((manifest, files) => {
+      ;(manifest.files as string[]).push('../outside.js')
+      files['../outside.js'] = 'document.body.textContent = "outside"'
+    }))).rejects.toThrow(/unsafe path/)
+    await expect(parseUploadedTemplateZip(await interactiveFixtureZip((_manifest, files) => {
+      files['runtime.js'] = `fetch('https://example.test/tracker')`
+    }))).rejects.toThrow(/external URL/)
+    await expect(parseUploadedTemplateZip(await interactiveFixtureZip((_manifest, files) => {
+      files['runtime.js'] += ';document.body.dataset.safe = "changed"'
+    }))).rejects.toThrow(/reviewed allowlist/)
+    await expect(parseUploadedTemplateZip(await interactiveFixtureZip((_manifest, files) => {
+      files['index.html'] = files['index.html'].replace(onePixelPng, 'R0lGODlh')
+    }))).rejects.toThrow(/signature|MIME/i)
+  })
+
   it('registers CAS once, queues one preview, stays hidden until a verified PNG pair, and is idempotent', async () => {
     const current = state()
     try {
@@ -119,6 +196,67 @@ describe('PocketBay administrator template import', () => {
       expect(repeated).toMatchObject({ created: false, job: { id: first.job.id, status: 'succeeded', available: true } })
       expect(current.database.prepare('SELECT count(*) AS count FROM template_versions').get()).toEqual({ count: 1 })
       expect(current.database.prepare('SELECT count(*) AS count FROM jobs').get()).toEqual({ count: 1 })
+    } finally { current.database.close(); rmSync(current.root, { recursive: true, force: true }) }
+  })
+
+  it('keeps the v1 current version when a v2 candidate preview fails', async () => {
+    const current = state()
+    try {
+      const v1 = await current.imports.importZip(await fixtureZip())
+      const renderer: PreviewRenderer = { render: async () => fakeRender() }
+      await new TemplatePreviewJobWorker(current.database as never, current.jobs, current.store, renderer, 'pb03-v1-worker', 30_000).runOnce()
+      expect(current.imports.job(v1.job.id)).toMatchObject({ status: 'succeeded', available: true })
+
+      const candidate = await current.imports.importZip(await interactiveFixtureZip())
+      expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(candidate.assetId)).toEqual({ current_version_id: v1.versionId })
+      expect(current.database.prepare('SELECT status FROM template_versions WHERE id = ?').get(candidate.versionId)).toEqual({ status: 'verified' })
+
+      await new TemplatePreviewJobWorker(current.database as never, current.jobs, current.store, renderer, 'pb03-v2-worker', 30_000).runOnce()
+      expect(current.imports.job(candidate.job.id)).toMatchObject({ status: 'failed', available: false })
+      expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(candidate.assetId)).toEqual({ current_version_id: v1.versionId })
+    } finally { current.database.close(); rmSync(current.root, { recursive: true, force: true }) }
+  })
+
+  it('promotes a newer candidate only in the transaction that records both verified derivatives', async () => {
+    const current = state()
+    try {
+      const v1 = await current.imports.importZip(await fixtureZip())
+      const candidate = await current.imports.importZip(await interactiveFixtureZip())
+      expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(candidate.assetId)).toEqual({ current_version_id: v1.versionId })
+
+      const render = fakeRender()
+      const preview = current.store.put(render.previewPng, 'image/png')
+      const thumbnail = current.store.put(render.thumbnailPng, 'image/png')
+      const repository = new PreviewArtifactRepository(current.database as never)
+      const v1Source = current.database.prepare('SELECT source_digest FROM template_versions WHERE id = ?').get(v1.versionId) as { source_digest: string }
+      expect(() => repository.recordRender({
+        templateVersionId: candidate.versionId,
+        sourceDigest: v1Source.source_digest,
+        preview,
+        thumbnail,
+        render,
+      })).toThrow(/source digest does not match the TemplateVersion/)
+      expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(candidate.assetId)).toEqual({ current_version_id: v1.versionId })
+      expect(current.database.prepare('SELECT count(*) AS count FROM template_preview_derivatives WHERE template_version_id = ?').get(candidate.versionId)).toEqual({ count: 0 })
+      expect(current.database.prepare('SELECT count(*) AS count FROM content_objects WHERE digest IN (?, ?)').get(preview.digest, thumbnail.digest)).toEqual({ count: 0 })
+
+      current.database.prepare('INSERT INTO content_objects (digest, media_type, byte_size, relative_path, created_at) VALUES (?, ?, ?, ?, ?)').run(preview.digest, preview.mediaType, preview.byteSize, preview.relativePath, Date.now())
+      current.database.prepare('INSERT INTO template_preview_derivatives (template_version_id, kind, source_digest, content_digest, renderer_version, security_diagnostic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(candidate.versionId, 'preview', allowlistedV2Digest, preview.digest, render.rendererVersion, JSON.stringify(render.diagnostic), Date.now())
+      expect(current.database.prepare('SELECT count(*) AS count FROM template_preview_derivatives WHERE template_version_id = ?').get(candidate.versionId)).toEqual({ count: 1 })
+      expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(candidate.assetId)).toEqual({ current_version_id: v1.versionId })
+
+      repository.recordRender({
+        templateVersionId: candidate.versionId,
+        sourceDigest: allowlistedV2Digest,
+        preview,
+        thumbnail,
+        render,
+      })
+      expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(candidate.assetId)).toEqual({ current_version_id: candidate.versionId })
+      expect(current.database.prepare('SELECT count(*) AS count FROM template_preview_derivatives WHERE template_version_id = ?').get(candidate.versionId)).toEqual({ count: 2 })
+
+      repository.recordRender({ templateVersionId: v1.versionId, sourceDigest: v1Source.source_digest, preview, thumbnail, render })
+      expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(candidate.assetId)).toEqual({ current_version_id: candidate.versionId })
     } finally { current.database.close(); rmSync(current.root, { recursive: true, force: true }) }
   })
 
