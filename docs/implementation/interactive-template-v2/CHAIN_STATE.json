@@ -7,12 +7,12 @@
     "implementationBranch": "feat/interactive-template-v2-export",
     "baselineCommit": "a427b530e05d79ae00b1d7196081f4a03c06451b"
   },
-  "workflowPhase": "awaiting_approval",
+  "workflowPhase": "executing",
   "plan": {
     "version": "2.0",
-    "approved": false,
-    "approvedVersion": null,
-    "approvedAt": null
+    "approved": true,
+    "approvedVersion": "2.0",
+    "approvedAt": "2026-08-14T17:56:07+08:00"
   },
   "contextPolicy": {
     "targetPercent": 50,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": null,
-    "activePhaseThreadId": null,
+    "currentPhaseId": "P00",
+    "activePhaseThreadId": "019fffb8-ed1b-78c2-bcb3-012d2db19b63",
     "terminalPhaseId": "P07"
   },
   "phases": [
@@ -30,13 +30,13 @@
       "id": "P00",
       "title": "执行链与失败基线",
       "objective": "固化真实 data-image 导出失败回归和运行环境基线",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-luna",
       "reasoning": "high",
       "estimatedContextPercent": 30,
       "dependsOn": [],
       "successor": "P01",
-      "threadId": null,
+      "threadId": "019fffb8-ed1b-78c2-bcb3-012d2db19b63",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -140,5 +140,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T17:56:07+08:00"
+  "updatedAt": "2026-08-14T18:02:23+08:00"
 }
