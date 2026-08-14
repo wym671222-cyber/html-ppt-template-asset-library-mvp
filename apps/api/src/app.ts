@@ -9,7 +9,7 @@ import { createAuthRouter } from './routes/auth.js'
 import { createAdminRouter } from './routes/admin.js'
 import { createBusinessAuthMiddleware, type AuthVariables } from './middleware/auth.js'
 import { createAdminMiddleware } from './middleware/admin.js'
-import { MAX_TEMPLATE_ZIP_BYTES, TemplateImportError, TemplateImportService } from './templates/template-import.js'
+import { MAX_TEMPLATE_HTML_JSON_BYTES, MAX_TEMPLATE_ZIP_BYTES, TemplateImportError, TemplateImportService } from './templates/template-import.js'
 
 export const LOOPBACK_HOST = '127.0.0.1'
 export const PRODUCTION_APP_ORIGIN = 'https://ppt.ajjy-ai.site'
@@ -90,6 +90,18 @@ async function boundedBinaryBody(request: Request, maxBytes: number, invalid: (m
   let offset = 0
   for (const chunk of chunks) { content.set(chunk, offset); offset += chunk.byteLength }
   return content
+}
+
+async function boundedJsonObject(request: Request, maxBytes: number, invalid: (message: string) => Error): Promise<Record<string, unknown>> {
+  const content = await boundedBinaryBody(request, maxBytes, invalid)
+  let text: string
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(content) }
+  catch { throw invalid('JSON request body must be valid UTF-8') }
+  let value: unknown
+  try { value = JSON.parse(text) }
+  catch { throw invalid('JSON request body is invalid') }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid('JSON request body must be one object')
+  return value as Record<string, unknown>
 }
 
 function presentationError(context: { json(value: { error: string }, status: 400 | 404 | 409 | 500): Response }, error: unknown): Response {
@@ -369,6 +381,24 @@ export function createApp(options: {
     try {
       const content = await boundedBinaryBody(context.req.raw, MAX_TEMPLATE_ZIP_BYTES, (message) => new TemplateImportError(message, 400))
       return context.json({ import: await templateImports.importZip(content) }, 202)
+    } catch (error) { return templateImportError(context, error) }
+  })
+  app.post('/api/template-imports/html/validate', async (context) => {
+    if (!templateImports) return context.json({ error: 'Template import service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Template import does not accept query parameters' }, 400)
+    if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/json') return context.json({ error: 'HTML template import Content-Type must be application/json' }, 400)
+    try {
+      const body = await boundedJsonObject(context.req.raw, MAX_TEMPLATE_HTML_JSON_BYTES, (message) => new TemplateImportError(message, 400))
+      return context.json({ validation: templateImports.validateHtml(body) })
+    } catch (error) { return templateImportError(context, error) }
+  })
+  app.post('/api/template-imports/html', async (context) => {
+    if (!templateImports) return context.json({ error: 'Template import service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Template import does not accept query parameters' }, 400)
+    if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/json') return context.json({ error: 'HTML template import Content-Type must be application/json' }, 400)
+    try {
+      const body = await boundedJsonObject(context.req.raw, MAX_TEMPLATE_HTML_JSON_BYTES, (message) => new TemplateImportError(message, 400))
+      return context.json({ import: await templateImports.importHtml(body) }, 202)
     } catch (error) { return templateImportError(context, error) }
   })
   app.get('/api/template-imports/:jobId', (context) => {

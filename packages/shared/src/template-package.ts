@@ -34,7 +34,8 @@ export interface TemplatePackageValidationError {
 }
 
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{1,63}$/
-const SAFE_CATEGORY = /^[a-z0-9][a-z0-9/_-]{0,63}$/
+const SAFE_CATEGORY = /^[\p{L}\p{N}][\p{L}\p{N}/_-]{0,79}$/u
+const SAFE_TAG = /^[\p{L}\p{N}][\p{L}\p{N} _-]{0,39}$/u
 const SAFE_TEXT = /^[^\u0000-\u001f\u007f]*$/
 const SAFE_PACKAGE_FILE = /^(?:[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*)+$/
 
@@ -76,8 +77,8 @@ export function validateTemplatePackage(source: TemplatePackageSource): Template
   for (const field of ['title', 'summary'] as const) {
     if (typeof manifest[field] !== 'string' || !manifest[field].trim() || !SAFE_TEXT.test(manifest[field])) errors.push({ field, message: 'must be non-empty plain text' })
   }
-  if (typeof manifest.category !== 'string' || !SAFE_CATEGORY.test(manifest.category)) errors.push({ field: 'category', message: 'must be a safe category path' })
-  if (!Array.isArray(manifest.tags) || manifest.tags.some((tag) => typeof tag !== 'string' || !SAFE_ID.test(tag))) errors.push({ field: 'tags', message: 'must contain only lowercase kebab-case identifiers' })
+  if (typeof manifest.category !== 'string' || manifest.category !== manifest.category.normalize('NFC') || !SAFE_CATEGORY.test(manifest.category)) errors.push({ field: 'category', message: 'must be an NFC category label or path' })
+  if (!Array.isArray(manifest.tags) || manifest.tags.length > 20 || new Set(manifest.tags).size !== manifest.tags.length || manifest.tags.some((tag) => typeof tag !== 'string' || tag !== tag.normalize('NFC') || !SAFE_TAG.test(tag))) errors.push({ field: 'tags', message: 'must contain unique NFC text labels' })
   if (!Array.isArray(manifest.files) || manifest.files.length === 0 || new Set(manifest.files).size !== manifest.files.length) errors.push({ field: 'files', message: 'must be a non-empty list of unique files' })
   for (const file of manifest.files ?? []) if (!isSafePackageFile(file)) errors.push({ field: 'files', message: `unsafe package path: ${String(file)}` })
   if (!isSafePackageFile(manifest.entry) || manifest.entry !== 'index.html') errors.push({ field: 'entry', message: 'must be the package-local index.html' })

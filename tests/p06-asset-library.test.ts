@@ -73,8 +73,8 @@ async function fixtureApp(): Promise<{ app: ReturnType<typeof createApp>; databa
 
 describe('P06 bounded deterministic catalog query', () => {
   it('parses only bounded, unique, known parameters', () => {
-    expect(parseCatalogQuery('http://127.0.0.1/api/catalog?search=quarterly&category=report%2Fquarterly&tags=brief%2Csimulated&limit=12')).toEqual({
-      search: 'quarterly', category: 'report/quarterly', tags: ['brief', 'simulated'], limit: 12,
+    expect(parseCatalogQuery('http://127.0.0.1/api/catalog?search=quarterly&category=report%2Fquarterly&tags=brief%2Csimulated&status=verified&sort=title-asc&limit=12&offset=24')).toEqual({
+      search: 'quarterly', category: 'report/quarterly', tags: ['brief', 'simulated'], status: 'verified', sort: 'title-asc', limit: 12, offset: 24,
     })
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?limit=49')).toThrow(/between 1 and 48/)
     expect(() => parseCatalogQuery(`http://127.0.0.1/api/catalog?search=${'x'.repeat(101)}`)).toThrow(/search is invalid/)
@@ -82,6 +82,8 @@ describe('P06 bounded deterministic catalog query', () => {
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?tags=a,a')).toThrow(/unique/)
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?tags=a,,b')).toThrow(/empty values/)
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?search=a&search=b')).toThrow(/must not repeat/)
+    expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?offset=10001')).toThrow(/between 0 and 10000/)
+    expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?sort=random')).toThrow(/sort/)
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?digest=' + 'a'.repeat(64))).toThrow(/Unknown/)
   })
 
@@ -109,8 +111,8 @@ describe('P06 read-only catalog API and PNG trust boundary', () => {
       `).run(incompletePreview.digest)
       const response = await state.app.request('http://127.0.0.1:3001/api/catalog', { headers: { origin: 'http://127.0.0.1:5173' } })
       expect(response.status).toBe(200)
-      const body = await response.json() as { items: Array<Record<string, unknown>>; facets: { categories: string[]; tags: string[] }; total: number }
-      expect(body).toMatchObject({ total: 1, facets: { categories: ['report/quarterly'], tags: ['brief', 'quarterly', 'simulated'] } })
+      const body = await response.json() as { items: Array<Record<string, unknown>>; facets: { categories: Array<{ value: string; count: number }>; tags: Array<{ value: string; count: number }> }; total: number }
+      expect(body).toMatchObject({ total: 1, limit: 24, offset: 0, facets: { categories: [{ value: 'report/quarterly', count: 1 }], tags: [{ value: 'brief', count: 1 }, { value: 'quarterly', count: 1 }, { value: 'simulated', count: 1 }] } })
       expect(body).not.toHaveProperty('owner')
       expect(body.items[0]).toMatchObject({
         id: state.assetId,

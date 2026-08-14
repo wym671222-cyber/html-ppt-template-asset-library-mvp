@@ -6,16 +6,16 @@ export function normalizedClientAddress(value: unknown): string {
   return typeof value === 'string' && isIP(value) !== 0 ? value.toLowerCase() : '127.0.0.1'
 }
 
-export function validateBrowserWrite(headers: Headers, expectedOrigin: string): Response | null {
+export function validateBrowserWrite(headers: Headers, expectedOrigin: string, maxBytes = MAX_WRITE_BYTES): Response | null {
   const origin = headers.get('origin')
   if (origin !== expectedOrigin || origin.includes(',')) return Response.json({ error: 'Exact Origin required' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
   if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test((headers.get('content-type') ?? '').trim())) return Response.json({ error: 'JSON Content-Type required' }, { status: 415, headers: { 'Cache-Control': 'no-store' } })
   const contentLength = headers.get('content-length')
-  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) || Number(contentLength) > MAX_WRITE_BYTES)) return Response.json({ error: 'JSON request body is invalid or too large' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
+  if (contentLength !== null && (!/^[0-9]+$/.test(contentLength) || Number(contentLength) > maxBytes)) return Response.json({ error: 'JSON request body is invalid or too large' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   return null
 }
 
-export async function readBoundedBody(body: ReadableStream<Uint8Array> | null): Promise<string | Response> {
+export async function readBoundedBody(body: ReadableStream<Uint8Array> | null, maxBytes = MAX_WRITE_BYTES): Promise<string | Response> {
   if (!body) return ''
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
@@ -25,7 +25,7 @@ export async function readBoundedBody(body: ReadableStream<Uint8Array> | null): 
       const next = await reader.read()
       if (next.done) break
       size += next.value.byteLength
-      if (size > MAX_WRITE_BYTES) {
+      if (size > maxBytes) {
         await reader.cancel()
         return Response.json({ error: 'JSON request body is invalid or too large' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
       }

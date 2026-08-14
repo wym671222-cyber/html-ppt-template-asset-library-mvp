@@ -20,14 +20,24 @@ export type CatalogItem = Readonly<{
 
 export type CatalogResponse = Readonly<{
   items: CatalogItem[]
-  facets: { categories: string[]; tags: string[] }
+  facets: {
+    categories: Array<{ value: string; count: number }>
+    tags: Array<{ value: string; count: number }>
+    statuses: Array<{ value: 'verified' | 'available'; count: number }>
+  }
   total: number
+  limit: number
+  offset: number
 }>
 
 export type CatalogFilters = Readonly<{
   search: string
   category: string
   tags: string[]
+  status?: '' | 'verified' | 'available'
+  sort?: 'updated-desc' | 'title-asc'
+  limit?: number
+  offset?: number
 }>
 
 const DERIVATIVE_URL = /^\/api\/catalog\/assets\/[a-z0-9]+(?:-[a-z0-9]+)*\/(?:preview|thumbnail)$/
@@ -43,6 +53,10 @@ export function catalogQuery(filters: CatalogFilters): string {
   if (search) parameters.set('search', search)
   if (filters.category) parameters.set('category', filters.category)
   if (filters.tags.length) parameters.set('tags', [...filters.tags].sort().join(','))
+  if (filters.status) parameters.set('status', filters.status)
+  if (filters.sort && filters.sort !== 'updated-desc') parameters.set('sort', filters.sort)
+  if (filters.limit !== undefined && filters.limit !== 24) parameters.set('limit', String(filters.limit))
+  if (filters.offset !== undefined && filters.offset > 0) parameters.set('offset', String(filters.offset))
   const query = parameters.toString()
   return `/api/catalog${query ? `?${query}` : ''}`
 }

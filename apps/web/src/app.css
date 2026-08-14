@@ -44,6 +44,84 @@
   --radius-full: 9999px;
 }
 
+/* Asset-library-only design tokens. Editor tokens remain independently scoped above. */
+html[data-asset-theme='light'] { background: #ffffff; color-scheme: light; }
+html[data-asset-theme='dark'] { background: #09111b; color-scheme: dark; }
+
+.library-theme-root {
+  --lib-bg: #ffffff;
+  --lib-rail: #f8fafc;
+  --lib-surface: #ffffff;
+  --lib-surface-soft: #f4f7fb;
+  --lib-surface-hover: #edf3fb;
+  --lib-elevated: #ffffff;
+  --lib-text: #101827;
+  --lib-text-strong: #080d18;
+  --lib-muted: #5f6b7c;
+  --lib-subtle: #8b96a7;
+  --lib-border: #d8e0ea;
+  --lib-border-strong: #aeb9c8;
+  --lib-accent: #1768e5;
+  --lib-accent-fill: #1768e5;
+  --lib-accent-strong: #0f57c7;
+  --lib-accent-soft: #eef5ff;
+  --lib-focus: rgba(23, 104, 229, .26);
+  --lib-success: #28763a;
+  --lib-danger: #b33838;
+  --lib-shadow: 0 6px 20px rgba(15, 35, 70, .08);
+  --lib-shadow-lg: 0 18px 48px rgba(15, 35, 70, .16);
+}
+
+.library-theme-root[data-theme-choice='dark'] {
+  --lib-bg: #09111b;
+  --lib-rail: #101a25;
+  --lib-surface: #111c27;
+  --lib-surface-soft: #0d1721;
+  --lib-surface-hover: #182738;
+  --lib-elevated: #152230;
+  --lib-text: #e8edf4;
+  --lib-text-strong: #ffffff;
+  --lib-muted: #9ba8b9;
+  --lib-subtle: #6e7c8f;
+  --lib-border: #2b3949;
+  --lib-border-strong: #526277;
+  --lib-accent: #4d86f7;
+  --lib-accent-fill: #3b70d8;
+  --lib-accent-strong: #6d9dff;
+  --lib-accent-soft: rgba(56, 111, 224, .16);
+  --lib-focus: rgba(77, 134, 247, .36);
+  --lib-success: #66b978;
+  --lib-danger: #f08080;
+  --lib-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+  --lib-shadow-lg: 0 20px 56px rgba(0, 0, 0, .42);
+}
+
+@media (prefers-color-scheme: dark) {
+  .library-theme-root[data-theme-choice='system'] {
+    --lib-bg: #09111b;
+    --lib-rail: #101a25;
+    --lib-surface: #111c27;
+    --lib-surface-soft: #0d1721;
+    --lib-surface-hover: #182738;
+    --lib-elevated: #152230;
+    --lib-text: #e8edf4;
+    --lib-text-strong: #ffffff;
+    --lib-muted: #9ba8b9;
+    --lib-subtle: #6e7c8f;
+    --lib-border: #2b3949;
+    --lib-border-strong: #526277;
+    --lib-accent: #4d86f7;
+    --lib-accent-fill: #3b70d8;
+    --lib-accent-strong: #6d9dff;
+    --lib-accent-soft: rgba(56, 111, 224, .16);
+    --lib-focus: rgba(77, 134, 247, .36);
+    --lib-success: #66b978;
+    --lib-danger: #f08080;
+    --lib-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+    --lib-shadow-lg: 0 20px 56px rgba(0, 0, 0, .42);
+  }
+}
+
 /* Editor dark mode — toggled via [data-editor-dark] on <html> */
 html[data-editor-dark] {
   --color-bg: #1a1a2e;

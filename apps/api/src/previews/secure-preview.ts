@@ -9,12 +9,13 @@ import {
   type TemplatePackageSource,
 } from '@slide-maker/shared'
 
-const PREVIEW_CSP = "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'none'; base-uri 'none'; frame-ancestors 'none'"
-const FORBIDDEN_HTML = /<(?:script|iframe|frame|object|embed|form|base)\b|<meta\b[^>]*\bhttp-equiv\s*=|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|srcset|target|action|formaction|download)\s*=/i
-const EXTERNAL_HTML_REFERENCE = /\b(?:src|href|poster)\s*=\s*["']\s*(?:[a-z][a-z0-9+.-]*:|\/\/)/i
+const PREVIEW_CSP = "default-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'none'; base-uri 'none'; frame-ancestors 'none'"
+const FORBIDDEN_HTML = /<(?:script|iframe|frame|object|embed|form|base)\b|<meta\b[^>]*\bhttp-equiv\s*=|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|srcset|target|action|formaction|download|style)\s*=/i
 const UNQUOTED_HTML_REFERENCE = /\b(?:src|href|poster)\s*=\s*(?!["'])/i
-const HTML_REFERENCE = /\b(?:src|href|poster)\s*=\s*(["'])(.*?)\1/gi
+const HTML_REFERENCE = /\b(src|href|poster)\s*=\s*(["'])(.*?)\2/gi
 const FORBIDDEN_CSS = /@import\b|\burl\s*\(/i
+const DATA_IMAGE = /^data:image\/(png|jpeg|webp|gif);base64,([a-z0-9+/]+={0,2})$/i
+const MAX_DATA_IMAGE_BYTES = 2 * 1024 * 1024
 
 export type PreviewSecurityDiagnostic = Readonly<{
   allowedRequestCount: number
@@ -49,9 +50,29 @@ function safePackagePath(packageRoot: string, file: string): string {
   return path
 }
 
-function assertDeclaredReference(reference: string, declaredFiles: ReadonlySet<string>): void {
+function assertDataImage(value: string): void {
+  const match = DATA_IMAGE.exec(value)
+  if (!match) throw new PreviewPolicyError('Preview data URL must be a base64 PNG, JPEG, WebP or GIF image')
+  const encoded = match[2]
+  const content = Buffer.from(encoded, 'base64')
+  if (content.byteLength === 0 || content.byteLength > MAX_DATA_IMAGE_BYTES || content.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) throw new PreviewPolicyError('Preview data image is malformed or too large')
+  const kind = match[1].toLowerCase()
+  const signature = content.subarray(0, 12).toString('hex')
+  const valid = kind === 'png' ? signature.startsWith('89504e470d0a1a0a')
+    : kind === 'jpeg' ? signature.startsWith('ffd8ff')
+      : kind === 'gif' ? content.subarray(0, 6).toString('ascii') === 'GIF87a' || content.subarray(0, 6).toString('ascii') === 'GIF89a'
+        : content.subarray(0, 4).toString('ascii') === 'RIFF' && content.subarray(8, 12).toString('ascii') === 'WEBP'
+  if (!valid) throw new PreviewPolicyError('Preview data image MIME type does not match its byte signature')
+}
+
+function assertDeclaredReference(reference: string, declaredFiles: ReadonlySet<string>, allowData: boolean): void {
   const value = reference.trim()
   if (!value || value.startsWith('#')) return
+  if (value.toLowerCase().startsWith('data:')) {
+    if (!allowData) throw new PreviewPolicyError('Preview data URLs are allowed only for images')
+    assertDataImage(value)
+    return
+  }
   let decoded: string
   try {
     decoded = decodeURIComponent(value.split(/[?#]/, 1)[0])
@@ -85,9 +106,8 @@ export function assertSafePreviewPackage(source: TemplatePackageSource): void {
       continue
     }
     if (FORBIDDEN_HTML.test(content)) throw new PreviewPolicyError(`Preview HTML contains an active or navigational element: ${file}`)
-    if (EXTERNAL_HTML_REFERENCE.test(content)) throw new PreviewPolicyError(`Preview HTML contains an external reference: ${file}`)
     if (UNQUOTED_HTML_REFERENCE.test(content)) throw new PreviewPolicyError(`Preview HTML references must be quoted: ${file}`)
-    for (const match of content.matchAll(HTML_REFERENCE)) assertDeclaredReference(match[2], declaredFiles)
+    for (const match of content.matchAll(HTML_REFERENCE)) assertDeclaredReference(match[3], declaredFiles, match[1].toLowerCase() !== 'href')
   }
 }
 

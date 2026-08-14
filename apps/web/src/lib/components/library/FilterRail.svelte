@@ -1,87 +1,84 @@
 <script lang="ts">
+  type Facet = { value: string; count: number }
+  type StatusFacet = { value: 'verified' | 'available'; count: number }
+
   let {
-    search,
-    category,
-    selectedTags,
-    categories,
-    tags,
-    onSearch,
-    onCategory,
-    onTag,
+    category, selectedTags, status, categories, tags, statuses, onCategory, onTag, onStatus, onClear, onClose,
   }: {
-    search: string
     category: string
     selectedTags: string[]
-    categories: string[]
-    tags: string[]
-    onSearch: (value: string) => void
+    status: '' | 'verified' | 'available'
+    categories: Facet[]
+    tags: Facet[]
+    statuses: StatusFacet[]
     onCategory: (value: string) => void
     onTag: (value: string) => void
+    onStatus: (value: '' | 'verified' | 'available') => void
+    onClear: () => void
+    onClose?: () => void
   } = $props()
 </script>
 
 <aside class="filter-rail" aria-label="资产筛选">
-  <div class="search-wrap">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4 4"></path></svg>
-    <label class="sr-only" for="asset-search">搜索模板</label>
-    <input
-      id="asset-search"
-      type="search"
-      placeholder="搜索模板"
-      value={search}
-      maxlength="100"
-      oninput={(event) => onSearch(event.currentTarget.value)}
-      onkeydown={(event) => { if (event.key === 'Escape') onSearch('') }}
-    />
-  </div>
+  <header>
+    <h2>筛选</h2>
+    <div><button type="button" onclick={onClear}>清空</button>{#if onClose}<button class="close" type="button" aria-label="关闭筛选" onclick={onClose}>×</button>{/if}</div>
+  </header>
 
   <fieldset>
-    <legend>分类</legend>
-    <label class="filter-option">
-      <input type="radio" name="category" checked={category === ''} onchange={() => onCategory('')} />
-      <span>全部</span>
-    </label>
-    {#each categories as value}
+    <legend><span>分类</span><button type="button" onclick={() => onCategory('')}>清空</button></legend>
+    {#if categories.length === 0}<p class="filter-empty">暂无分类</p>{/if}
+    {#each categories as facet}
       <label class="filter-option">
-        <input type="radio" name="category" checked={category === value} onchange={() => onCategory(value)} />
-        <span>{value}</span>
+        <input type="radio" name="category" checked={category === facet.value} onchange={() => onCategory(category === facet.value ? '' : facet.value)} />
+        <span>{facet.value}</span><small>{facet.count}</small>
       </label>
     {/each}
   </fieldset>
 
   <fieldset>
-    <legend>标签</legend>
-    {#if tags.length === 0}
-      <p class="filter-empty">暂无可用标签</p>
-    {:else}
-      {#each tags as value}
-        <label class="filter-option">
-          <input type="checkbox" checked={selectedTags.includes(value)} onchange={() => onTag(value)} />
-          <span>{value}</span>
-        </label>
-      {/each}
-    {/if}
+    <legend><span>标签</span><button type="button" onclick={() => { for (const value of selectedTags) onTag(value) }}>清空</button></legend>
+    {#if tags.length === 0}<p class="filter-empty">暂无可用标签</p>{/if}
+    {#each tags as facet}
+      <label class="filter-option">
+        <input type="checkbox" checked={selectedTags.includes(facet.value)} onchange={() => onTag(facet.value)} />
+        <span>{facet.value}</span><small>{facet.count}</small>
+      </label>
+    {/each}
   </fieldset>
+
+  <fieldset>
+    <legend><span>状态</span><button type="button" onclick={() => onStatus('')}>清空</button></legend>
+    {#each statuses as facet}
+      <label class="filter-option">
+        <input type="radio" name="status" checked={status === facet.value} onchange={() => onStatus(status === facet.value ? '' : facet.value)} />
+        <span>{facet.value === 'available' ? '已发布' : '已验证'}</span><small>{facet.count}</small>
+      </label>
+    {/each}
+  </fieldset>
+
+  <footer>更多筛选 <span aria-hidden="true">⌄</span></footer>
 </aside>
 
 <style>
-  .filter-rail { min-width: 0; background: #f7f8fa; border-right: 1px solid #dce2ea; padding: 28px 24px; overflow-y: auto; }
-  .search-wrap { position: relative; }
-  .search-wrap svg { position: absolute; width: 19px; height: 19px; left: 14px; top: 50%; transform: translateY(-50%); fill: none; stroke: #59677c; stroke-width: 1.7; stroke-linecap: round; pointer-events: none; }
-  input[type='search'] { width: 100%; height: 46px; border: 1px solid #aeb9c8; border-radius: 8px; background: #fff; color: #0b1739; padding: 0 14px 0 42px; font: 500 14px/1 var(--font-body); outline: none; transition: border-color .16s, box-shadow .16s; }
-  input[type='search']:focus { border-color: #1768e5; box-shadow: 0 0 0 3px rgba(23, 104, 229, .16); }
-  fieldset { border: 0; border-top: 1px solid #dce2ea; margin-top: 22px; padding-top: 20px; }
-  legend { color: #0b1739; font: 700 15px/1.3 var(--font-body); padding: 0; margin-bottom: 10px; }
-  .filter-option { display: flex; align-items: center; gap: 10px; min-height: 38px; color: #27364f; font-size: 14px; cursor: pointer; border-radius: 6px; }
-  .filter-option:focus-within { outline: 2px solid #1768e5; outline-offset: 2px; }
-  input[type='radio'], input[type='checkbox'] { width: 17px; height: 17px; accent-color: #1768e5; cursor: pointer; }
-  .filter-empty { color: #708096; font-size: 13px; line-height: 1.6; }
-  @media (max-width: 1080px) {
-    .filter-rail { border-right: 0; border-bottom: 1px solid #dce2ea; display: grid; grid-template-columns: minmax(220px, 1fr) 1fr 1fr; gap: 24px; padding: 20px 24px; }
-    fieldset { border-top: 0; margin: 0; padding: 0; }
-  }
-  @media (max-width: 700px) {
-    .filter-rail { display: block; padding: 16px; }
-    fieldset { border-top: 1px solid #dce2ea; margin-top: 16px; padding-top: 14px; }
+  .filter-rail { min-width: 0; height: 100%; background: var(--lib-rail); border-right: 1px solid var(--lib-border); overflow-y: auto; color: var(--lib-text); }
+  header { min-height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid var(--lib-border); }
+  h2 { font-size: 16px; line-height: 1; }
+  header div { display: flex; align-items: center; gap: 8px; }
+  button { border: 0; background: transparent; color: var(--lib-muted); font: 600 12px/1 var(--font-body); cursor: pointer; }
+  button:hover { color: var(--lib-accent); }
+  button:focus-visible, .filter-option:focus-within { outline: 3px solid var(--lib-focus); outline-offset: 2px; }
+  .close { display: none; width: 30px; height: 30px; font-size: 22px; }
+  fieldset { border: 0; border-bottom: 1px solid var(--lib-border); padding: 16px 18px 14px; }
+  legend { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 0 8px; color: var(--lib-text-strong); font: 700 14px/1.3 var(--font-body); }
+  .filter-option { min-height: 34px; display: grid; grid-template-columns: 17px minmax(0,1fr) auto; align-items: center; gap: 9px; border-radius: 5px; color: var(--lib-text); font-size: 13px; cursor: pointer; }
+  .filter-option small { color: var(--lib-muted); font-size: 12px; }
+  input { width: 16px; height: 16px; accent-color: var(--lib-accent); }
+  .filter-empty { padding: 8px 0; color: var(--lib-muted); font-size: 12px; }
+  footer { padding: 17px 18px; color: var(--lib-text); font-size: 13px; }
+  footer span { margin-left: 5px; color: var(--lib-muted); }
+  @media (max-width: 1100px) {
+    .filter-rail { width: min(310px, 88vw); box-shadow: var(--lib-shadow-lg); }
+    .close { display: inline-grid; place-items: center; }
   }
 </style>

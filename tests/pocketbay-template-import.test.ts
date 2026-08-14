@@ -11,7 +11,7 @@ import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { LocalJobRepository } from '../apps/api/src/jobs/local-jobs.js'
 import { TemplatePreviewJobWorker, type PreviewRenderer } from '../apps/api/src/previews/preview-jobs.js'
 import type { SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
-import { parseUploadedTemplateZip, TemplateImportService } from '../apps/api/src/templates/template-import.js'
+import { parseUploadedTemplateZip, TemplateImportService, validateUploadedTemplateHtml } from '../apps/api/src/templates/template-import.js'
 import { createTrustedTestAuth, seedTestUser, testOwner, TEST_MEMBER_ID } from './p14-test-support.js'
 
 type SQLite = {
@@ -26,6 +26,20 @@ const requireFromApi = createRequire(new URL('../apps/api/package.json', import.
 const Database = requireFromApi('better-sqlite3') as new (path: string) => SQLite
 const JSZip = requireFromApi('jszip') as ZipConstructor
 const fixtureRoot = join(process.cwd(), 'fixtures/p03-simulated-template')
+const onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+
+function htmlBody(html: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    filename: 'quarterly.html',
+    mimeType: 'text/html',
+    contentBase64: Buffer.from(html, 'utf8').toString('base64'),
+    title: '季度经营分析',
+    summary: '面向管理层的季度经营复盘模板',
+    category: '通用汇报',
+    tags: ['季度汇报', '管理层'],
+    ...overrides,
+  }
+}
 
 async function fixtureZip(change?: (manifest: Record<string, unknown>, files: Record<string, string>) => void): Promise<Buffer> {
   const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'manifest.json'), 'utf8')) as Record<string, unknown>
@@ -72,7 +86,7 @@ function state() {
   return { root, database, admin, member, store, jobs, imports }
 }
 
-describe('PocketBay administrator template ZIP import', () => {
+describe('PocketBay administrator template import', () => {
   it('parses only an exact html-template/v1 file set and rejects active or unknown input', async () => {
     const parsed = await parseUploadedTemplateZip(await fixtureZip())
     expect(parsed).toMatchObject({ asset: { id: 'simulated-quarterly-brief' }, version: { id: 'simulated-quarterly-brief-v1' } })
@@ -93,17 +107,69 @@ describe('PocketBay administrator template ZIP import', () => {
       const zip = await fixtureZip()
       const first = await current.imports.importZip(zip)
       expect(first).toMatchObject({ created: true, assetId: 'simulated-quarterly-brief', job: { status: 'pending', available: false } })
-      expect(new AssetLibraryCatalog(current.database as never, current.store).list(testOwner(current.admin.id), { search: '', category: null, tags: [], limit: 48 })).toMatchObject({ total: 0 })
+      const query = { search: '', category: null, tags: [], status: null, sort: 'updated-desc' as const, limit: 48, offset: 0 }
+      expect(new AssetLibraryCatalog(current.database as never, current.store).list(testOwner(current.admin.id), query)).toMatchObject({ total: 0 })
 
       const renderer: PreviewRenderer = { render: async () => fakeRender() }
       await expect(new TemplatePreviewJobWorker(current.database as never, current.jobs, current.store, renderer, 'pb03-worker', 30_000).runOnce()).resolves.toBe(true)
       expect(current.imports.job(first.job.id)).toMatchObject({ status: 'succeeded', available: true })
-      expect(new AssetLibraryCatalog(current.database as never, current.store).list(testOwner(current.admin.id), { search: '', category: null, tags: [], limit: 48 })).toMatchObject({ total: 1 })
+      expect(new AssetLibraryCatalog(current.database as never, current.store).list(testOwner(current.admin.id), query)).toMatchObject({ total: 1 })
 
       const repeated = await current.imports.importZip(zip)
       expect(repeated).toMatchObject({ created: false, job: { id: first.job.id, status: 'succeeded', available: true } })
       expect(current.database.prepare('SELECT count(*) AS count FROM template_versions').get()).toEqual({ count: 1 })
       expect(current.database.prepare('SELECT count(*) AS count FROM jobs').get()).toEqual({ count: 1 })
+    } finally { current.database.close(); rmSync(current.root, { recursive: true, force: true }) }
+  })
+
+  it('normalizes one self-contained HTML file and rejects active, external, inline-style and forged data-image input', () => {
+    const safe = htmlBody(`<!doctype html><html><head><style>body{margin:0;background:#fff}</style></head><body><img src="data:image/png;base64,${onePixelPng}"><h1>季度经营分析</h1></body></html>`)
+    const first = validateUploadedTemplateHtml(safe)
+    const second = validateUploadedTemplateHtml(safe)
+    expect(first).toMatchObject({ assetId: expect.stringMatching(/^html-[0-9a-f]{20}$/), versionId: expect.stringMatching(/-v1$/), category: '通用汇报', tags: ['季度汇报', '管理层'], normalizedFiles: ['index.html', 'styles.css'] })
+    expect(second.assetId).toBe(first.assetId)
+    expect(() => validateUploadedTemplateHtml(htmlBody('<html><body><script>alert(1)</script></body></html>'))).toThrow(/active|script/i)
+    expect(() => validateUploadedTemplateHtml(htmlBody('<html><body><img src="https://example.test/a.png"></body></html>'))).toThrow(/external|declared|reference/i)
+    expect(() => validateUploadedTemplateHtml(htmlBody('<html><body style="color:red">x</body></html>'))).toThrow(/active|style/i)
+    expect(() => validateUploadedTemplateHtml(htmlBody('<html><body><img src="data:image/png;base64,R0lGODlh"></body></html>'))).toThrow(/signature|MIME/i)
+    expect(() => validateUploadedTemplateHtml(htmlBody('<html><body>x</body></html>', { filename: 'quarterly.txt' }))).toThrow(/\.html/)
+    expect(() => validateUploadedTemplateHtml(htmlBody('<html><body>x</body></html>', { contentBase64: '***' }))).toThrow(/base64/i)
+  })
+
+  it('validates and imports self-contained HTML only for an authenticated administrator', async () => {
+    const current = state()
+    try {
+      const origin = 'http://127.0.0.1:5173'
+      const body = htmlBody('<!doctype html><html><head><style>body{margin:0}</style></head><body><h1>季度经营分析</h1></body></html>')
+      const adminApp = createApp({ auth: createTrustedTestAuth(current.admin), templateImports: current.imports })
+      const memberApp = createApp({ auth: createTrustedTestAuth(current.member), templateImports: current.imports })
+      expect((await memberApp.request('http://127.0.0.1:3001/api/template-imports/html/validate', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })).status).toBe(403)
+      const validated = await adminApp.request('http://127.0.0.1:3001/api/template-imports/html/validate', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      expect(validated.status).toBe(200)
+      expect(await validated.json()).toMatchObject({ validation: { normalizedFiles: ['index.html', 'styles.css'] } })
+      const uploaded = await adminApp.request('http://127.0.0.1:3001/api/template-imports/html', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      expect(uploaded.status).toBe(202)
+      const result = (await uploaded.json() as { import: { created: boolean; job: { status: string } } }).import
+      expect(result).toMatchObject({ created: true, job: { status: 'pending' } })
+      const storedVersion = current.database.prepare('SELECT source_digest FROM template_versions LIMIT 1').get() as { source_digest: string }
+      const storedPackage = JSON.parse(current.store.read(storedVersion.source_digest).toString('utf8')) as { files: Record<string, string> }
+      expect(storedPackage.files['styles.css']).toContain('@scope (html[data-ppt-template-root])')
+      expect(storedPackage.files['index.html']).toContain('data-ppt-template-root=""')
+      const repeated = await current.imports.importHtml(body)
+      expect(repeated).toMatchObject({ created: false, job: { status: 'pending' } })
+    } finally { current.database.close(); rmSync(current.root, { recursive: true, force: true }) }
+  })
+
+  it('rolls back the catalog index atomically when preview queue registration fails', async () => {
+    const current = state()
+    try {
+      current.database.exec(`CREATE TRIGGER reject_html_preview_job BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'preview queue unavailable'); END`)
+      const body = htmlBody('<!doctype html><html><body><h1>原子回滚演练</h1></body></html>', { title: '原子回滚演练' })
+      await expect(current.imports.importHtml(body)).rejects.toThrow(/preview queue unavailable/)
+      expect(current.database.prepare('SELECT count(*) AS count FROM template_assets').get()).toEqual({ count: 0 })
+      expect(current.database.prepare('SELECT count(*) AS count FROM template_versions').get()).toEqual({ count: 0 })
+      expect(current.database.prepare('SELECT count(*) AS count FROM content_objects').get()).toEqual({ count: 0 })
+      expect(current.database.prepare('SELECT count(*) AS count FROM jobs').get()).toEqual({ count: 0 })
     } finally { current.database.close(); rmSync(current.root, { recursive: true, force: true }) }
   })
 
@@ -124,7 +190,7 @@ describe('PocketBay administrator template ZIP import', () => {
     } finally { current.database.close(); rmSync(current.root, { recursive: true, force: true }) }
   })
 
-  it('packages system Chromium and keeps the Web import surface on ZIP and PNG only', () => {
+  it('packages system Chromium and keeps the Web import surface on safe file inputs and PNG previews only', () => {
     const docker = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8')
     expect(docker).toContain('chromium fonts-noto-cjk')
     expect(docker).toContain('CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium')
@@ -135,5 +201,7 @@ describe('PocketBay administrator template ZIP import', () => {
       'apps/web/src/routes/(app)/admin/+page.svelte',
     ].map((path) => readFileSync(join(process.cwd(), path), 'utf8')).join('\n')
     expect(web).not.toMatch(/<iframe|srcdoc|\{@html|innerHTML|createObjectURL|file:\/\//i)
+    expect(web).toMatch(/\.html,\.htm|\.html\?\$/)
+    expect(web).toContain('/api/template-imports/html/validate')
   })
 })

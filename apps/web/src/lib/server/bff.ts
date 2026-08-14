@@ -68,10 +68,10 @@ function clientAddress(event: RequestEvent): string {
   }
 }
 
-async function writeBody(event: RequestEvent): Promise<string | Response> {
-  const rejected = validateBrowserWrite(event.request.headers, browserWriteOrigin(event))
+async function writeBody(event: RequestEvent, maxBytes?: number): Promise<string | Response> {
+  const rejected = validateBrowserWrite(event.request.headers, browserWriteOrigin(event), maxBytes)
   if (rejected) return rejected
-  return readBoundedBody(event.request.body)
+  return readBoundedBody(event.request.body, maxBytes)
 }
 
 function apiHeaders(event: RequestEvent, method: string): Headers {
@@ -79,10 +79,10 @@ function apiHeaders(event: RequestEvent, method: string): Headers {
   return trustedApiHeaders(event.request.headers, clientAddress(event), method, writeOrigin(event))
 }
 
-export async function forwardJson(event: RequestEvent, pathname: string): Promise<Response> {
+export async function forwardJson(event: RequestEvent, pathname: string, maxBytes?: number): Promise<Response> {
   const target = new URL(pathname, apiBaseUrl())
   const method = event.request.method
-  const bodyResult = method === 'GET' || method === 'HEAD' ? undefined : await writeBody(event)
+  const bodyResult = method === 'GET' || method === 'HEAD' ? undefined : await writeBody(event, maxBytes)
   if (bodyResult instanceof Response) return bodyResult
   const response = await fetch(target, { method, headers: apiHeaders(event, method), body: bodyResult, redirect: 'error' })
   const contentType = response.headers.get('content-type') ?? ''
