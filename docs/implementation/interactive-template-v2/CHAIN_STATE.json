@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P01",
-    "activePhaseThreadId": "019fffc5-7541-73c2-85a2-eee7f3555527",
+    "currentPhaseId": "P02",
+    "activePhaseThreadId": "01a00074-dbcb-7c01-b683-02efc6422852",
     "terminalPhaseId": "P07"
   },
   "phases": [
@@ -52,27 +52,36 @@
       "id": "P01",
       "title": "v2 协议与白名单导入",
       "objective": "增加 v2、规范化摘要、审核白名单和候选版本登记",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 45,
       "dependsOn": ["P00"],
       "successor": "P02",
       "threadId": "019fffc5-7541-73c2-85a2-eee7f3555527",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "f696ee8988f983f297a8d797308f7f73864a1221",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination dc99f08 exactly one atomic P01 commit across the twelve approved protocol, import, repository, test and handoff paths",
+          "parent review verified v1 compatibility, deterministic v2 SHA-256 allowlisting, ZIP-only policy and candidate registration without early current-version promotion",
+          "the single bounded repair fail-closed binds render source and content digests to the immutable TemplateVersion before derivative writes and promotion, with zero-side-effect negative coverage",
+          "parent Node 22.23.2 and pnpm 9.15.0 rerun: shared and API builds passed; 11 files and 57 tests passed; the planned P08 data-image regression remained the only exact failure",
+          "validator passed; main and PocketBay chain hashes were unchanged; worktree retained only .workbuddy/"
+        ]
+      }
     },
     {
       "id": "P02",
       "title": "沙箱运行与安全预览",
       "objective": "建立断网 iframe runtime 和白名单 v2 PNG 渲染",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "max",
       "estimatedContextPercent": 50,
       "dependsOn": ["P01"],
       "successor": "P03",
-      "threadId": null,
+      "threadId": "01a00074-dbcb-7c01-b683-02efc6422852",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -148,5 +157,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T18:16:08+08:00"
+  "updatedAt": "2026-08-14T21:27:42+08:00"
 }
