@@ -44,9 +44,12 @@ function configuredOrigin(): string {
 
 export function writeOrigin(event?: Pick<RequestEvent, 'url'>): string {
   const expected = configuredOrigin()
-  if (env.POCKETBAY_RUNTIME === 'true' && event && event.url.origin !== expected) {
-    throw new Error('PocketBay request Origin does not match POCKETBAY_PUBLIC_ORIGIN')
-  }
+  // PocketBay terminates TLS and may expose the loopback URL to SvelteKit for
+  // requests with a body. The browser Origin is checked by
+  // `validateBrowserWrite` before any write is forwarded; the API receives
+  // this fixed, configured origin. Do not compare against the proxy's
+  // internal `event.url.origin`, otherwise legitimate POSTs become 502s.
+  void event
   return expected
 }
 
@@ -54,6 +57,7 @@ function browserWriteOrigin(event: Pick<RequestEvent, 'url'>): string {
   const value = env.POCKETBAY_RUNTIME === 'true' ? writeOrigin(event) : (env.P15_BROWSER_ORIGIN ?? configuredOrigin())
   const parsed = new URL(value)
   if (value === 'https://ppt.ajjy-ai.site') return value
+  if (env.POCKETBAY_RUNTIME === 'true' && isPocketBayOrigin(value)) return value
   if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && ['127.0.0.1', 'localhost'].includes(parsed.hostname) && parsed.pathname === '/' && !parsed.search && !parsed.hash && !parsed.username && !parsed.password) return value
   throw new Error('P15_BROWSER_ORIGIN must be the production Origin or an explicit loopback test Origin')
 }
