@@ -1,12 +1,23 @@
 import type BetterSqlite3 from 'better-sqlite3'
+import {
+  isInteractiveTemplatePackageManifest,
+  type TemplatePackageSource as SharedTemplatePackageSource,
+  type TemplateSlotDefinition as SharedTemplateSlotDefinition,
+} from '@slide-maker/shared'
 import { isUserId, type OwnerContext } from '../owner.js'
 import { LocalContentStore, type StoredContentObject } from '../assets/content-store.js'
+import { isAllowlistedInteractiveTemplateDigest } from '../templates/interactive-template-allowlist.js'
+import { assertSafeInteractiveTemplatePackage } from '../templates/interactive-template-policy.js'
+import { compileInteractiveTemplateRuntime } from '../templates/interactive-template-runtime.js'
+import { serializeTemplatePackage } from '../templates/simulated-adapter.js'
 import { assertSafeExportPath, createStoredZip, readStoredZip, sha256 } from './offline-archive.js'
 
 type Database = BetterSqlite3.Database
 
-const EXPORT_CONTRACT = 'html-presentation-export/v2' as const
-const PACKAGE_CONTRACT = 'html-presentation-export-package/v2' as const
+const LEGACY_EXPORT_CONTRACT = 'html-presentation-export/v2' as const
+const LEGACY_PACKAGE_CONTRACT = 'html-presentation-export-package/v2' as const
+const EXPORT_CONTRACT = 'html-presentation-export/v3' as const
+const PACKAGE_CONTRACT = 'html-presentation-export-package/v3' as const
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SHA256 = /^[0-9a-f]{64}$/
 const MAX_ITEMS = 100
@@ -16,20 +27,11 @@ const MAX_ZIP_BYTES = 25_165_824
 const SAFE_PACKAGE_FILE = /^(?:[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*)+$/
 const FORBIDDEN_TEMPLATE_HTML = /<(?:script|iframe|frame|object|embed|form|base)\b|<meta\b[^>]*\bhttp-equiv\s*=|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|srcset|target|action|formaction|download)\s*=/i
 const TEMPLATE_REFERENCE = /\b(?:src|href|poster)\s*=\s*(["'])(.*?)\1/gi
+const DATA_IMAGE = /^data:image\/(png|jpeg|webp|gif);base64,([a-z0-9+/]+={0,2})$/i
+const MAX_DATA_IMAGE_BYTES = 2 * 1024 * 1024
 
-type TemplateSlotDefinition = { id: string; type: 'text' | 'color'; required: boolean; maxLength?: number; default?: string }
-type TemplatePackageSource = {
-  manifest: {
-    contractVersion: string
-    id: string
-    version: number
-    title: string
-    entry: string
-    files: string[]
-    slots: TemplateSlotDefinition[]
-  }
-  files: Readonly<Record<string, string>>
-}
+type TemplateSlotDefinition = SharedTemplateSlotDefinition
+type TemplatePackageSource = SharedTemplatePackageSource
 
 export class ExportRequestError extends Error {
   constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
@@ -57,10 +59,13 @@ export type ExportItemManifest = Readonly<{
   source: { sourceSha256: string; contentObjectSha256: string }
   slotOverrides: Record<string, string>
   verifiedDerivatives: { rendererVersion: string; previewSha256: string; thumbnailSha256: string }
+  /** P04 v3 package-local paths; absent on legacy v2 exports. */
+  thumbnailPath?: string
+  slidePath?: string
 }>
 
 export type PresentationExportManifest = Readonly<{
-  contractVersion: typeof EXPORT_CONTRACT
+  contractVersion: typeof EXPORT_CONTRACT | typeof LEGACY_EXPORT_CONTRACT
   exportId: string
   ownerUserId: string
   createdAt: number
@@ -194,29 +199,86 @@ function parseOverrides(value: string, slots: readonly TemplateSlotDefinition[])
   return result
 }
 
-function assertSafeStoredPackage(source: TemplatePackageSource): void {
+function assertDataImage(value: string): void {
+  const match = DATA_IMAGE.exec(value.trim())
+  if (!match) throw new ExportRequestError('Verified template data image is malformed or unsupported', 409)
+  const encoded = match[2]
+  const content = Buffer.from(encoded, 'base64')
+  if (content.byteLength === 0 || content.byteLength > MAX_DATA_IMAGE_BYTES
+    || content.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) {
+    throw new ExportRequestError('Verified template data image is malformed or too large', 409)
+  }
+  const signature = content.subarray(0, 12).toString('hex')
+  const kind = match[1].toLowerCase()
+  const valid = kind === 'png' ? signature.startsWith('89504e470d0a1a0a')
+    : kind === 'jpeg' ? signature.startsWith('ffd8ff')
+      : kind === 'gif' ? ['GIF87a', 'GIF89a'].includes(content.subarray(0, 6).toString('ascii'))
+        : content.subarray(0, 4).toString('ascii') === 'RIFF' && content.subarray(8, 12).toString('ascii') === 'WEBP'
+  if (!valid) throw new ExportRequestError('Verified template data image MIME type does not match its byte signature', 409)
+}
+
+function assertCommonStoredPackageShape(source: TemplatePackageSource): void {
   const { manifest, files } = source
-  if (manifest.contractVersion !== 'html-template/v1' || !ID.test(manifest.id) || !Number.isInteger(manifest.version) || manifest.version < 1 || manifest.entry !== 'index.html') throw new ExportRequestError('Verified template package identity is invalid', 409)
-  if (!Array.isArray(manifest.files) || manifest.files.length < 1 || manifest.files.length > 100 || new Set(manifest.files).size !== manifest.files.length || !manifest.files.includes(manifest.entry)) throw new ExportRequestError('Verified template package file manifest is invalid', 409)
-  if (!Array.isArray(manifest.slots) || manifest.slots.length > 100 || new Set(manifest.slots.map((slot) => slot.id)).size !== manifest.slots.length) throw new ExportRequestError('Verified template package slot manifest is invalid', 409)
+  if ((!isInteractiveTemplatePackageManifest(manifest) && manifest.contractVersion !== 'html-template/v1')
+    || !ID.test(manifest.id) || !Number.isInteger(manifest.version) || manifest.version < 1 || manifest.entry !== 'index.html') {
+    throw new ExportRequestError('Verified template package identity is invalid', 409)
+  }
+  if (!Array.isArray(manifest.files) || manifest.files.length < 1 || manifest.files.length > 100
+    || new Set(manifest.files).size !== manifest.files.length || !manifest.files.includes(manifest.entry)) {
+    throw new ExportRequestError('Verified template package file manifest is invalid', 409)
+  }
+  if (!Array.isArray(manifest.slots) || manifest.slots.length > 100 || new Set(manifest.slots.map((slot) => slot.id)).size !== manifest.slots.length) {
+    throw new ExportRequestError('Verified template package slot manifest is invalid', 409)
+  }
   for (const slot of manifest.slots) {
-    if (!isRecord(slot) || typeof slot.id !== 'string' || !ID.test(slot.id) || !['text', 'color'].includes(slot.type) || typeof slot.required !== 'boolean' || (slot.maxLength !== undefined && (!Number.isInteger(slot.maxLength) || slot.maxLength < 1 || slot.maxLength > 2_000)) || (slot.default !== undefined && (typeof slot.default !== 'string' || /[\u0000-\u001f\u007f]/.test(slot.default)))) {
+    if (!isRecord(slot) || typeof slot.id !== 'string' || !ID.test(slot.id) || !['text', 'color'].includes(slot.type)
+      || typeof slot.required !== 'boolean' || (slot.maxLength !== undefined && (!Number.isInteger(slot.maxLength) || slot.maxLength < 1 || slot.maxLength > 2_000))
+      || (slot.default !== undefined && (typeof slot.default !== 'string' || /[\u0000-\u001f\u007f]/.test(slot.default)))) {
       throw new ExportRequestError('Verified template package slot manifest is invalid', 409)
     }
   }
   const declared = new Set(manifest.files)
-  if (Object.keys(files).length !== declared.size || Object.keys(files).some((file) => !declared.has(file))) throw new ExportRequestError('Verified template package contains an undeclared file', 409)
+  if (Object.keys(files).length !== declared.size || Object.keys(files).some((file) => !declared.has(file))) {
+    throw new ExportRequestError('Verified template package contains an undeclared file', 409)
+  }
+}
+
+function assertSafeStoredPackage(source: TemplatePackageSource): void {
+  assertCommonStoredPackageShape(source)
+  const { manifest, files } = source
+  if (isInteractiveTemplatePackageManifest(manifest)) {
+    try { assertSafeInteractiveTemplatePackage(source) }
+    catch (error) { throw new ExportRequestError(error instanceof Error ? error.message : 'Verified interactive template package is unsafe', 409) }
+    return
+  }
   for (const file of manifest.files) {
-    if (!SAFE_PACKAGE_FILE.test(file) || file.includes('..') || !/\.(?:html|css)$/.test(file) || typeof files[file] !== 'string') throw new ExportRequestError('Verified template package contains an unsafe file path', 409)
+    if (!SAFE_PACKAGE_FILE.test(file) || file.includes('..') || !/\.(?:html|css)$/.test(file) || typeof files[file] !== 'string') {
+      throw new ExportRequestError('Verified template package contains an unsafe file path', 409)
+    }
     const value = files[file]
     if (file.endsWith('.css')) {
-      if (/@import\b|\burl\s*\(/i.test(value)) throw new ExportRequestError('Verified template CSS contains a resource fetch', 409)
+      if (/@import\b/i.test(value)) throw new ExportRequestError('Verified template CSS contains a resource fetch', 409)
+      for (const match of value.matchAll(/\burl\s*\(\s*(?:(["'])(.*?)\1|([^)]*))\s*\)/gi)) {
+        const reference = (match[2] ?? match[3] ?? '').trim()
+        if (!reference.toLowerCase().startsWith('data:image/')) throw new ExportRequestError('Verified template CSS contains a resource fetch', 409)
+        assertDataImage(reference)
+      }
       continue
     }
-    if (FORBIDDEN_TEMPLATE_HTML.test(value) || /\b(?:src|href|poster)\s*=\s*(?!["'])/i.test(value)) throw new ExportRequestError('Verified template HTML contains active content', 409)
+    if (FORBIDDEN_TEMPLATE_HTML.test(value) || /\b(?:src|href|poster)\s*=\s*(?!["'])/i.test(value)) {
+      throw new ExportRequestError('Verified template HTML contains active content', 409)
+    }
     for (const match of value.matchAll(TEMPLATE_REFERENCE)) {
-      const reference = match[2].trim().split(/[?#]/, 1)[0]
-      if (!reference || reference.startsWith('/') || reference.split('/').includes('..') || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(reference) || !declared.has(reference)) throw new ExportRequestError('Verified template HTML contains an undeclared reference', 409)
+      const raw = match[2].trim()
+      if (raw.toLowerCase().startsWith('data:image/')) {
+        if (match[0].toLowerCase().startsWith('href')) throw new ExportRequestError('Verified template HTML contains an undeclared reference', 409)
+        assertDataImage(raw)
+        continue
+      }
+      const reference = raw.split(/[?#]/, 1)[0]
+      if (!reference || reference.startsWith('/') || reference.split('/').includes('..') || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(reference) || !manifest.files.includes(reference)) {
+        throw new ExportRequestError('Verified template HTML contains an undeclared reference', 409)
+      }
     }
   }
 }
@@ -232,7 +294,8 @@ function readPackage(content: Buffer): TemplatePackageSource {
   if (!isRecord(parsed) || !isRecord(parsed.manifest) || !isRecord(parsed.files)) throw new ExportRequestError('Verified CAS template package shape is invalid', 409)
   const source = parsed as unknown as TemplatePackageSource
   assertSafeStoredPackage(source)
-  if (!serializePackage(source).equals(content)) throw new ExportRequestError('Verified CAS template package is not canonical', 409)
+  const canonical = isInteractiveTemplatePackageManifest(source.manifest) ? serializeTemplatePackage(source) : serializePackage(source)
+  if (!canonical.equals(content)) throw new ExportRequestError('Verified CAS template package is not canonical', 409)
   return source
 }
 
@@ -275,10 +338,15 @@ function scopeCss(css: string, scope: string): string {
 function renderTemplateBody(item: SnapshotItem): { body: string; css: string } {
   const entry = item.source.package.files[item.source.package.manifest.entry]
   const bodyMatch = entry.match(/<body(?:\s[^>]*)?>([\s\S]*)<\/body\s*>/i)
-  if (!bodyMatch || (entry.match(/<body\b/gi)?.length ?? 0) !== 1 || /\b(?:src|href|poster)\s*=/i.test(bodyMatch[1])) {
+  if (!bodyMatch || (entry.match(/<body\b/gi)?.length ?? 0) !== 1) {
     throw new ExportRequestError('Template entry is outside the P08 fixture export profile', 409)
   }
   let body = bodyMatch[1]
+  for (const match of body.matchAll(TEMPLATE_REFERENCE)) {
+    const reference = match[2].trim()
+    if (reference.toLowerCase().startsWith('data:image/')) assertDataImage(reference)
+    else throw new ExportRequestError('Template entry is outside the P08 fixture export profile', 409)
+  }
   for (const slot of item.source.package.manifest.slots) {
     const value = item.slotOverrides[slot.id] ?? slot.default
     if (value === undefined) continue
@@ -307,20 +375,98 @@ function renderTemplateBody(item: SnapshotItem): { body: string; css: string } {
   return { body, css }
 }
 
-export function assertSafeExportHtml(content: string, allowedResourcePaths: ReadonlySet<string>): void {
+function runtimeSlotOverrides(item: SnapshotItem): Record<string, string> {
+  const values: Record<string, string> = {}
+  for (const slot of item.source.package.manifest.slots) {
+    const value = item.slotOverrides[slot.id] ?? slot.default
+    if (value !== undefined) values[slot.id] = value
+  }
+  return values
+}
+
+function renderInteractiveRuntime(item: SnapshotItem): Buffer {
+  try {
+    return compileInteractiveTemplateRuntime(item.source.package, {
+      expectedSourceDigest: item.source.sourceSha256,
+      expectedAssetId: item.template.assetId,
+      expectedVersion: item.template.versionNumber,
+      offline: true,
+      slotOverrides: runtimeSlotOverrides(item),
+    }).html
+  } catch (error) {
+    if (error instanceof ExportRequestError) throw error
+    throw new ExportRequestError(error instanceof Error ? error.message : 'Interactive template runtime compilation failed', 409)
+  }
+}
+
+export type SafeExportHtmlOptions = Readonly<{
+  allowOfflineIframes?: boolean
+  allowDataImages?: boolean
+}>
+
+export function assertSafeExportHtml(content: string, allowedResourcePaths: ReadonlySet<string>, options: SafeExportHtmlOptions = {}): void {
   if (Buffer.byteLength(content, 'utf8') > MAX_HTML_BYTES) throw new ExportRequestError('Generated HTML exceeds the export size limit', 409)
-  if (/<(?:script|iframe|frame|object|embed|form|base)\b|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|action|formaction|target|download)\s*=/i.test(content)) throw new ExportRequestError('Generated HTML contains an active or navigational element', 409)
-  if (/\b(?:https?|file|data|blob|javascript):|\/\/|@import\b|\burl\s*\(/i.test(content)) throw new ExportRequestError('Generated HTML contains an external or executable reference', 409)
+  const active = options.allowOfflineIframes
+    ? /<(?:script|frame|object|embed|form|base)\b|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|action|formaction|target|download)\s*=/i
+    : /<(?:script|iframe|frame|object|embed|form|base)\b|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|action|formaction|target|download)\s*=/i
+  if (active.test(content)) throw new ExportRequestError('Generated HTML contains an active or navigational element', 409)
+  if (/\b(?:https?|file|blob|javascript):|(?:src|href)\s*=\s*["']\/\/|@import\b/i.test(content)) throw new ExportRequestError('Generated HTML contains an external or executable reference', 409)
+  for (const match of content.matchAll(/\burl\s*\(\s*(?:(["'])(.*?)\1|([^)]*))\s*\)/gi)) {
+    const reference = (match[2] ?? match[3] ?? '').trim()
+    if (!options.allowDataImages || !reference.toLowerCase().startsWith('data:image/')) throw new ExportRequestError('Generated HTML contains an external or executable reference', 409)
+    assertDataImage(reference)
+  }
   if (/\b(?:src|href)\s*=\s*(?!["'])/i.test(content)) throw new ExportRequestError('Generated HTML contains an unquoted resource reference', 409)
+  if (options.allowOfflineIframes) {
+    for (const match of content.matchAll(/<iframe\b([^>]*)>/gi)) {
+      const fragment = match[1]
+      if (/allow-same-origin/i.test(fragment) || !/\bsandbox\s*=\s*["']allow-scripts["']/i.test(fragment)) {
+        throw new ExportRequestError('Generated HTML iframe sandbox is outside the offline export boundary', 409)
+      }
+      const src = /\bsrc\s*=\s*(["'])(.*?)\1/i.exec(fragment)?.[2]
+      if (!src || !allowedResourcePaths.has(src)) throw new ExportRequestError('Generated HTML iframe references a file outside the export allowlist', 409)
+    }
+  }
   for (const match of content.matchAll(/\b(src|href)\s*=\s*(["'])(.*?)\2/gi)) {
     const value = match[3]
     if (match[1].toLowerCase() === 'href' && /^#slide-[0-9]+$/.test(value)) continue
+    if (value.toLowerCase().startsWith('data:image/')) {
+      if (match[1].toLowerCase() === 'href' || !options.allowDataImages) throw new ExportRequestError('Generated HTML contains an external or executable reference', 409)
+      assertDataImage(value)
+      continue
+    }
     if (!allowedResourcePaths.has(value)) throw new ExportRequestError('Generated HTML references a file outside the export allowlist', 409)
   }
 }
 
-function publicItems(items: readonly SnapshotItem[]): ExportItemManifest[] {
-  return items.map((item) => ({
+function assertOfflineRuntimeHtml(content: Buffer): void {
+  const html = content.toString('utf8')
+  if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES || /allow-same-origin|(?:https?|file|blob|javascript):\/\//i.test(html)) {
+    throw new ExportRequestError('Generated interactive runtime is outside the offline export boundary', 409)
+  }
+  if (!/html-template-runtime\/v1/.test(html) || !/sandbox allow-scripts/i.test(html)
+    || !/frame-src data:/i.test(html) || !/connect-src 'none'/i.test(html) || !/<iframe\b[^>]*\bsandbox=["']allow-scripts["']/i.test(html)
+    || !/templateDocumentUrl\s*=\s*["']data:text\/html;base64,/i.test(html)) {
+    throw new ExportRequestError('Generated interactive runtime does not carry the approved sandbox protocol', 409)
+  }
+  const data = /templateDocumentUrl\s*=\s*["'](data:text\/html;base64,[^"']+)["']/i.exec(html)?.[1]
+  if (!data) throw new ExportRequestError('Generated interactive runtime inner document is missing', 409)
+  let inner: string
+  try { inner = Buffer.from(data.slice('data:text/html;base64,'.length), 'base64').toString('utf8') }
+  catch { throw new ExportRequestError('Generated interactive runtime inner document is malformed', 409) }
+  if (!/<script\b[^>]*data-ppt-template-runtime=["']bootstrap["']/i.test(inner)
+    || !/connect-src 'none'/i.test(inner) || !/frame-src data:/i.test(inner) || !/sandbox allow-scripts/i.test(inner)
+    || /(?:https?|file|blob|javascript):\/\//i.test(inner) || /allow-same-origin/i.test(inner)) {
+    throw new ExportRequestError('Generated interactive runtime inner document is unsafe', 409)
+  }
+  for (const match of inner.matchAll(/\b(src|href)\s*=\s*(["'])(.*?)\2/gi)) {
+    if (!match[3].toLowerCase().startsWith('data:image/')) throw new ExportRequestError('Generated interactive runtime contains an undeclared resource', 409)
+    assertDataImage(match[3])
+  }
+}
+
+function publicItems(items: readonly SnapshotItem[], rendered?: Pick<RenderedExport, 'thumbnailPaths' | 'slidePaths'>): ExportItemManifest[] {
+  return items.map((item, index) => ({
     itemId: item.itemId,
     position: item.position,
     templateVersionId: item.templateVersionId,
@@ -328,23 +474,63 @@ function publicItems(items: readonly SnapshotItem[]): ExportItemManifest[] {
     source: { sourceSha256: item.source.sourceSha256, contentObjectSha256: item.source.contentObjectSha256 },
     slotOverrides: item.slotOverrides,
     verifiedDerivatives: item.verifiedDerivatives,
+    ...(rendered ? { thumbnailPath: rendered.thumbnailPaths[index], slidePath: rendered.slidePaths[index] } : {}),
   }))
 }
 
-function renderHtml(snapshot: ExportSnapshot): { content: Buffer; thumbnails: Array<{ relativePath: string; content: Buffer }> } {
-  const thumbnails = snapshot.items.map((item) => ({ relativePath: `assets/slide-${String(item.position + 1).padStart(4, '0')}-thumbnail.png`, content: item.thumbnail }))
-  const allowed = new Set<string>()
-  const rendered = snapshot.items.map(renderTemplateBody)
-  const navigation = snapshot.items.map((item, index) => `<a href="#slide-${index + 1}"><span>${index + 1}</span><strong>${escapeHtml(item.template.title)}</strong></a>`).join('')
-  const slides = snapshot.items.map((item, index) => `<section id="slide-${index + 1}" class="p08-slide" data-slide-position="${item.position}" aria-label="Slide ${index + 1}: ${escapeHtml(item.template.title)}">${rendered[index].body}</section>`).join('\n')
-  const sourceCss = rendered.map((item) => item.css).join('\n')
-  const content = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"><title>${escapeHtml(snapshot.presentation.name)}</title><style>
-*{box-sizing:border-box}html{background:#e9eef5;color:#0f172a;font-family:system-ui,sans-serif}body{margin:0}.p08-export-header{padding:1rem 1.25rem;background:#fff;border-bottom:1px solid #cbd5e1}.p08-export-header h1{margin:0;font-size:1.1rem}.p08-export-header p{margin:.35rem 0 0;color:#64748b;font-size:.8rem}.p08-thumbnails{display:flex;gap:.6rem;padding:.75rem 1.25rem;overflow:auto;background:#f8fafc}.p08-thumbnails a{display:flex;align-items:center;gap:.45rem;flex:0 0 auto;padding:.45rem .65rem;border:1px solid #94a3b8;border-radius:.35rem;background:#fff;color:#0f172a;text-decoration:none}.p08-thumbnails span{display:grid;place-items:center;width:1.35rem;height:1.35rem;background:#0f172a;color:#fff;border-radius:999px;font-size:.7rem}.p08-thumbnails strong{font-size:.75rem}.p08-deck{display:grid;gap:1.5rem;padding:1.5rem}.p08-slide{width:min(100%,1280px);min-height:min(720px,70vw);margin:auto;overflow:hidden;background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.12)}@media(max-width:700px){.p08-deck{padding:.75rem}.p08-slide{min-height:56.25vw}}
-${sourceCss}</style></head><body><header class="p08-export-header"><h1>${escapeHtml(snapshot.presentation.name)}</h1><p>Revision ${snapshot.presentation.revision} · ${snapshot.items.length} slides · offline export</p></header><nav class="p08-thumbnails" aria-label="Slides">${navigation}</nav><main class="p08-deck">${slides}</main></body></html>
-`
-  assertSafeExportHtml(content, allowed)
-  return { content: Buffer.from(content, 'utf8'), thumbnails }
+type RenderedExport = {
+  content: Buffer
+  thumbnails: Array<{ relativePath: string; content: Buffer }>
+  slides: Array<{ relativePath: string; content: Buffer; interactive: boolean }>
+  thumbnailPaths: string[]
+  slidePaths: string[]
+}
+
+function renderHtml(snapshot: ExportSnapshot): RenderedExport {
+  const thumbnails: Array<{ relativePath: string; content: Buffer }> = []
+  const thumbnailPaths: string[] = []
+  const byThumbnailDigest = new Map<string, string>()
+  for (const item of snapshot.items) {
+    const digest = sha256(item.thumbnail)
+    const existing = byThumbnailDigest.get(digest)
+    const relativePath = existing ?? `assets/slide-${String(item.position + 1).padStart(4, '0')}-thumbnail.png`
+    if (!existing) {
+      byThumbnailDigest.set(digest, relativePath)
+      thumbnails.push({ relativePath, content: item.thumbnail })
+    }
+    thumbnailPaths.push(relativePath)
+  }
+
+  const slides: RenderedExport['slides'] = []
+  const slidePaths: string[] = []
+  snapshot.items.forEach((item, index) => {
+    const relativePath = `slides/slide-${String(index + 1).padStart(4, '0')}.html`
+    slidePaths.push(relativePath)
+    if (isInteractiveTemplatePackageManifest(item.source.package.manifest)) {
+      const content = renderInteractiveRuntime(item)
+      assertOfflineRuntimeHtml(content)
+      slides.push({ relativePath, content, interactive: true })
+      return
+    }
+    const rendered = renderTemplateBody(item)
+    const content = Buffer.from(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"><title>${escapeHtml(item.template.title)}</title><style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#fff;color:#0f172a;font-family:system-ui,sans-serif}.p08-slide{width:100%;min-height:100vh;overflow:hidden;background:#fff}
+${rendered.css}</style></head><body><section class="p08-slide" data-slide-position="${item.position}" aria-label="Slide ${index + 1}: ${escapeHtml(item.template.title)}">${rendered.body}</section></body></html>`, 'utf8')
+    assertSafeExportHtml(content.toString('utf8'), new Set(), { allowDataImages: true })
+    slides.push({ relativePath, content, interactive: false })
+  })
+
+  const allowed = new Set([...slidePaths, ...thumbnailPaths])
+  const navigation = snapshot.items.map((item, index) => `<a href="#slide-${index + 1}"><img alt="" width="160" height="90" src="${thumbnailPaths[index]}"><span>${index + 1}</span><strong>${escapeHtml(item.template.title)}</strong></a>`).join('')
+  const frames = snapshot.items.map((item, index) => `<section id="slide-${index + 1}" class="p08-slide-frame" aria-label="Slide ${index + 1}: ${escapeHtml(item.template.title)}"><iframe title="${escapeHtml(item.template.title)}" sandbox="allow-scripts" src="${slidePaths[index]}"></iframe></section>`).join('\n')
+  const content = Buffer.from(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'self'; object-src 'none'; form-action 'none'; base-uri 'none'"><title>${escapeHtml(snapshot.presentation.name)}</title><style>
+*{box-sizing:border-box}html{background:#e9eef5;color:#0f172a;font-family:system-ui,sans-serif}body{margin:0}.p08-export-header{padding:1rem 1.25rem;background:#fff;border-bottom:1px solid #cbd5e1}.p08-export-header h1{margin:0;font-size:1.1rem}.p08-export-header p{margin:.35rem 0 0;color:#64748b;font-size:.8rem}.p08-thumbnails{display:flex;gap:.6rem;padding:.75rem 1.25rem;overflow:auto;background:#f8fafc}.p08-thumbnails a{display:flex;align-items:center;gap:.45rem;flex:0 0 auto;padding:.45rem .65rem;border:1px solid #94a3b8;border-radius:.35rem;background:#fff;color:#0f172a;text-decoration:none}.p08-thumbnails img{display:block;object-fit:cover}.p08-thumbnails span{display:grid;place-items:center;width:1.35rem;height:1.35rem;background:#0f172a;color:#fff;border-radius:999px;font-size:.7rem}.p08-thumbnails strong{font-size:.75rem}.p08-deck{display:grid;gap:1.5rem;padding:1.5rem}.p08-slide-frame{width:min(100%,1280px);height:min(720px,70vw);margin:auto;overflow:hidden;background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.12)}.p08-slide-frame iframe{display:block;width:100%;height:100%;border:0}
+</style></head><body><header class="p08-export-header"><h1>${escapeHtml(snapshot.presentation.name)}</h1><p>Revision ${snapshot.presentation.revision} · ${snapshot.items.length} slides · offline export</p></header><nav class="p08-thumbnails" aria-label="Slides">${navigation}</nav><main class="p08-deck">${frames}</main></body></html>
+`, 'utf8')
+  assertSafeExportHtml(content.toString('utf8'), allowed, { allowOfflineIframes: true })
+  return { content, thumbnails, slides, thumbnailPaths, slidePaths }
 }
 
 function fileManifest(relativePath: string, mediaType: string, content: Buffer): ExportFileManifest {
@@ -375,25 +561,37 @@ function assertStoredManifestShape(manifest: PresentationExportManifest): void {
     throw new ExportRequestError('Stored export manifest snapshot is invalid', 409)
   }
   manifest.items.forEach((item, index) => {
-    if (!item || !ID.test(item.itemId) || !ID.test(item.templateVersionId) || item.position !== index || !isRecord(item.template) || !ID.test(item.template.assetId) || typeof item.template.title !== 'string' || !Number.isInteger(item.template.versionNumber) || item.template.versionNumber < 1 || item.template.contractVersion !== 'html-template/v1') {
+    if (!item || !ID.test(item.itemId) || !ID.test(item.templateVersionId) || item.position !== index || !isRecord(item.template) || !ID.test(item.template.assetId) || typeof item.template.title !== 'string' || !Number.isInteger(item.template.versionNumber) || item.template.versionNumber < 1 || !['html-template/v1', 'html-template/v2'].includes(item.template.contractVersion)) {
       throw new ExportRequestError('Stored export manifest item identity is invalid', 409)
     }
     if (!isRecord(item.source) || !SHA256.test(item.source.sourceSha256) || item.source.contentObjectSha256 !== item.source.sourceSha256 || !isRecord(item.slotOverrides) || JSON.stringify(item.slotOverrides).length > 8_192 || Object.values(item.slotOverrides).some((value) => typeof value !== 'string' || /[\u0000-\u001f\u007f<>]/.test(value))) {
       throw new ExportRequestError('Stored export manifest item content is invalid', 409)
     }
+    if (item.template.contractVersion === 'html-template/v2' && !isAllowlistedInteractiveTemplateDigest(item.source.sourceSha256)) {
+      throw new ExportRequestError('Stored export interactive source digest is not allowlisted', 409)
+    }
     if (!isRecord(item.verifiedDerivatives) || typeof item.verifiedDerivatives.rendererVersion !== 'string' || !item.verifiedDerivatives.rendererVersion || /[\u0000-\u001f\u007f]/.test(item.verifiedDerivatives.rendererVersion) || !SHA256.test(item.verifiedDerivatives.previewSha256) || !SHA256.test(item.verifiedDerivatives.thumbnailSha256)) {
       throw new ExportRequestError('Stored export manifest derivative identity is invalid', 409)
     }
   })
-  if (manifest.exportId !== `export-${sha256(Buffer.from(JSON.stringify({ ownerUserId: manifest.ownerUserId, presentation: manifest.presentation, items: manifest.items }), 'utf8'))}`) throw new ExportRequestError('Stored export manifest fingerprint is invalid', 409)
-  if (manifest.package.files.length !== manifest.items.length + 2) throw new ExportRequestError('Stored export file allowlist size is invalid', 409)
+  const fingerprintItems = manifest.items.map(({ thumbnailPath: _thumbnailPath, slidePath: _slidePath, ...item }) => item)
+  if (manifest.exportId !== `export-${sha256(Buffer.from(JSON.stringify({ ownerUserId: manifest.ownerUserId, presentation: manifest.presentation, items: fingerprintItems }), 'utf8'))}`) throw new ExportRequestError('Stored export manifest fingerprint is invalid', 409)
+  const legacy = manifest.contractVersion === LEGACY_EXPORT_CONTRACT
+  if (legacy && manifest.package.files.length !== manifest.items.length + 2) throw new ExportRequestError('Stored export file allowlist size is invalid', 409)
+  if (!legacy && manifest.package.files.length < 3) throw new ExportRequestError('Stored export file allowlist size is invalid', 409)
   const index = manifest.package.files.find((file) => file.relativePath === 'index.html')
   const embedded = manifest.package.files.find((file) => file.relativePath === 'manifest.json')
   if (!index || index.mediaType !== 'text/html; charset=utf-8' || index.sha256 !== manifest.package.htmlSha256 || !embedded || embedded.mediaType !== 'application/json') throw new ExportRequestError('Stored export primary file manifest is invalid', 409)
   for (const item of manifest.items) {
-    const path = `assets/slide-${String(item.position + 1).padStart(4, '0')}-thumbnail.png`
+    const path = legacy ? `assets/slide-${String(item.position + 1).padStart(4, '0')}-thumbnail.png` : item.thumbnailPath
+    if (!path || !SAFE_PACKAGE_FILE.test(path)) throw new ExportRequestError('Stored export thumbnail path is invalid', 409)
     const thumbnail = manifest.package.files.find((file) => file.relativePath === path)
     if (!thumbnail || thumbnail.mediaType !== 'image/png' || thumbnail.sha256 !== item.verifiedDerivatives.thumbnailSha256) throw new ExportRequestError('Stored export thumbnail manifest is invalid', 409)
+    if (!legacy) {
+      if (!item.slidePath || !SAFE_PACKAGE_FILE.test(item.slidePath)) throw new ExportRequestError('Stored export slide path is invalid', 409)
+      const slide = manifest.package.files.find((file) => file.relativePath === item.slidePath)
+      if (!slide || slide.mediaType !== 'text/html; charset=utf-8') throw new ExportRequestError('Stored export slide manifest is invalid', 409)
+    }
   }
 }
 
@@ -410,20 +608,26 @@ export class PresentationExportRepository {
     const exportId = `export-${fingerprint}`
     const createdAt = Date.now()
     const rendered = renderHtml(snapshot)
+    const exportItems = publicItems(snapshot.items, rendered)
     const htmlFile = fileManifest('index.html', 'text/html; charset=utf-8', rendered.content)
-    const payloadFiles = [htmlFile, ...rendered.thumbnails.map((file) => fileManifest(file.relativePath, 'image/png', file.content))]
+    const payloadFiles = [
+      htmlFile,
+      ...rendered.slides.map((file) => fileManifest(file.relativePath, 'text/html; charset=utf-8', file.content)),
+      ...rendered.thumbnails.map((file) => fileManifest(file.relativePath, 'image/png', file.content)),
+    ]
     const packageManifest = {
       contractVersion: PACKAGE_CONTRACT,
       exportId,
       ownerUserId: owner.id,
       presentation: snapshot.presentation,
-      items: publicItems(snapshot.items),
+      items: exportItems,
       files: payloadFiles,
     }
     const embeddedManifest = Buffer.from(`${JSON.stringify(packageManifest, null, 2)}\n`, 'utf8')
     const embeddedManifestFile = fileManifest('manifest.json', 'application/json', embeddedManifest)
     const zip = createStoredZip([
       { relativePath: 'index.html', content: rendered.content },
+      ...rendered.slides,
       ...rendered.thumbnails,
       { relativePath: 'manifest.json', content: embeddedManifest },
     ])
@@ -434,7 +638,7 @@ export class PresentationExportRepository {
       ownerUserId: owner.id,
       createdAt,
       presentation: snapshot.presentation,
-      items: publicItems(snapshot.items),
+      items: exportItems,
       package: {
         entry: 'index.html',
         embeddedManifest: 'manifest.json',
@@ -522,6 +726,11 @@ export class PresentationExportRepository {
       if (source.manifest.id !== row.asset_id || source.manifest.version !== row.version_number || source.manifest.contractVersion !== row.contract_version || JSON.stringify({ slots: source.manifest.slots }) !== row.slot_schema) {
         throw new ExportRequestError('Template source does not match its fixed TemplateVersion', 409)
       }
+      if (isInteractiveTemplatePackageManifest(source.manifest)) {
+        if (!isAllowlistedInteractiveTemplateDigest(row.source_digest) || sha256(serializeTemplatePackage(source)) !== row.source_digest) {
+          throw new ExportRequestError('Interactive TemplateVersion source digest is not in the reviewed export allowlist', 409)
+        }
+      }
       const derivatives = this.database.prepare(`
         SELECT preview.renderer_version,
           preview.content_digest AS preview_digest, preview_object.media_type AS preview_media_type,
@@ -597,7 +806,7 @@ export class PresentationExportRepository {
     try { parsed = JSON.parse(manifestBytes.toString('utf8')) } catch { throw new ExportRequestError('Stored export manifest is malformed', 409) }
     if (!isRecord(parsed) || `${JSON.stringify(parsed, null, 2)}\n` !== manifestBytes.toString('utf8')) throw new ExportRequestError('Stored export manifest is not canonical', 409)
     const manifest = parsed as unknown as PresentationExportManifest
-    if (manifest.contractVersion !== EXPORT_CONTRACT || manifest.exportId !== row.id || manifest.ownerUserId !== row.owner_user_id || !isUserId(manifest.ownerUserId) || manifest.presentation?.id !== row.presentation_id || manifest.presentation.revision !== row.presentation_revision || manifest.createdAt !== row.created_at || !Array.isArray(manifest.items) || !isRecord(manifest.package)) {
+    if (![LEGACY_EXPORT_CONTRACT, EXPORT_CONTRACT].includes(manifest.contractVersion) || manifest.exportId !== row.id || manifest.ownerUserId !== row.owner_user_id || !isUserId(manifest.ownerUserId) || manifest.presentation?.id !== row.presentation_id || manifest.presentation.revision !== row.presentation_revision || manifest.createdAt !== row.created_at || !Array.isArray(manifest.items) || !isRecord(manifest.package)) {
       throw new ExportRequestError('Stored export manifest identity is invalid', 409)
     }
     if (manifest.package.entry !== 'index.html' || manifest.package.embeddedManifest !== 'manifest.json' || manifest.package.htmlSha256 !== row.html_digest || manifest.package.zipSha256 !== row.zip_digest || manifest.package.zipByteSize !== zip.byteLength || !Array.isArray(manifest.package.files)) {
@@ -622,12 +831,25 @@ export class PresentationExportRepository {
     const embedded = archive.get('manifest.json')
     let embeddedValue: unknown
     try { embeddedValue = embedded ? JSON.parse(embedded.toString('utf8')) : null } catch { throw new ExportRequestError('Embedded export manifest is malformed', 409) }
-    if (!isRecord(embeddedValue) || embeddedValue.contractVersion !== PACKAGE_CONTRACT || embeddedValue.exportId !== row.id || embeddedValue.ownerUserId !== row.owner_user_id || JSON.stringify(embeddedValue.presentation) !== JSON.stringify(manifest.presentation) || JSON.stringify(embeddedValue.items) !== JSON.stringify(manifest.items)) {
+    const expectedPackageContract = manifest.contractVersion === LEGACY_EXPORT_CONTRACT ? LEGACY_PACKAGE_CONTRACT : PACKAGE_CONTRACT
+    if (!isRecord(embeddedValue) || embeddedValue.contractVersion !== expectedPackageContract || embeddedValue.exportId !== row.id || embeddedValue.ownerUserId !== row.owner_user_id || JSON.stringify(embeddedValue.presentation) !== JSON.stringify(manifest.presentation) || JSON.stringify(embeddedValue.items) !== JSON.stringify(manifest.items)) {
       throw new ExportRequestError('Embedded export manifest does not match the audit manifest', 409)
     }
     const embeddedFiles = embeddedValue.files
     if (!Array.isArray(embeddedFiles) || JSON.stringify(embeddedFiles) !== JSON.stringify(manifest.package.files.filter((file) => file.relativePath !== 'manifest.json'))) throw new ExportRequestError('Embedded export file allowlist is invalid', 409)
-    assertSafeExportHtml(html.toString('utf8'), new Set(manifest.package.files.filter((file) => file.mediaType === 'image/png').map((file) => file.relativePath)))
+    const isLegacy = manifest.contractVersion === LEGACY_EXPORT_CONTRACT
+    const allowedImages = new Set(manifest.package.files.filter((file) => file.mediaType === 'image/png').map((file) => file.relativePath))
+    const allowedSlides = new Set(manifest.package.files.filter((file) => file.mediaType === 'text/html; charset=utf-8' && file.relativePath !== 'index.html').map((file) => file.relativePath))
+    assertSafeExportHtml(html.toString('utf8'), new Set([...allowedImages, ...allowedSlides]), isLegacy ? {} : { allowOfflineIframes: true })
+    if (!isLegacy) {
+      for (const item of manifest.items) {
+        const slidePath = item.slidePath!
+        const slide = archive.get(slidePath)
+        if (!slide) throw new ExportRequestError('Stored export slide is missing', 409)
+        if (item.template.contractVersion === 'html-template/v2') assertOfflineRuntimeHtml(slide)
+        else assertSafeExportHtml(slide.toString('utf8'), new Set(), { allowDataImages: true })
+      }
+    }
     return { manifest, html, zip }
   }
 }

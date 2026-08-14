@@ -36,6 +36,10 @@ export type InteractiveTemplateRuntimeOptions = Readonly<{
   expectedSourceDigest?: string
   expectedAssetId?: string
   expectedVersion?: number
+  /** P04 only: make the returned document self-contained when written to an offline ZIP. */
+  offline?: boolean
+  /** P04 only: apply immutable PresentationItem slot values inside the opaque document. */
+  slotOverrides?: Readonly<Record<string, string>>
 }>
 
 type ParsedAttribute = { name: string; value: string | null }
@@ -134,6 +138,8 @@ function templateDocumentBootstrap(input: {
   version: number
   styles: readonly string[]
   scripts: readonly string[]
+  slots: readonly { id: string; type: 'text' | 'color' }[]
+  slotOverrides: Readonly<Record<string, string>>
 }): string {
   const identity = safeJavascriptValue({ assetId: input.assetId, version: input.version, sourceDigest: input.sourceDigest })
   return `<script nonce="${input.nonce}" data-ppt-template-runtime="bootstrap">
@@ -145,6 +151,8 @@ function templateDocumentBootstrap(input: {
   const nonce = ${safeJavascriptValue(input.nonce)}
   const styles = ${safeJavascriptValue(input.styles)}
   const scripts = ${safeJavascriptValue(input.scripts)}
+  const slotTypes = ${safeJavascriptValue(Object.fromEntries(input.slots.map((slot) => [slot.id, slot.type])))}
+  const slotOverrides = Object.freeze(${safeJavascriptValue(input.slotOverrides)})
   let lastSequence = 0
   let failed = false
   let errorSent = false
@@ -175,6 +183,17 @@ function templateDocumentBootstrap(input: {
     document.dispatchEvent(new CustomEvent(eventName, { detail: Object.freeze({ sequence: command.sequence }) }))
     event.stopImmediatePropagation()
   }, true)
+  for (const [slotId, value] of Object.entries(slotOverrides)) {
+    const slotType = slotTypes[slotId]
+    if (slotType !== 'text' && slotType !== 'color') continue
+    for (const element of document.querySelectorAll('[data-template-slot="' + slotId + '"]')) {
+      if (slotType === 'text') element.textContent = value
+      else {
+        element.style.borderTopColor = value
+        element.style.setProperty('--template-slot-color', value)
+      }
+    }
+  }
   for (const content of styles) {
     const style = document.createElement('style')
     style.nonce = nonce
@@ -203,9 +222,11 @@ function runtimeSupervisor(input: {
   assetId: string
   version: number
   templateDocumentUrl: string
+  contentSecurityPolicy?: string
 }): string {
   const identity = safeJavascriptValue({ assetId: input.assetId, version: input.version, sourceDigest: input.sourceDigest })
-  return `<!doctype html><html><head><meta charset="utf-8"><style nonce="${input.nonce}" data-ppt-template-runtime="supervisor-style">
+  const cspMeta = input.contentSecurityPolicy ? `<meta http-equiv="Content-Security-Policy" content="${input.contentSecurityPolicy}">` : ''
+  return `<!doctype html><html><head><meta charset="utf-8">${cspMeta}<style nonce="${input.nonce}" data-ppt-template-runtime="supervisor-style">
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}iframe{display:block;border:0;width:100%;height:100%}
 </style></head><body><iframe id="ppt-template-document" name="ppt-template-document" title="Interactive template document" sandbox="allow-scripts"></iframe>
 <script nonce="${input.nonce}" data-ppt-template-runtime="supervisor">
@@ -294,6 +315,7 @@ export function compileInteractiveTemplateRuntime(
   const nonce = randomBytes(32).toString('base64url')
   const sessionId = randomBytes(16).toString('hex')
   const resources = extractRuntimeResources(source)
+  const contentSecurityPolicy = buildTemplateRuntimeCsp(nonce)
   const bootstrap = templateDocumentBootstrap({
     nonce,
     sessionId,
@@ -302,8 +324,17 @@ export function compileInteractiveTemplateRuntime(
     version: source.manifest.version,
     styles: resources.styles,
     scripts: resources.scripts,
+    slots: source.manifest.slots.map((slot) => ({ id: slot.id, type: slot.type })),
+    slotOverrides: options.slotOverrides ?? {},
   })
-  const templateDocument = resources.document.replace(/<\/body\s*>/i, `${bootstrap}</body>`)
+  const offlineMeta = options.offline ? `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy}">` : ''
+  let templateDocument = resources.document
+  if (offlineMeta) {
+    if (/<head(?:\s[^>]*)?>/i.test(templateDocument)) templateDocument = templateDocument.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${offlineMeta}`)
+    else if (/<html(?:\s[^>]*)?>/i.test(templateDocument)) templateDocument = templateDocument.replace(/<html(?:\s[^>]*)?>/i, (html) => `${html}<head>${offlineMeta}</head>`)
+    else templateDocument = `${offlineMeta}${templateDocument}`
+  }
+  templateDocument = templateDocument.replace(/<\/body\s*>/i, `${bootstrap}</body>`)
   const templateDocumentUrl = `data:text/html;base64,${Buffer.from(templateDocument, 'utf8').toString('base64')}`
   const html = runtimeSupervisor({
     nonce,
@@ -312,10 +343,11 @@ export function compileInteractiveTemplateRuntime(
     assetId: source.manifest.id,
     version: source.manifest.version,
     templateDocumentUrl,
+    contentSecurityPolicy: options.offline ? contentSecurityPolicy : undefined,
   })
   return {
     html: Buffer.from(html, 'utf8'),
-    contentSecurityPolicy: buildTemplateRuntimeCsp(nonce),
+    contentSecurityPolicy,
     sessionId,
     sourceDigest,
     assetId: source.manifest.id,

@@ -217,8 +217,10 @@ describe('P09 isolated restore and fixture-only replay', () => {
         const replayRevised = presentations.reviseOverrides(owner, replayAdded.id, replayAdded.items[0].id, { title: 'Fixture-only replay', 'accent-color': '#2563eb' }, replayAdded.revision)
         const replayExport = exports.create(owner, replayRevised.id, replayRevised.revision, replayRevised.items.map((item) => item.id))
         const html = exports.readArtifact(owner, replayRevised.id, replayExport.summary.id, 'html').toString('utf8')
-        expect(html).toContain('Fixture-only replay')
-        expect(html).not.toMatch(/<(?:script|iframe|form)\b|https?:|file:|data:|blob:|document\.cookie/i)
+        expect(html).toContain('sandbox="allow-scripts"')
+        const replaySlide = readStoredZip(exports.readArtifact(owner, replayRevised.id, replayExport.summary.id, 'zip')).get('slides/slide-0001.html')!.toString('utf8')
+        expect(replaySlide).toContain('Fixture-only replay')
+        expect(html).not.toMatch(/<script\b|https?:|file:|blob:|document\.cookie/i)
       } finally { database.close() }
       expect(sourceFingerprint(state)).toBe(sourceBefore)
     } finally { rmSync(state.directory, { recursive: true, force: true }) }

@@ -257,10 +257,10 @@ describe('P14 authenticated user ownership', () => {
       })
       expect(exportResponse.status).toBe(201)
       const exported = await exportResponse.json() as { export: { id: string }; manifest: { contractVersion: string; ownerUserId: string } }
-      expect(exported.manifest).toMatchObject({ contractVersion: 'html-presentation-export/v2', ownerUserId: state.users.memberA.id })
+      expect(exported.manifest).toMatchObject({ contractVersion: 'html-presentation-export/v3', ownerUserId: state.users.memberA.id })
       const zip = state.exports.readArtifact(getOwnerContext(state.users.memberA.id), presentation.id, exported.export.id, 'zip')
       const embedded = JSON.parse(readStoredZip(zip).get('manifest.json')!.toString('utf8')) as { contractVersion: string; ownerUserId: string }
-      expect(embedded).toMatchObject({ contractVersion: 'html-presentation-export-package/v2', ownerUserId: state.users.memberA.id })
+      expect(embedded).toMatchObject({ contractVersion: 'html-presentation-export-package/v3', ownerUserId: state.users.memberA.id })
 
       expect((await state.app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/exports`)).status).toBe(401)
       const crossExport = await state.app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/exports`, {

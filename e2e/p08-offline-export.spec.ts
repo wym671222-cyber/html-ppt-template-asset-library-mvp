@@ -96,7 +96,11 @@ test('P08 ZIP opens offline using only controlled extracted files with no cookie
     await page.goto(pathToFileURL(resolve(exportRoot, 'index.html')).href)
     await expect(page.getByRole('heading', { name: 'P08 导出闭环' })).toBeVisible()
     await expect(page.getByRole('link', { name: '1 Simulated Quarterly Brief' })).toBeVisible()
-    expect(await page.locator('script, iframe, frame, object, embed, form').count()).toBe(0)
+    expect(await page.locator('script, frame, object, embed, form').count()).toBe(0)
+    expect(await page.locator('iframe[sandbox="allow-scripts"]').count()).toBe(1)
+    const slide = page.frameLocator('iframe[sandbox="allow-scripts"]').first()
+    await expect(slide.getByRole('heading', { name: 'Quarterly brief title' })).toBeVisible()
+    expect(await slide.locator('script, iframe, frame, object, embed, form').count()).toBe(0)
     expect(await page.evaluate(() => { try { return document.cookie } catch { return '' } })).toBe('')
     expect(requests.some((url) => /^https?:/i.test(url))).toBe(false)
     for (const url of requests) {
