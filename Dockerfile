@@ -17,7 +17,8 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-RUN pnpm --filter @slide-maker/api build \
+RUN pnpm --filter @slide-maker/shared build \
+  && pnpm --filter @slide-maker/api build \
   && pnpm --filter @slide-maker/web build
 
 ENV NODE_ENV=production
