@@ -1,6 +1,8 @@
 import type BetterSqlite3 from 'better-sqlite3'
-import type { TemplatePackageSource } from '@slide-maker/shared'
+import { isInteractiveTemplatePackageManifest, type TemplatePackageSource } from '@slide-maker/shared'
 import { LocalContentStore, type StoredContentObject } from '../assets/content-store.js'
+import { isAllowlistedInteractiveTemplateDigest } from '../templates/interactive-template-allowlist.js'
+import { assertSafeInteractiveTemplatePackage } from '../templates/interactive-template-policy.js'
 import { serializeTemplatePackage } from '../templates/simulated-adapter.js'
 import { LocalJobRepository } from '../jobs/local-jobs.js'
 import {
@@ -44,7 +46,7 @@ export function parseTemplatePreviewJobInput(value: unknown): TemplatePreviewJob
   return { templateVersionId: value.templateVersionId, contentObjectDigest: value.contentObjectDigest }
 }
 
-function parseStoredPackage(content: Buffer): TemplatePackageSource {
+function parseStoredPackage(content: Buffer, expectedDigest: string): TemplatePackageSource {
   let parsed: unknown
   try {
     parsed = JSON.parse(content.toString('utf8'))
@@ -53,7 +55,13 @@ function parseStoredPackage(content: Buffer): TemplatePackageSource {
   }
   if (!isRecord(parsed) || !isRecord(parsed.manifest) || !isRecord(parsed.files)) throw new PreviewPolicyError('Verified CAS object has an invalid template package shape')
   const source = parsed as unknown as TemplatePackageSource
-  assertSafePreviewPackage(source)
+  if (isInteractiveTemplatePackageManifest(source.manifest)) {
+    try { assertSafeInteractiveTemplatePackage(source) }
+    catch (error) { throw new PreviewPolicyError(error instanceof Error ? error.message : 'Interactive preview package is unsafe') }
+    if (!isAllowlistedInteractiveTemplateDigest(expectedDigest)) throw new PreviewPolicyError('Interactive preview package digest is not allowlisted')
+  } else {
+    assertSafePreviewPackage(source)
+  }
   if (!serializeTemplatePackage(source).equals(content)) throw new PreviewPolicyError('Verified CAS template package is not canonical')
   return source
 }
@@ -64,7 +72,7 @@ function assertPngDimensions(content: Buffer, width: number, height: number, kin
   }
 }
 
-function assertSecureRender(render: SecurePreviewRender): void {
+function assertSecureRender(render: SecurePreviewRender, source: TemplatePackageSource): void {
   if (!render.rendererVersion || /[\u0000-\u001f\u007f]/.test(render.rendererVersion)) throw new PreviewPolicyError('Chromium renderer version is invalid')
   if (render.diagnostic.allowedRequestCount < 1
     || render.diagnostic.blockedRequestCount !== 0
@@ -75,6 +83,26 @@ function assertSecureRender(render: SecurePreviewRender): void {
     || render.diagnostic.forbiddenDomNodeCount !== 0
     || render.diagnostic.newWindowCount !== 0) {
     throw new PreviewPolicyError('Chromium render did not satisfy the P05 security diagnostic')
+  }
+  if (isInteractiveTemplatePackageManifest(source.manifest)
+    && (!render.diagnostic.runtimeOpaqueOrigin
+      || !render.diagnostic.templateOpaqueOrigin
+      || !render.diagnostic.cookieAccessBlocked
+      || !render.diagnostic.localStorageAccessBlocked
+      || !render.diagnostic.sessionStorageAccessBlocked
+      || !render.diagnostic.parentDomAccessBlocked
+      || !render.diagnostic.topLocationAccessBlocked
+      || !render.diagnostic.popupAccessBlocked
+      || !render.diagnostic.topNavigationBlocked
+      || !render.diagnostic.networkAccessBlocked
+      || render.diagnostic.networkAuditHitCount !== 0
+      || render.diagnostic.selfNavigationAuditHitCount !== 0
+      || !render.diagnostic.selfNavigationBlocked
+      || !render.diagnostic.runtimeContextBound
+      || !render.diagnostic.commandProtocolBound
+      || !render.diagnostic.forgedCommandRejected
+      || !render.diagnostic.allowScriptsOnlySandbox)) {
+    throw new PreviewPolicyError('Chromium render did not satisfy the P02 interactive sandbox diagnostic')
   }
   assertPngDimensions(render.previewPng, 1280, 720, 'preview')
   assertPngDimensions(render.thumbnailPng, 320, 180, 'thumbnail')
@@ -96,7 +124,7 @@ export class PreviewArtifactRepository {
     } catch (error) {
       throw new PreviewPolicyError(error instanceof Error ? error.message : 'Verified CAS content could not be read')
     }
-    const source = parseStoredPackage(content)
+    const source = parseStoredPackage(content, version.source_digest)
     if (source.manifest.id !== version.asset_id || source.manifest.version !== version.version_number || source.manifest.contractVersion !== version.contract_version) {
       throw new PreviewPolicyError('Stored template package identity does not match its immutable TemplateVersion')
     }
@@ -232,7 +260,7 @@ export class TemplatePreviewJobWorker {
       const input = parseTemplatePreviewJobInput(job.inputSnapshot)
       const { source, sourceDigest } = this.artifacts.loadVerifiedSource(input, this.contentStore)
       const render = await this.renderer.render(source)
-      assertSecureRender(render)
+      assertSecureRender(render, source)
       const preview = this.contentStore.put(render.previewPng, 'image/png')
       const thumbnail = this.contentStore.put(render.thumbnailPng, 'image/png')
       this.artifacts.recordRender({ templateVersionId: input.templateVersionId, sourceDigest, preview, thumbnail, render })

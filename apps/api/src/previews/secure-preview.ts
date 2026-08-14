@@ -6,8 +6,11 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { chromium } from '@playwright/test'
 import {
   assertValidTemplatePackage,
+  isInteractiveTemplatePackageManifest,
   type TemplatePackageSource,
 } from '@slide-maker/shared'
+import { compileInteractiveTemplateRuntime } from '../templates/interactive-template-runtime.js'
+import { renderInteractiveSecurePreview } from './interactive-secure-preview.js'
 
 const PREVIEW_CSP = "default-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'none'; base-uri 'none'; frame-ancestors 'none'"
 const FORBIDDEN_HTML = /<(?:script|iframe|frame|object|embed|form|base)\b|<meta\b[^>]*\bhttp-equiv\s*=|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|srcset|target|action|formaction|download|style)\s*=/i
@@ -26,6 +29,23 @@ export type PreviewSecurityDiagnostic = Readonly<{
   documentCookiePresent: boolean
   forbiddenDomNodeCount: number
   newWindowCount: number
+  runtimeOpaqueOrigin?: boolean
+  templateOpaqueOrigin?: boolean
+  cookieAccessBlocked?: boolean
+  localStorageAccessBlocked?: boolean
+  sessionStorageAccessBlocked?: boolean
+  parentDomAccessBlocked?: boolean
+  topLocationAccessBlocked?: boolean
+  popupAccessBlocked?: boolean
+  topNavigationBlocked?: boolean
+  networkAccessBlocked?: boolean
+  networkAuditHitCount?: number
+  selfNavigationAuditHitCount?: number
+  selfNavigationBlocked?: boolean
+  runtimeContextBound?: boolean
+  commandProtocolBound?: boolean
+  forgedCommandRejected?: boolean
+  allowScriptsOnlySandbox?: boolean
 }>
 
 export type SecurePreviewRender = Readonly<{
@@ -146,6 +166,15 @@ export class SecurePreviewRenderer {
   constructor(private readonly options: SecurePreviewRendererOptions = {}) {}
 
   async render(source: TemplatePackageSource): Promise<SecurePreviewRender> {
+    if (isInteractiveTemplatePackageManifest(source.manifest)) {
+      try {
+        return await renderInteractiveSecurePreview(compileInteractiveTemplateRuntime(source), this.options)
+      } catch (error) {
+        if (error instanceof PreviewPolicyError) throw error
+        if (error instanceof Error && /Interactive (?:template|runtime)/.test(error.message)) throw new PreviewPolicyError(error.message)
+        throw error
+      }
+    }
     assertSafePreviewPackage(source)
     const temporaryRoot = resolve(this.options.temporaryRoot ?? tmpdir())
     if (lstatSync(temporaryRoot).isSymbolicLink()) throw new PreviewPolicyError('Preview temporary root must not be a symbolic link')

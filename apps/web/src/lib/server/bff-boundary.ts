@@ -1,6 +1,19 @@
 import { isIP } from 'node:net'
+import {
+  isTemplateRuntimeSessionId,
+  TEMPLATE_RUNTIME_PROTOCOL,
+  TEMPLATE_RUNTIME_PROTOCOL_HEADER,
+  TEMPLATE_RUNTIME_SESSION_HEADER,
+  TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS,
+  templateRuntimeNonceFromCsp,
+} from '@slide-maker/shared'
 
 export const MAX_WRITE_BYTES = 16_384
+const TEMPLATE_RUNTIME_PATH = /^\/api\/catalog\/assets\/[a-z0-9]+(?:-[a-z0-9]+)*\/runtime$/
+
+export function isTemplateRuntimePath(value: unknown): value is string {
+  return typeof value === 'string' && TEMPLATE_RUNTIME_PATH.test(value)
+}
 
 export function normalizedClientAddress(value: unknown): string {
   return typeof value === 'string' && isIP(value) !== 0 ? value.toLowerCase() : '127.0.0.1'
@@ -79,5 +92,21 @@ export function trustedApiHeaders(browserHeaders: Headers, clientAddress: unknow
     headers.set('Origin', origin)
     headers.set('Content-Type', 'application/json')
   }
+  return headers
+}
+
+export function validatedTemplateRuntimeHeaders(upstream: Headers): Headers | null {
+  const contentSecurityPolicy = upstream.get('content-security-policy')
+  const sessionId = upstream.get(TEMPLATE_RUNTIME_SESSION_HEADER)
+  if (templateRuntimeNonceFromCsp(contentSecurityPolicy) === null
+    || upstream.get(TEMPLATE_RUNTIME_PROTOCOL_HEADER) !== TEMPLATE_RUNTIME_PROTOCOL
+    || !isTemplateRuntimeSessionId(sessionId)) return null
+  for (const [name, value] of Object.entries(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)) {
+    if (upstream.get(name) !== value) return null
+  }
+  const headers = new Headers(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)
+  headers.set('Content-Security-Policy', contentSecurityPolicy!)
+  headers.set(TEMPLATE_RUNTIME_PROTOCOL_HEADER, TEMPLATE_RUNTIME_PROTOCOL)
+  headers.set(TEMPLATE_RUNTIME_SESSION_HEADER, sessionId)
   return headers
 }

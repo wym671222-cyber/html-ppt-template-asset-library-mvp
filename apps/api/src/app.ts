@@ -1,4 +1,10 @@
 import { Hono } from 'hono'
+import {
+  TEMPLATE_RUNTIME_PROTOCOL,
+  TEMPLATE_RUNTIME_PROTOCOL_HEADER,
+  TEMPLATE_RUNTIME_SESSION_HEADER,
+  TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS,
+} from '@slide-maker/shared'
 import { AssetLibraryCatalog, CatalogRequestError, parseCatalogQuery } from './assets/library-catalog.js'
 import { getOwnerContext } from './owner.js'
 import { PresentationRepository, PresentationRequestError } from './presentations/presentation-repository.js'
@@ -235,6 +241,22 @@ export function createApp(options: {
     } catch (error) {
       if (error instanceof CatalogRequestError) return context.json({ error: error.message }, error.status)
       return context.json({ error: 'Catalog query failed' }, 500)
+    }
+  })
+  app.get('/api/catalog/assets/:assetId/runtime', (context) => {
+    if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Runtime query parameters are not accepted' }, 400)
+    try {
+      const runtime = catalog.readRuntime(getOwnerContext(context.get('auth').user.id), context.req.param('assetId'))
+      for (const [name, value] of Object.entries(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)) context.header(name, value)
+      context.header('Content-Length', String(runtime.html.byteLength))
+      context.header('Content-Security-Policy', runtime.contentSecurityPolicy)
+      context.header(TEMPLATE_RUNTIME_PROTOCOL_HEADER, TEMPLATE_RUNTIME_PROTOCOL)
+      context.header(TEMPLATE_RUNTIME_SESSION_HEADER, runtime.sessionId)
+      return context.body(new Uint8Array(runtime.html))
+    } catch (error) {
+      if (error instanceof CatalogRequestError) return context.json({ error: error.message }, error.status)
+      return context.json({ error: 'Interactive runtime read failed' }, 500)
     }
   })
   app.get('/api/catalog/assets/:assetId/:kind', (context) => {

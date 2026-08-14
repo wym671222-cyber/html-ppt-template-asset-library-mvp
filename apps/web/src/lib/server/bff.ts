@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private'
 import type { RequestEvent } from '@sveltejs/kit'
-import { normalizedClientAddress, readBoundedBinaryBody, readBoundedBody, trustedApiHeaders, validateBrowserBinaryWrite, validateBrowserWrite } from './bff-boundary.js'
+import { isTemplateRuntimePath, normalizedClientAddress, readBoundedBinaryBody, readBoundedBody, trustedApiHeaders, validatedTemplateRuntimeHeaders, validateBrowserBinaryWrite, validateBrowserWrite } from './bff-boundary.js'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
 
@@ -131,6 +131,21 @@ export async function forwardArtifact(event: RequestEvent, pathname: string, kin
   if (disposition) headers.set('Content-Disposition', disposition)
   if (kind === 'html') headers.set('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'")
   return new Response(await response.arrayBuffer(), { status: 200, headers })
+}
+
+export async function forwardTemplateRuntime(event: RequestEvent, pathname: string): Promise<Response> {
+  if (!isTemplateRuntimePath(pathname)) return Response.json({ error: '交互模板运行页路径不符合契约' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
+  const response = await fetch(new URL(pathname, apiBaseUrl()), { method: 'GET', headers: apiHeaders(event, 'GET'), redirect: 'error' })
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+  if (!response.ok) {
+    if (!contentType.startsWith('application/json')) return Response.json({ error: '本机服务返回了无效响应' }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
+    return new Response(await response.arrayBuffer(), { status: response.status, headers: JSON_HEADERS })
+  }
+  const headers = validatedTemplateRuntimeHeaders(response.headers)
+  if (!headers) return Response.json({ error: '交互模板运行页安全响应头不符合契约' }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
+  const content = await response.arrayBuffer()
+  headers.set('Content-Length', String(content.byteLength))
+  return new Response(content, { status: 200, headers })
 }
 
 export async function sessionFromApi(event: RequestEvent): Promise<import('$lib/auth').SessionUser | null> {

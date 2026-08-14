@@ -1,5 +1,12 @@
 import type BetterSqlite3 from 'better-sqlite3'
+import { INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION, type TemplatePackageSource } from '@slide-maker/shared'
 import { isUserId, type OwnerContext } from '../owner.js'
+import { isAllowlistedInteractiveTemplateDigest } from '../templates/interactive-template-allowlist.js'
+import {
+  compileInteractiveTemplateRuntime,
+  InteractiveTemplateRuntimeError,
+  type CompiledInteractiveTemplateRuntime,
+} from '../templates/interactive-template-runtime.js'
 import { LocalContentStore } from './content-store.js'
 
 type Database = BetterSqlite3.Database
@@ -75,6 +82,16 @@ type AssetRow = {
 }
 
 type DerivativeRow = {
+  content_digest: string
+  media_type: string
+  byte_size: number
+  relative_path: string
+}
+
+type RuntimeRow = {
+  asset_id: string
+  version_number: number
+  source_digest: string
   content_digest: string
   media_type: string
   byte_size: number
@@ -316,5 +333,62 @@ export class AssetLibraryCatalog {
     if (content.byteLength !== row.byte_size) throw new CatalogRequestError('Registered derivative size check failed', 409)
     assertPng(content, kind)
     return content
+  }
+
+  readRuntime(owner: OwnerContext, assetId: string): CompiledInteractiveTemplateRuntime {
+    assertOwner(owner)
+    assertAssetId(assetId)
+    const row = this.database.prepare(`
+      SELECT asset.id AS asset_id, version.version_number, version.source_digest,
+        object.digest AS content_digest, object.media_type, object.byte_size, object.relative_path
+      FROM template_assets asset
+      JOIN template_versions version
+        ON version.id = asset.current_version_id AND version.asset_id = asset.id
+      JOIN content_objects object ON object.digest = version.content_object_digest
+      WHERE asset.id = ?
+        AND asset.status = 'active'
+        AND version.status IN ('verified', 'available')
+        AND version.contract_version = ?
+        AND version.content_object_digest = version.source_digest
+      LIMIT 1
+    `).get(assetId, INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) as RuntimeRow | undefined
+    if (!row || !isAllowlistedInteractiveTemplateDigest(row.source_digest)) {
+      throw new CatalogRequestError('Interactive runtime not found', 404)
+    }
+    if (row.content_digest !== row.source_digest
+      || row.media_type !== 'application/vnd.html-template-package+json'
+      || row.relative_path !== this.contentStore.relativePathFor(row.content_digest)) {
+      throw new CatalogRequestError('Interactive runtime content metadata is invalid', 409)
+    }
+
+    let content: Buffer
+    try { content = this.contentStore.read(row.content_digest) }
+    catch { throw new CatalogRequestError('Interactive runtime content integrity check failed', 409) }
+    if (content.byteLength !== row.byte_size) throw new CatalogRequestError('Interactive runtime content size check failed', 409)
+
+    let source: TemplatePackageSource
+    try {
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(content)
+      const value = JSON.parse(text) as unknown
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid root')
+      const record = value as Record<string, unknown>
+      if (Object.keys(record).sort().join(',') !== 'files,manifest'
+        || !record.manifest || typeof record.manifest !== 'object' || Array.isArray(record.manifest)
+        || !record.files || typeof record.files !== 'object' || Array.isArray(record.files)) throw new Error('invalid package shape')
+      source = value as TemplatePackageSource
+    } catch {
+      throw new CatalogRequestError('Interactive runtime package is invalid', 409)
+    }
+
+    try {
+      return compileInteractiveTemplateRuntime(source, {
+        expectedSourceDigest: row.source_digest,
+        expectedAssetId: row.asset_id,
+        expectedVersion: row.version_number,
+      })
+    } catch (error) {
+      if (error instanceof InteractiveTemplateRuntimeError) throw new CatalogRequestError('Interactive runtime package verification failed', 409)
+      throw error
+    }
   }
 }

@@ -7,6 +7,7 @@ import { sessionFromApi } from '$lib/server/bff'
 // can be served from a real hostname; CSP and route whitelist remain.
 export const handle: Handle = async ({ event, resolve }) => {
   const catalogRoute = event.url.pathname === '/api/catalog' || event.url.pathname.startsWith('/api/catalog/assets/')
+  const templateRuntimeRoute = /^\/api\/catalog\/assets\/[a-z0-9]+(?:-[a-z0-9]+)*\/runtime$/.test(event.url.pathname)
   const healthRoute = event.url.pathname === '/api/health/live' || event.url.pathname === '/api/health/ready'
   const presentationRoute = event.url.pathname === '/api/presentations' || event.url.pathname.startsWith('/api/presentations/')
   const recoveryRoute = event.url.pathname === '/api/recovery' || event.url.pathname.startsWith('/api/recovery/')
@@ -42,6 +43,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   const response = await resolve(event)
+  if (templateRuntimeRoute && response.ok && response.headers.get('Content-Type') === 'text/html; charset=utf-8') return response
   response.headers.set('X-Frame-Options', 'SAMEORIGIN')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'no-referrer')
