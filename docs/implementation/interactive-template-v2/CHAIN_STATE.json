@@ -207,13 +207,13 @@
           "parent independently reviewed the unique P07 evidence commit 202c82fda92cc33b6a8d248017513b9f23859f6d relative to 68358b95123db8735766b4443f0359a79d2a0653: exactly one handoff/STATUS commit, no CHAIN_STATE, source, real asset or production change",
           "parent read-only curl of the historical PocketBay target returned HTTP 204 for /, /login, /api/health/live and /api/health/ready; no live/ready 200 or current application catalog was available",
           "P07 worker and parent browser checks found no existing authenticated owner/admin/control session; no authorized server, pairing/control channel, production /data, SQLite/CAS or backup/rollback read access was available, so no production write was attempted",
-          "the repository has no authoritative mapping from the twelve synthetic P05 fixture IDs to the twelve existing production static-component asset IDs, no three exact production retire asset IDs, and no fixed historical v1 PresentationItem acceptance target; guessing these identities would violate the immutable-version and exact-asset contracts",
+          "the repository has no authoritative mapping from the twelve synthetic P05 fixture IDs to the twelve existing production static-component asset IDs and no fixed historical v1 PresentationItem acceptance target; the three approved retire IDs are known and recorded in the P07 handoff, so retire-ID availability is not the blocker",
           "P06 exact candidate 68358b95123db8735766b4443f0359a79d2a0653 was independently pushed to origin/feat/interactive-template-v2-export and re-read at the exact SHA; the unpushed P07 blocker evidence remains local",
-          "safe recovery requires current PocketBay access/control and owner decision, twelve-item production mapping, three retire IDs, one fixed v1 acceptance target, then read-only health/backup/hash verification before any re-authorization"
+          "safe recovery requires current PocketBay access/control and owner decision, twelve-item production mapping, one fixed v1 acceptance target, then read-only health/backup/hash verification before any re-authorization; the approved retire IDs remain html-4d353ff9f58e974d4e8a, html-ef7410b3f4732cb7df31 and html-221e1002d8e216bfefde"
         ]
       }
     }
   ],
-  "blockedReason": "P07 cannot safely perform PocketBay migration: the target currently exposes only HTTP 204 sleep-layer responses with no health 200 or authenticated control session, and the authoritative production mappings for twelve v2 assets, three retire IDs, and the fixed v1 PresentationItem target are missing. Resume only after those access, owner/security, mapping and read-only backup prerequisites are supplied.",
+  "blockedReason": "P07 cannot safely perform PocketBay migration: the target currently exposes only HTTP 204 sleep-layer responses with no health 200 or authenticated control session, and the authoritative production mappings for twelve v2 assets and the fixed v1 PresentationItem target are missing. The three approved retire IDs are already known and recorded in the P07 handoff. Resume only after the access, owner/security, mapping and read-only backup prerequisites are supplied.",
   "updatedAt": "2026-08-15T00:50:42+08:00"
 }
