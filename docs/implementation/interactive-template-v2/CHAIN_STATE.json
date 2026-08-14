@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P03",
-    "activePhaseThreadId": "01a000bf-4ac0-7560-8d6c-5368af742242",
+    "currentPhaseId": "P04",
+    "activePhaseThreadId": "01a000d0-a46a-7e00-bb94-fbf9f548477f",
     "terminalPhaseId": "P07"
   },
   "phases": [
@@ -98,27 +98,37 @@
       "id": "P03",
       "title": "目录交互与模板下架",
       "objective": "交付交互详情、目录 runtime 信息和管理员退役接口",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-terra",
       "reasoning": "high",
       "estimatedContextPercent": 40,
       "dependsOn": ["P02"],
       "successor": "P04",
       "threadId": "01a000bf-4ac0-7560-8d6c-5368af742242",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "901fc2d028449a94a59169cfe0951a53c3b5dff8",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination 0d21106f0307f1f7e3354acf5ce2ee68fbdf6e9b exactly one atomic P03 implementation commit; worker stopped without CHAIN_STATE/P04/production changes and worktree retained only .workbuddy/",
+          "parent review verified catalog current/runtime metadata is allowlist-bound without path or digest leakage, detail iframe exists only while open and item is present, uses exact sandbox=allow-scripts without allow-same-origin, and is destroyed on close/Escape/background/retire",
+          "parent Node 22.23.2 and pnpm 9.15.0 targeted rerun: 7 files and 32 tests passed, including real Chrome P02 second-listener fetch/self-navigation zero-hit/session-bound regression",
+          "parent shared/API builds, Web check (0 errors and 9 pre-existing warnings), Web build, 41-file 812-test Vitest regression excluding P08, and shell suites 8/8 passed",
+          "retire gate verified authenticated admin exact POST with no query, JSON empty body, invalid/missing/non-admin/method negatives, idempotent TEMPLATE_RETIRED/ALREADY_RETIRED audit, retired hidden from catalog and new selection, while fixed PresentationItem and derivative records remain",
+          "P08 planned red baseline remains exact: 7 tests with 6 passed and only Verified template HTML contains an undeclared reference failing; official validator passed"
+        ]
+      }
     },
     {
       "id": "P04",
       "title": "导出协议 v3",
       "objective": "修复 v1 data-image 并实现 v1/v2 离线交互导出",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "max",
       "estimatedContextPercent": 50,
       "dependsOn": ["P03"],
       "successor": "P05",
-      "threadId": null,
+      "threadId": "01a000d0-a46a-7e00-bb94-fbf9f548477f",
       "commit": null,
       "gate": {"result": "pending", "evidence": []}
     },
@@ -166,5 +176,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T22:48:56+08:00"
+  "updatedAt": "2026-08-14T23:07:57+08:00"
 }
