@@ -11,7 +11,7 @@ import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { assertSafeExportHtml, PresentationExportRepository } from '../apps/api/src/presentation-exports/presentation-export-repository.js'
 import { assertSafeExportPath, createStoredZip, readStoredZip, sha256 } from '../apps/api/src/presentation-exports/offline-archive.js'
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
-import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
+import { adaptSimulatedTemplatePackage, adaptTemplatePackageSource } from '../apps/api/src/templates/simulated-adapter.js'
 import { createTrustedTestAuth, seedTestUser, testOwner } from './p14-test-support.js'
 
 type SQLite = {
@@ -21,6 +21,7 @@ type SQLite = {
 }
 
 const Database = createRequire(new URL('../apps/api/package.json', import.meta.url))('better-sqlite3') as new (path: string) => SQLite
+const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 
 function fakePng(width: number, height: number, marker: number): Buffer {
   const content = Buffer.alloc(25)
@@ -33,7 +34,7 @@ function fakePng(width: number, height: number, marker: number): Buffer {
   return content
 }
 
-function fixture(): {
+function fixture(template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))): {
   directory: string
   database: SQLite
   store: LocalContentStore
@@ -51,7 +52,6 @@ function fixture(): {
   database.pragma('foreign_keys = ON')
   const user = seedTestUser(database as never)
   const store = new LocalContentStore(join(directory, 'objects'))
-  const template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
   const registered = new AssetCatalogRepository(database as never, store).registerTemplate(template)
   const now = Date.now()
   const derivatives = [
@@ -73,6 +73,20 @@ function fixture(): {
     sourceDigest: registered.sourceDigest,
     user,
   }
+}
+
+function dataImageSnapshotTemplate() {
+  const template = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
+  return adaptTemplatePackageSource({
+    manifest: template.source.manifest,
+    files: {
+      ...template.source.files,
+      'index.html': template.source.files['index.html'].replace(
+        '<main class="report" data-template-slot="accent-color">',
+        `<main class="report" data-template-slot="accent-color"><img alt="embedded static snapshot" src="data:image/png;base64,${ONE_PIXEL_PNG}">`,
+      ),
+    },
+  })
 }
 
 function preparedPresentation(state: ReturnType<typeof fixture>, name = 'P08 Offline Brief') {
@@ -131,6 +145,24 @@ describe('P08 fixed revision HTML/ZIP export', () => {
 
       state.database.prepare('UPDATE template_assets SET current_version_id = NULL WHERE id = ?').run(state.assetId)
       expect(state.exports.readManifest(owner, presentation.id, created.summary.id)).toEqual(created.manifest)
+    } finally { state.database.close() }
+  })
+
+  it('records the v1 data:image static snapshot regression with the exact undeclared-reference failure', () => {
+    const state = fixture(dataImageSnapshotTemplate())
+    try {
+      const owner = testOwner()
+      const presentation = preparedPresentation(state, 'v1 data-image static snapshot')
+      let failure: unknown
+      try {
+        state.exports.create(owner, presentation.id, presentation.revision, presentation.items.map((item) => item.id))
+      } catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(Error)
+      expect((failure as Error).message).toBe('Verified template HTML contains an undeclared reference')
+      expect(state.database.prepare('SELECT count(*) AS count FROM presentation_exports').get()).toEqual({ count: 0 })
+      throw failure
     } finally { state.database.close() }
   })
 
