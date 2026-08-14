@@ -7,7 +7,7 @@
     "implementationBranch": "feat/interactive-template-v2-export",
     "baselineCommit": "a427b530e05d79ae00b1d7196081f4a03c06451b"
   },
-  "workflowPhase": "executing",
+  "workflowPhase": "blocked",
   "plan": {
     "version": "2.0",
     "approved": true,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P05",
-    "activePhaseThreadId": "01a000e9-37c1-7361-914f-9d40d844a6ac",
+    "currentPhaseId": null,
+    "activePhaseThreadId": null,
     "terminalPhaseId": "P07"
   },
   "phases": [
@@ -145,20 +145,22 @@
       "id": "P05",
       "title": "十二组件与迁移演练",
       "objective": "生成十二个 v2 包并在隔离 DB/CAS 演练晋升和退役",
-      "status": "in_progress",
+      "status": "failed",
       "model": "gpt-5.6-terra",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P04"],
       "successor": "P06",
       "threadId": "01a000e9-37c1-7361-914f-9d40d844a6ac",
-      "commit": null,
+      "commit": "9fee3a4c36a18c293f49508478814385cf07858c",
       "gate": {
-        "result": "pending",
+        "result": "failed",
         "evidence": [
           "parent revoked the former P05 pass after proving commit 59b0b111 only generated p05-interactive-01 through p05-interactive-12 synthetic button-counter fixtures rather than the twelve approved production asset IDs and required interaction families",
           "the authoritative Release 264 import record recovered the twelve production component IDs without reading either forbidden source directory",
-          "first bounded repair is assigned back to the original P05 thread with unchanged protocol, security and acceptance contracts; no production write is authorized"
+          "the only bounded repair candidate 9fee3a4c uses the twelve exact production asset IDs and passes its automated suite, but its D3 test dispatches only pointerdown and an auxiliary zoom button while runtime marks starDragged on any pointerdown instead of proving a drag gesture",
+          "the same candidate replaces the Three.js orbit drag and Interact.js composer drag acceptance with auxiliary orbit-spin and layout-nudge button clicks, so Chrome assertions prove state-marker changes rather than the approved drag interactions",
+          "the worker handoff calls these real D3, Three.js and Interact interactions despite the test code bypassing their drag handlers; this is a semantic gate failure after the single allowed bounded repair, so P06, push and P07 production work must not start"
         ]
       }
     },
@@ -178,7 +180,7 @@
         "result": "pending",
         "evidence": [
           "the former P06 validation is retained in git history but superseded because its P05 input did not satisfy the approved production-ID and interaction-family gate",
-          "P06 must rerun independently after the bounded P05 repair passes"
+          "P06 was not restarted because the only bounded P05 repair failed its parent semantic gate; resumption requires a newly approved plan or explicit authorization to reopen P05"
         ]
       }
     },
@@ -198,11 +200,12 @@
         "result": "pending",
         "evidence": [
           "the former P07 blocker audit remains in git history but is superseded while P05 and P06 are rerun",
-          "the PocketBay pairing session and Release 264 identity were recovered read-only; public access still remains at the platform 204 sleep layer and no production write has occurred"
+          "the PocketBay pairing session and Release 264 identity were recovered read-only; public access still remains at the platform 204 sleep layer and no production write has occurred",
+          "P07 did not restart because P05 failed after its only bounded repair and P06 remained pending"
         ]
       }
     }
   ],
-  "blockedReason": null,
-  "updatedAt": "2026-08-15T01:25:00+08:00"
+  "blockedReason": "P05 failed its parent gate after the single allowed bounded repair: candidate 9fee3a4c changed the required D3, Three.js and Interact drag acceptance into pointerdown or auxiliary-button state changes. The automated tests pass but do not prove the approved drag interactions. P06, push, PocketBay backup, migration, deployment and retire operations are stopped pending a newly approved plan or explicit authorization to reopen P05 with a revised test and packaging design.",
+  "updatedAt": "2026-08-15T01:58:51+08:00"
 }
