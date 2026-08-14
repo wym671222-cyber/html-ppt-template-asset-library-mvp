@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { chromium } from '@playwright/test'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../apps/api/src/app.js'
 import { AssetCatalogRepository } from '../apps/api/src/assets/catalog-repository.js'
@@ -18,15 +19,20 @@ import {
 } from '../apps/api/src/previews/preview-jobs.js'
 import { PreviewPolicyError, SecurePreviewRenderer, type SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
 import { assertSafeInteractiveTemplatePackage } from '../apps/api/src/templates/interactive-template-policy.js'
+import { compileInteractiveTemplateRuntime } from '../apps/api/src/templates/interactive-template-runtime.js'
 import { TemplateImportService, parseUploadedTemplateZip } from '../apps/api/src/templates/template-import.js'
+import { adaptTemplatePackageSource } from '../apps/api/src/templates/simulated-adapter.js'
 import { isAllowlistedInteractiveTemplateDigest } from '../apps/api/src/templates/interactive-template-allowlist.js'
 import { createStoredZip, readStoredZip } from '../apps/api/src/presentation-exports/offline-archive.js'
 import {
   P05_INTERACTIVE_FIXTURE_IDS,
+  P05_INTERACTIVE_FIXTURES,
+  P05_LOCAL_LIBRARY_VERSIONS,
   createP05InteractivePackage,
   createP05InteractiveSource,
   createP05PackageZip,
   createP05V1BaselinePackage,
+  createP05V1BaselineSource,
   p05FixtureDigests,
   writeP05InteractiveFixtureDirectory,
 } from '../fixtures/p05-interactive-v2/generator.js'
@@ -114,17 +120,27 @@ describe('P05 deterministic interactive fixture catalogue', () => {
       const source = createP05InteractiveSource(assetId)
       assertSafeInteractiveTemplatePackage(source)
       expect(source.manifest).toMatchObject({ id: assetId, version: 2, contractVersion: 'html-template/v2', runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 } } })
-      expect(source.manifest.files).toEqual(['index.html', 'styles.css', 'runtime.js'])
+      expect(source.manifest.files).toContain('index.html')
+      expect(source.manifest.files).toContain('styles.css')
+      expect(source.manifest.files).toContain('runtime.js')
+      expect(source.manifest.files).toContainEqual(expect.stringMatching(/^vendor\/.+\.min\.js$/))
+      expect(source.manifest.files.every((file) => /^(?:index\.html|styles\.css|runtime\.js|vendor\/[a-z0-9-]+\.min\.js)$/.test(file))).toBe(true)
       expect(digests[assetId]).toMatch(/^[0-9a-f]{64}$/)
       expect(isAllowlistedInteractiveTemplateDigest(digests[assetId])).toBe(true)
       const firstZip = createP05PackageZip(assetId)
       const secondZip = createP05PackageZip(assetId)
       expect(firstZip).toEqual(secondZip)
+      expect(firstZip.byteLength).toBeLessThan(5 * 1024 * 1024)
       const parsed = await parseUploadedTemplateZip(firstZip)
       expect(parsed.version.sourceDigest).toBe(digests[assetId])
       expect(parsed.version.versionNumber).toBe(2)
     }
-  })
+    expect(P05_INTERACTIVE_FIXTURES.map((fixture) => fixture.title)).toEqual([
+      '动态标题导演', '叙事时间线', '数据变形叙事', '决策象限', '流向探索器', '关系星图',
+      '3D 系统轨道', '生成式品牌场', '物理优先级场', '图像焦点地图', '转型对照镜', '实时组件编排器',
+    ])
+    expect(P05_LOCAL_LIBRARY_VERSIONS).toEqual({ gsap: '3.13.0', echarts: '5.6.0', d3: '7.9.0', three: '0.152.2', p5: '2.1.1', 'matter-js': '0.20.0', interactjs: '1.10.27' })
+  }, 30_000)
 
   it('rejects external, iframe, file/blob, and traversal references before isolated registration', () => {
     const source = createP05InteractiveSource(P05_INTERACTIVE_FIXTURE_IDS[0])
@@ -144,6 +160,85 @@ describe('P05 deterministic interactive fixture catalogue', () => {
       expect(database.prepare('SELECT count(*) AS count FROM template_assets').get()).toEqual({ count: 1 })
     } finally { database.close() }
   })
+})
+
+describe.skipIf(!chromiumExecutablePath)('P05 production-ID interactive runtime acceptance', () => {
+  it('uses a sandboxed offline document and proves every component changes its own observable state', async () => {
+    const browser = await chromium.launch({ executablePath: chromiumExecutablePath })
+    try {
+      for (const fixture of P05_INTERACTIVE_FIXTURES) {
+        const page = await browser.newPage()
+        const blockedRequests: string[] = []
+        page.on('request', (request) => { if (/^https?:/i.test(request.url())) blockedRequests.push(request.url()) })
+        const compiled = compileInteractiveTemplateRuntime(createP05InteractiveSource(fixture.id), { offline: true })
+        await page.setContent(`<iframe id="p05-runtime" sandbox="allow-scripts" src="data:text/html;base64,${compiled.html.toString('base64')}"></iframe>`)
+        await expect.poll(() => page.frame({ name: 'ppt-template-document' })?.url().startsWith('data:text/html') ?? false).toBe(true)
+        const frame = page.frame({ name: 'ppt-template-document' })!
+        await frame.locator('#stage').waitFor()
+        expect(await page.locator('#p05-runtime').getAttribute('sandbox')).toBe('allow-scripts')
+        switch (fixture.kind) {
+          case 'title':
+            await frame.locator('#replay').click()
+            expect(await frame.locator('html').getAttribute('data-animation-cycle')).toBe('1')
+            break
+          case 'timeline':
+            await frame.locator('#timeline-next').click()
+            expect(await frame.locator('html').getAttribute('data-timeline-step')).toBe('1')
+            break
+          case 'chart':
+            await frame.locator('#switch-view').click()
+            expect(await frame.locator('html').getAttribute('data-chart-view')).toBe('line')
+            break
+          case 'quadrant':
+            await frame.locator('[data-quadrant="defend"]').click()
+            expect(await frame.locator('html').getAttribute('data-quadrant')).toBe('defend')
+            break
+          case 'flow':
+            await frame.locator('[data-flow="launch"]').click()
+            expect(await frame.locator('html').getAttribute('data-flow-focus')).toBe('launch')
+            break
+          case 'star': {
+            const box = await frame.locator('#star-map').boundingBox()
+            if (!box) throw new Error('Star map is not visible')
+            await frame.locator('#star-map').dispatchEvent('pointerdown', { clientX: box.width / 2, clientY: box.height / 2 })
+            await frame.locator('#star-zoom').click()
+            expect(await frame.locator('html').getAttribute('data-star-dragged')).toBe('true')
+            expect(await frame.locator('html').getAttribute('data-star-zoom')).toMatch(/[0-9.]+/)
+            break
+          }
+          case 'orbit': {
+            await frame.locator('#orbit-spin').click()
+            expect(await frame.locator('html').getAttribute('data-webgl')).toBe('ready')
+            expect(await frame.locator('html').getAttribute('data-orbit-angle')).toMatch(/[0-9.-]+/)
+            break
+          }
+          case 'particles':
+            await frame.locator('#particle-burst').click()
+            expect(await frame.locator('html').getAttribute('data-particles')).toBe('20')
+            break
+          case 'physics':
+            await frame.locator('#physics-step').click()
+            expect(await frame.locator('html').getAttribute('data-physics-ticks')).toBe('1')
+            break
+          case 'focus':
+            await frame.locator('#zoom-in').click()
+            expect(await frame.locator('html').getAttribute('data-focus-scale')).toBe('1.2')
+            break
+          case 'compare':
+            await frame.locator('#compare-range').evaluate((element) => { const input = element as HTMLInputElement; input.value = '72'; input.dispatchEvent(new Event('input', { bubbles: true })) })
+            expect(await frame.locator('html').getAttribute('data-compare-position')).toBe('72')
+            break
+          case 'composer': {
+            await frame.locator('#layout-nudge').click()
+            expect(await frame.locator('html').getAttribute('data-layout-x')).toMatch(/[1-9][0-9]*/)
+            break
+          }
+        }
+        expect(blockedRequests).toEqual([])
+        await page.close()
+      }
+    } finally { await browser.close() }
+  }, 180_000)
 })
 
 describe.skipIf(!chromiumExecutablePath)('P05 isolated 12-package migration, preview, retirement, and export rehearsal', () => {
@@ -234,22 +329,32 @@ describe.skipIf(!chromiumExecutablePath)('P05 isolated 12-package migration, pre
 
       const auth = authFor(admin, member)
       const app = createApp({ catalog: new AssetLibraryCatalog(database as never, store), presentations, auth: auth as never })
-      for (const assetId of P05_INTERACTIVE_FIXTURE_IDS.slice(0, 3)) {
+      const retirementIds = ['html-4d353ff9f58e974d4e8a', 'html-ef7410b3f4732cb7df31', 'html-221e1002d8e216bfefde']
+      const retirementRows = retirementIds.map((assetId) => {
+        const source = createP05V1BaselineSource(P05_INTERACTIVE_FIXTURE_IDS[0])
+        return catalogRepository.registerTemplate(adaptTemplatePackageSource({
+          ...source,
+          manifest: { ...source.manifest, id: assetId, title: `P05 isolated retirement ${assetId}` },
+        }, 'tests/p05-interactive-fixtures.test.ts'))
+      })
+      for (const assetId of retirementIds) {
         const response = await app.request(`http://127.0.0.1:3001/api/admin/templates/${assetId}/retire`, { method: 'POST', headers: headers('admin'), body: '{}' })
         expect(response.status).toBe(200)
         expect(await response.json()).toMatchObject({ template: { assetId, status: 'retired', alreadyRetired: false } })
       }
-      const repeated = await app.request(`http://127.0.0.1:3001/api/admin/templates/${P05_INTERACTIVE_FIXTURE_IDS[0]}/retire`, { method: 'POST', headers: headers('admin'), body: '{}' })
+      const repeated = await app.request(`http://127.0.0.1:3001/api/admin/templates/${retirementIds[0]}/retire`, { method: 'POST', headers: headers('admin'), body: '{}' })
       expect(await repeated.json()).toMatchObject({ template: { alreadyRetired: true } })
-      expect((await (await app.request('http://127.0.0.1:3001/api/catalog', { headers: headers('member') })).json() as { items: Array<{ id: string }> }).items.map((item) => item.id)).not.toEqual(expect.arrayContaining([...P05_INTERACTIVE_FIXTURE_IDS.slice(0, 3)]))
+      const catalogIds = (await (await app.request('http://127.0.0.1:3001/api/catalog', { headers: headers('member') })).json() as { items: Array<{ id: string }> }).items.map((item) => item.id)
+      expect(catalogIds).not.toEqual(expect.arrayContaining(retirementIds))
+      expect(catalogIds).toEqual(expect.arrayContaining([...P05_INTERACTIVE_FIXTURE_IDS]))
       const persisted = presentations.read(testOwner(TEST_MEMBER_ID), historical.id)
       expect(persisted.items[0].templateVersionId).toBe(firstBaseline.versionId)
       expect(persisted.items[0].template.versionNumber).toBe(1)
-      const blockedAdd = await app.request(`http://127.0.0.1:3001/api/presentations/${historical.id}/items`, { method: 'POST', headers: headers('member'), body: JSON.stringify({ templateVersionId: firstBaseline.versionId, expectedRevision: persisted.revision }) })
+      const blockedAdd = await app.request(`http://127.0.0.1:3001/api/presentations/${historical.id}/items`, { method: 'POST', headers: headers('member'), body: JSON.stringify({ templateVersionId: retirementRows[0].versionId, expectedRevision: persisted.revision }) })
       expect(blockedAdd.status).toBe(409)
       const audit = database.prepare("SELECT action, entity_id, diagnostic FROM audit_events WHERE action = 'admin.template_retire' ORDER BY created_at, id").all()
       expect(audit).toHaveLength(4)
-      expect(audit).toEqual(expect.arrayContaining([{ action: 'admin.template_retire', entity_id: P05_INTERACTIVE_FIXTURE_IDS[0], diagnostic: 'TEMPLATE_RETIRED' }, { action: 'admin.template_retire', entity_id: P05_INTERACTIVE_FIXTURE_IDS[0], diagnostic: 'ALREADY_RETIRED' }]))
+      expect(audit).toEqual(expect.arrayContaining([{ action: 'admin.template_retire', entity_id: retirementIds[0], diagnostic: 'TEMPLATE_RETIRED' }, { action: 'admin.template_retire', entity_id: retirementIds[0], diagnostic: 'ALREADY_RETIRED' }]))
 
       const exported = new PresentationExportRepository(database as never, store).create(testOwner(TEST_MEMBER_ID), historical.id, persisted.revision, [historicalItem.id])
       expect(exported.manifest.contractVersion).toBe('html-presentation-export/v3')

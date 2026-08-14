@@ -8,6 +8,12 @@
 - 最后核实结论：父级撤销原 P05/P06 门禁；`59b0b111` 只交付合成按钮计数器，未满足十二个生产 ID 和真实交互族验收，因此远端 `68358b95` 不再是可部署候选。
 - 下一安全动作：原 P05 线程在不读取两个来源目录、不写生产的边界内完成一次有界修复；父级独立复核后，才重新放行 P06。
 
+### P05 worker 有界修复证据（待独立门禁）
+
+- 本 worker 已将 12 个 package fixture 改为准确生产 `assetId`/标题和真实交互族，固定 7 个本地库版本并重新审核 12 个规范化 SHA-256；P01 既有摘要未改。
+- Node 22.23.2 / pnpm 9.15.0：P05 定向确定性/负例、真实 Chrome 12 项交互、隔离 SQLite/CAS 全量 preview+thumbnail 晋升、精确三目标退役与旧 v1 v3 导出通过。Chrome 预览诊断保持 P02 `networkAuditHitCount=0` 与 `selfNavigationAuditHitCount=0`。
+- 仍禁止推进链：P05 保持 `in_progress`、gate `pending`；未修改任一 CHAIN_STATE、未创建 P06、未触碰生产 DB/CAS/PocketBay、远端或两个真实来源目录。
+
 ## 阶段账本
 
 | 阶段 | 状态 | 提交 | 线程 | 门禁 | 证据 |
