@@ -7,7 +7,7 @@
     "implementationBranch": "feat/pocketbay-production",
     "baselineCommit": "450d9d500088aed82176c10bd7bf44de18edcc6c"
   },
-  "workflowPhase": "executing",
+  "workflowPhase": "complete",
   "plan": {
     "version": "1.0",
     "approved": true,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P04",
-    "activePhaseThreadId": "current-parent",
+    "currentPhaseId": null,
+    "activePhaseThreadId": null,
     "terminalPhaseId": "P04"
   },
   "phases": [
@@ -121,17 +121,26 @@
       "id": "P04",
       "title": "受控上线与终局验收",
       "objective": "通过全量门禁并部署到现有 PocketBay 项目完成线上验收",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P03"],
       "successor": null,
       "threadId": "current-parent",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "ae5f4d4a7a3c603cf41a882f911667fd190a707f",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "修复后全量 Vitest 39 files/798 tests、shared/API/Web 构建和 Web check 0 errors/9 warnings 通过",
+          "生产依赖审计 exit 0，info/low/moderate/high/critical 全部为 0；shell 8/8 保持通过",
+          "PocketBay Release 235 返回 next_action=done、project_status=running；Docker 构建成功并通过 8080 健康检查",
+          "真实浏览器确认唤醒后登录页加载；公网 / 303、/login 200、health/live 200、health/ready 200，登录页 CSP/nosniff/frame/referrer 响应头存在",
+          "管理员口令已由用户轮换；部署包 497 files，排除 .env、数据库、凭据、bootstrap 配置、.workbuddy 和 sibling 真实素材"
+        ]
+      }
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-14T07:27:23+08:00"
+  "updatedAt": "2026-08-14T09:30:00+08:00"
 }
