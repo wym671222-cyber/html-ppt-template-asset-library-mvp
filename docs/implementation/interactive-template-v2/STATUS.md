@@ -34,7 +34,7 @@
 | P03 | passed | `901fc2d028449a94a59169cfe0951a53c3b5dff8` | `01a000bf-4ac0-7560-8d6c-5368af742242` | passed | 父级复核：相对协调提交恰好一个原子提交；目录 runtime/按需 iframe/退役边界与安全协议通过；定向 32/32、全量非 P08 41 文件/812 tests、shared/API/Web build、Web check 0 errors、shell 8/8、P08 精确红线与 validator 通过 |
 | P04 | passed | `1045dd6752657add984d4a89504ef9aa357697fa` | `01a000d0-a46a-7e00-bb94-fbf9f548477f` | passed | 父级复核：v3 自包含 HTML/ZIP、v1 data:image 与 v2 opaque 离线 runtime、旧 v2 读取兼容、P08 10/10（含真实 Chromium v1/v2）、定向 36/36、全量 42 文件/822 tests、build/check、shell 8/8、validator 通过 |
 | P05 | passed | `626ae6d53b4d52b63d7e618386b499e2387a4a43` | `01a000e9-37c1-7361-914f-9d40d844a6ac` | passed | 固定 `1024×768` 浏览器与 `960×540` iframe；D3 拖拽/滚轮、Three pointer drag、Interact drag 均真实改变状态；P05 4/4、全量 43/826、shell 8/8、build/check 通过 |
-| P06 | passed | `66135d5e8a9028239b4585c5b8b0935f36e54578` | `01a00110-abc1-74b3-b71b-e88f9a02bee6` | passed | 全量 Vitest 43/826、shell 8/8、Chrome 12/12、生产审计全零、扫描和构建通过；候选边界与 validator 通过 |
+| P06 | passed | `66135d5add134da929cb2da7e4810bad340e9ba3` | `01a00110-abc1-74b3-b71b-e88f9a02bee6` | passed | 全量 Vitest 43/826、shell 8/8、Chrome 12/12、生产审计全零、扫描和构建通过；候选边界与 validator 通过 |
 | P07 | in_progress | — | `01a00120-bf9d-7950-a479-c15a213bed6d` | pending | 已启动写前只读核验；当前已知 Release 264/项目身份保留，但健康 200、认证会话、权威映射和备份条件仍需现场确认 |
 
 ## 阻塞与不确定性
