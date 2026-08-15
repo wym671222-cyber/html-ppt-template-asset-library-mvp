@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P01",
-    "activePhaseThreadId": "/root/p01_sealed_backup",
+    "currentPhaseId": "P02",
+    "activePhaseThreadId": "/root/p02_candidate_gate",
     "terminalPhaseId": "P03B"
   },
   "phases": [
@@ -52,27 +52,35 @@
       "id": "P01",
       "title": "密封备份架构",
       "objective": "实现密封 ZIP 备份、旧目录兼容、无效备份隔离和恢复管理接口",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P00"],
       "successor": "P02",
       "threadId": "/root/p01_sealed_backup",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "87ba2e0373f749d9198d38bde9020703b282c703",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to coordination baseline 6e09130 exactly one atomic P01 commit across the approved recovery service, Web contract, tests, status and handoff paths",
+          "parent Node 22.23.2/pnpm 9.15.0 rerun: P00/P01/P09/P12/P14/encryption passed 6 files and 38 tests; shared/API builds passed",
+          "parent Web check passed with 0 errors and 9 pre-existing warnings; Web adapter-node build passed",
+          "sealed ZIP preserves portable manifest v1 and all physical/logical/SQLite/CAS checks; invalid legacy items expose no operation URLs or controls"
+        ]
+      }
     },
     {
       "id": "P02",
       "title": "候选与独立门禁",
       "objective": "完成全量验证并形成两个运行时代码一致的可部署候选",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 40,
       "dependsOn": ["P01"],
       "successor": "P03A",
-      "threadId": null,
+      "threadId": "/root/p02_candidate_gate",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -106,5 +114,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-15T16:03:30+08:00"
+  "updatedAt": "2026-08-15T16:24:30+08:00"
 }

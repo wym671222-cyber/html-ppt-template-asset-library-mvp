@@ -3,18 +3,18 @@
 - 工作流阶段：executing
 - 计划版本：2.1
 - 用户批准版本：2.1
-- 当前阶段：P01 密封备份架构
-- 活动线程：`/root/p01_sealed_backup`
-- 最后核实提交：`3979fd68d90cdb1902870482300a47d7d82c1543`
-- 下一安全动作：P01 只实现密封 ZIP、旧备份隔离与恢复 API/UI 合同；不得开始生产或 P02。
+- 当前阶段：P02 候选与独立门禁
+- 活动线程：`/root/p02_candidate_gate`
+- 最后核实提交：`87ba2e0373f749d9198d38bde9020703b282c703`
+- 下一安全动作：完成全量本地门禁、审计、候选 A/B 运行时代码一致性和精确分支推送；不得触碰生产。
 
 ## 阶段账本
 
 | 阶段 | 状态 | 提交 | 线程 | 门禁 | 证据 |
 |---|---|---|---|---|---|
 | P00 | passed | `3979fd68d90cdb1902870482300a47d7d82c1543` | `/root/p00_recovery_baseline` | passed | 父级复跑红测精确失败且 exit 1；P09 10/10、validator、旧链哈希和工作树门禁通过 |
-| P01 | in_progress | — | `/root/p01_sealed_backup` | pending | 依赖 P00；实现密封备份架构 |
-| P02 | pending | — | — | pending | 依赖 P01 |
+| P01 | passed | `87ba2e0373f749d9198d38bde9020703b282c703` | `/root/p01_sealed_backup` | passed | 父级定向 38/38、Shared/API build、Web check/build 与代码合同复核通过 |
+| P02 | in_progress | — | `/root/p02_candidate_gate` | pending | 全量门禁、审计、候选一致性和推送 |
 | P03A | pending | — | — | pending | 依赖 P02 |
 | P03B | pending | — | — | pending | 依赖 P03A |
 
@@ -48,3 +48,9 @@
 - `tests/p00-pocketbay-backup-drift.test.ts` 已转绿：逻辑等价旧目录 SQLite 物理重写后，当前状态正常返回、该项被隔离，且 source/restore/activation 无副作用。
 - 固定 Node `v22.23.2` / pnpm `9.15.0`：全量 Vitest `45 files / 835 tests`；指定 P00/P01/P09/P12/P14/encryption `6 files / 38 tests`；shell `8/8 suites`；Shared/API build、Web check/build 全部 exit 0。Web check 为 `0 errors / 9` 条既有 warning。
 - 未接触生产、远端、旧链、`.workbuddy/`、`01_AI协会_Workshop_HTML` 或 `02_HTML_PPT_组件与模板`。
+
+## P01 parent gate
+
+- 父级固定 Node `v22.23.2` / pnpm `9.15.0` 复跑 P00/P01/P09/P12/P14/encryption：`6 files / 38 tests` 全通过。
+- Shared/API build 通过；Web check 为 `0 errors / 9` 条既有 warning；Web adapter-node build 通过。
+- 代码复核确认 portable manifest v1 未变、sealed 每次重新验证、legacy invalid 无操作能力且精确请求 409。P01 通过并启动 P02。
