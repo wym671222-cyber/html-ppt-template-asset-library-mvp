@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import {
   chmodSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -9,7 +8,6 @@ import {
   readdirSync,
   rmSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -22,7 +20,7 @@ import { AssetLibraryCatalog, parseCatalogQuery } from '../apps/api/src/assets/l
 import { LocalContentStore } from '../apps/api/src/assets/content-store.js'
 import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { PresentationExportRepository } from '../apps/api/src/presentation-exports/presentation-export-repository.js'
-import { readStoredZip, sha256 } from '../apps/api/src/presentation-exports/offline-archive.js'
+import { createStoredZip, readStoredZip, sha256 } from '../apps/api/src/presentation-exports/offline-archive.js'
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
 import { LocalRecoveryService, type LocalBackupManifest } from '../apps/api/src/recovery/local-recovery.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
@@ -60,6 +58,12 @@ const secureDiagnostic = JSON.stringify({
 
 function hashFile(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+function rewriteArchive(path: string, change: (files: Map<string, Buffer>) => void): void {
+  const files = readStoredZip(readFileSync(path), { maxEntries: 5_002, maxBytes: 128 * 1024 * 1024 })
+  change(files)
+  writeFileSync(path, createStoredZip([...files].map(([relativePath, content]) => ({ relativePath, content })), { maxEntries: 5_002, maxBytes: 128 * 1024 * 1024 }))
 }
 
 function fixture() {
@@ -126,6 +130,9 @@ describe('P09 auditable local backup manifest', () => {
       const overview = state.service.inspectCurrent()
       expect(overview).not.toHaveProperty('owner')
       const backup = await state.service.createBackup(overview.stateSha256)
+      expect(backup).toMatchObject({ integrity: 'valid', storageKind: 'sealed-zip' })
+      expect(existsSync(join(state.backupRoot, `${backup.id}.zip`))).toBe(true)
+      expect(existsSync(join(state.backupRoot, backup.id))).toBe(false)
       const { manifest, manifestSha256 } = state.service.readBackupManifest(backup.id)
       expect(manifestSha256).toBe(backup.manifestSha256)
       expect(manifest).toMatchObject({
@@ -266,18 +273,14 @@ describe('P09 recovery negative and security boundaries', () => {
     for (const fault of ['database', 'cas', 'manifest', 'zip'] as const) {
       const state = await backedUpFixture()
       try {
-        const directory = join(state.backupRoot, state.backup.id)
-        if (fault === 'database') unlinkSync(join(directory, 'database/asset-library.db'))
-        if (fault === 'manifest') writeFileSync(join(directory, 'backup-manifest.json'), '{}\n')
-        if (fault === 'cas') {
-          const object = state.readback.manifest.objects.find((entry) => entry.roles.includes('template-package'))!
-          writeFileSync(join(directory, object.relativePath), 'tampered')
-        }
-        if (fault === 'zip') {
-          const object = state.readback.manifest.objects.find((entry) => entry.roles.includes('export-zip'))!
-          writeFileSync(join(directory, object.relativePath), 'tampered zip')
-        }
-        expect(() => state.service.restoreBackup(state.backup.id, state.backup.manifestSha256)).toThrow(/missing|hash|tampered|manifest/i)
+        const archivePath = join(state.backupRoot, `${state.backup.id}.zip`)
+        rewriteArchive(archivePath, (files) => {
+          if (fault === 'database') files.delete('database/asset-library.db')
+          if (fault === 'manifest') files.set('backup-manifest.json', Buffer.from('{}\n'))
+          if (fault === 'cas') files.set(state.readback.manifest.objects.find((entry) => entry.roles.includes('template-package'))!.relativePath, Buffer.from('tampered'))
+          if (fault === 'zip') files.set(state.readback.manifest.objects.find((entry) => entry.roles.includes('export-zip'))!.relativePath, Buffer.from('tampered zip'))
+        })
+        expect(() => state.service.restoreBackup(state.backup.id, state.backup.manifestSha256)).toThrow(/invalid|tampered/i)
         expect(existsSync(join(state.restoreRoot, `restore-${state.backup.id}`))).toBe(false)
         expect(existsSync(state.restoreRoot) ? readdirSync(state.restoreRoot).filter((name) => name.startsWith('.restore-')) : []).toEqual([])
       } finally { rmSync(state.directory, { recursive: true, force: true }) }
@@ -292,13 +295,16 @@ describe('P09 recovery negative and security boundaries', () => {
       const outside = join(state.directory, 'outside')
       mkdirSync(outside)
       symlinkSync(outside, join(state.backupRoot, 'backup-symlink'))
-      expect(() => state.service.readBackupManifest('backup-symlink')).toThrow(/non-symbolic/)
+      expect(() => state.service.readBackupManifest('backup-symlink')).toThrow(/invalid|tampered/)
 
-      const manifestPath = join(state.backupRoot, state.backup.id, 'backup-manifest.json')
-      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as LocalBackupManifest
+      const archivePath = join(state.backupRoot, `${state.backup.id}.zip`)
+      const files = readStoredZip(readFileSync(archivePath), { maxEntries: 5_002, maxBytes: 128 * 1024 * 1024 })
+      const manifest = JSON.parse(files.get('backup-manifest.json')!.toString('utf8')) as LocalBackupManifest
       const tampered = { ...manifest, objects: manifest.objects.map((object, index) => index === 0 ? { ...object, relativePath: '../outside' } : object) }
-      writeFileSync(manifestPath, `${JSON.stringify(tampered, null, 2)}\n`)
-      expect(() => state.service.restoreBackup(state.backup.id, hashFile(manifestPath))).toThrow(/unsafe|path/)
+      const manifestBytes = Buffer.from(`${JSON.stringify(tampered, null, 2)}\n`)
+      files.set('backup-manifest.json', manifestBytes)
+      writeFileSync(archivePath, createStoredZip([...files].map(([relativePath, content]) => ({ relativePath, content })), { maxEntries: 5_002, maxBytes: 128 * 1024 * 1024 }))
+      expect(() => state.service.restoreBackup(state.backup.id, sha256(manifestBytes))).toThrow(/invalid|tampered/)
       expect(existsSync(join(state.restoreRoot, `restore-${state.backup.id}`))).toBe(false)
     } finally { rmSync(state.directory, { recursive: true, force: true }) }
   })

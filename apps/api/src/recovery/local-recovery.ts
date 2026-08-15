@@ -39,6 +39,10 @@ export const MAX_RECOVERY_ARCHIVE_BYTES = 128 * 1024 * 1024
 const MAX_RECOVERY_ARCHIVE_FILES = MAX_OBJECTS + 2
 const DATABASE_RELATIVE_PATH = 'database/asset-library.db' as const
 const MANIFEST_RELATIVE_PATH = 'backup-manifest.json' as const
+const SEALED_BACKUP_SUFFIX = '.zip' as const
+const INVALID_SEALED_DIAGNOSTIC = 'Sealed backup failed integrity verification.' as const
+const INVALID_LEGACY_DIAGNOSTIC = 'Legacy backup failed integrity verification.' as const
+const CONFLICT_DIAGNOSTIC = 'Backup storage conflict requires operator review.' as const
 
 export class RecoveryRequestError extends Error {
   constructor(message: string, readonly status: 400 | 404 | 409 | 500 = 409) {
@@ -124,8 +128,12 @@ export type LocalBackupManifest = Readonly<{
   exports: BackupExportEntry[]
 }>
 
-export type RecoveryBackupSummary = Readonly<{
+export type RecoveryBackupStorageKind = 'sealed-zip' | 'legacy-directory'
+
+export type RecoveryValidBackupSummary = Readonly<{
   id: string
+  integrity: 'valid'
+  storageKind: RecoveryBackupStorageKind
   createdAt: number
   stateSha256: string
   manifestSha256: string
@@ -137,6 +145,15 @@ export type RecoveryBackupSummary = Readonly<{
   archiveUrl: string
   restored: boolean
 }>
+
+export type RecoveryInvalidBackupSummary = Readonly<{
+  id: string
+  integrity: 'invalid'
+  storageKind: RecoveryBackupStorageKind | 'conflict'
+  diagnostic: typeof INVALID_SEALED_DIAGNOSTIC | typeof INVALID_LEGACY_DIAGNOSTIC | typeof CONFLICT_DIAGNOSTIC
+}>
+
+export type RecoveryBackupSummary = RecoveryValidBackupSummary | RecoveryInvalidBackupSummary
 
 export type RecoveryRestoreSummary = Readonly<{
   id: string
@@ -181,6 +198,7 @@ export type RecoveryOverview = Readonly<{
 export type RecoveryFaultHooks = Readonly<{
   afterDatabaseSnapshot?: () => void
   afterBackupObject?: (copiedCount: number) => void
+  beforeArchiveCommit?: () => void
   afterRestoreObject?: (copiedCount: number) => void
 }>
 
@@ -196,10 +214,19 @@ type DatabaseIndex = Readonly<{
 }>
 
 type ValidatedBackup = Readonly<{
-  directory: string
+  storageKind: RecoveryBackupStorageKind
+  directory?: string
+  files?: ReadonlyMap<string, Buffer>
+  archiveBytes?: Buffer
   manifest: LocalBackupManifest
   manifestSha256: string
   index: DatabaseIndex
+}>
+
+type BackupStorageRecord = Readonly<{
+  id: string
+  directoryPath?: string
+  archivePath?: string
 }>
 
 type ContentRow = {
@@ -258,6 +285,14 @@ function controlledChild(root: string, id: string, label: string): string {
   return path
 }
 
+function controlledArchivePath(root: string, backupId: string): string {
+  assertControlledId(backupId, 'Backup id')
+  const filename = `${backupId}${SEALED_BACKUP_SUFFIX}`
+  const path = resolve(root, filename)
+  if (relative(root, path) !== filename) throw new RecoveryRequestError('Backup id escapes its controlled root', 400)
+  return path
+}
+
 function assertRegularFile(path: string, label: string): void {
   if (!existsSync(path)) throw new RecoveryRequestError(`${label} is missing`)
   const stat = lstatSync(path)
@@ -288,6 +323,18 @@ function writeExclusive(path: string, content: Uint8Array): void {
   } finally {
     closeSync(descriptor)
   }
+}
+
+function fsyncDirectory(path: string): void {
+  const descriptor = openSync(path, 'r')
+  try { fsyncSync(descriptor) } finally { closeSync(descriptor) }
+}
+
+function readValidatedBackupFile(validated: ValidatedBackup, relativePath: string): Buffer {
+  const sealed = validated.files?.get(relativePath)
+  if (sealed) return Buffer.from(sealed)
+  if (!validated.directory) throw new RecoveryRequestError('Validated backup storage is unavailable')
+  return readFileSync(join(validated.directory, relativePath))
 }
 
 function objectBackupPath(digest: string): string {
@@ -492,8 +539,11 @@ function inspectDatabase(databasePath: string): DatabaseIndex {
   }
 }
 
-function verifyContentFiles(contentRoot: string, index: DatabaseIndex): void {
-  if (index.objects.length === 0) return
+function verifyContentFiles(contentRoot: string, index: DatabaseIndex, requireRoot = false): void {
+  if (index.objects.length === 0) {
+    if (requireRoot) assertDirectory(contentRoot, 'Content object root')
+    return
+  }
   assertDirectory(contentRoot, 'Content object root')
   const store = new LocalContentStore(contentRoot)
   for (const object of index.objects) {
@@ -594,10 +644,14 @@ function parseActivationRequest(content: Buffer): RecoveryActivationRequest {
   return request
 }
 
-function backupSummary(validated: ValidatedBackup, restoreRoot: string): RecoveryBackupSummary {
+function backupSummary(validated: ValidatedBackup, restoreRoot: string): RecoveryValidBackupSummary {
   const { manifest } = validated
+  const restorePath = controlledChild(restoreRoot, `restore-${manifest.backupId}`, 'Restore id')
+  const restored = existsSync(restorePath) && !lstatSync(restorePath).isSymbolicLink() && lstatSync(restorePath).isDirectory()
   return {
     id: manifest.backupId,
+    integrity: 'valid',
+    storageKind: validated.storageKind,
     createdAt: manifest.createdAt,
     stateSha256: manifest.source.stateSha256,
     manifestSha256: validated.manifestSha256,
@@ -607,8 +661,14 @@ function backupSummary(validated: ValidatedBackup, restoreRoot: string): Recover
     exportCount: manifest.exports.length,
     manifestUrl: `/api/recovery/backups/${encodeURIComponent(manifest.backupId)}/manifest`,
     archiveUrl: `/api/recovery/backups/${encodeURIComponent(manifest.backupId)}/archive`,
-    restored: existsSync(controlledChild(restoreRoot, `restore-${manifest.backupId}`, 'Restore id')),
+    restored,
   }
+}
+
+function invalidBackupSummary(record: BackupStorageRecord): RecoveryInvalidBackupSummary {
+  if (record.directoryPath && record.archivePath) return { id: record.id, integrity: 'invalid', storageKind: 'conflict', diagnostic: CONFLICT_DIAGNOSTIC }
+  if (record.archivePath) return { id: record.id, integrity: 'invalid', storageKind: 'sealed-zip', diagnostic: INVALID_SEALED_DIAGNOSTIC }
+  return { id: record.id, integrity: 'invalid', storageKind: 'legacy-directory', diagnostic: INVALID_LEGACY_DIAGNOSTIC }
 }
 
 export class LocalRecoveryService {
@@ -642,7 +702,7 @@ export class LocalRecoveryService {
   inspectCurrent(): RecoveryOverview {
     try {
       const index = inspectDatabase(this.databasePath)
-      verifyContentFiles(this.contentRoot, index)
+      verifyContentFiles(this.contentRoot, index, true)
       verifyExports(this.databasePath, this.contentRoot, index)
       return {
         stateSha256: index.stateSha256,
@@ -660,30 +720,34 @@ export class LocalRecoveryService {
   }
 
   listBackups(): RecoveryBackupSummary[] {
-    if (!existsSync(this.backupRoot)) return []
-    assertDirectory(this.backupRoot, 'Recovery backup root')
-    const ids = readdirSync(this.backupRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && /^backup-[a-z0-9-]+$/.test(entry.name))
-      .map((entry) => entry.name)
-      .sort()
-    if (ids.length > MAX_BACKUPS) throw new RecoveryRequestError(`Recovery UI is limited to ${MAX_BACKUPS} local backups`)
-    return ids.map((id) => backupSummary(this.validateBackup(id), this.restoreRoot)).sort((left, right) => right.createdAt - left.createdAt || left.id.localeCompare(right.id))
+    const records = this.listBackupStorageRecords()
+    const summaries = records.map((record): RecoveryBackupSummary => {
+      if (record.directoryPath && record.archivePath) return invalidBackupSummary(record)
+      try { return backupSummary(this.validateStorageRecord(record), this.restoreRoot) } catch { return invalidBackupSummary(record) }
+    })
+    return summaries.sort((left, right) => {
+      if (left.integrity !== right.integrity) return left.integrity === 'valid' ? -1 : 1
+      if (left.integrity === 'valid' && right.integrity === 'valid') return right.createdAt - left.createdAt || left.id.localeCompare(right.id)
+      return left.id.localeCompare(right.id)
+    })
   }
 
-  async createBackup(expectedStateSha256: unknown): Promise<RecoveryBackupSummary> {
+  async createBackup(expectedStateSha256: unknown): Promise<RecoveryValidBackupSummary> {
     assertSha256(expectedStateSha256, 'expectedStateSha256')
     const createdAt = Date.now()
     const backupId = `backup-${createdAt}-${randomUUID()}`
     const sourceBeforeHash = sha256File(this.databasePath)
     const sourceBefore = inspectDatabase(this.databasePath)
-    verifyContentFiles(this.contentRoot, sourceBefore)
+    verifyContentFiles(this.contentRoot, sourceBefore, true)
     verifyExports(this.databasePath, this.contentRoot, sourceBefore)
     if (sourceBefore.stateSha256 !== expectedStateSha256) throw new RecoveryRequestError('Recovery source state is stale; reload and retry', 409)
 
     ensureWritableRoot(this.backupRoot, 'Recovery backup root')
-    const destination = controlledChild(this.backupRoot, backupId, 'Backup id')
-    if (existsSync(destination)) throw new RecoveryRequestError('Backup destination already exists')
-    const temporary = join(this.backupRoot, `.backup-${randomUUID()}.tmp`)
+    this.assertBackupCapacity(backupId)
+    const destination = controlledArchivePath(this.backupRoot, backupId)
+    const legacyDestination = controlledChild(this.backupRoot, backupId, 'Backup id')
+    if (existsSync(destination) || existsSync(legacyDestination)) throw new RecoveryRequestError('Backup destination already exists')
+    const temporary = join(this.backupRoot, `.backup-build-${randomUUID()}.tmp`)
     try {
       mkdirSync(temporary, { mode: 0o700 })
       const snapshotPath = join(temporary, DATABASE_RELATIVE_PATH)
@@ -709,7 +773,7 @@ export class LocalRecoveryService {
       }
 
       const sourceAfter = inspectDatabase(this.databasePath)
-      verifyContentFiles(this.contentRoot, sourceAfter)
+      verifyContentFiles(this.contentRoot, sourceAfter, true)
       verifyExports(this.databasePath, this.contentRoot, sourceAfter)
       const sourceAfterHash = sha256File(this.databasePath)
       if (sourceAfter.stateSha256 !== sourceBefore.stateSha256 || sourceAfterHash !== sourceBeforeHash) throw new RecoveryRequestError('Recovery source changed during backup; retry')
@@ -736,12 +800,18 @@ export class LocalRecoveryService {
       }
       const manifestBytes = Buffer.from(canonical(manifest), 'utf8')
       writeExclusive(join(temporary, MANIFEST_RELATIVE_PATH), manifestBytes)
-      this.validateBackupDirectory(temporary, sha256(manifestBytes), backupId)
-      renameSync(temporary, destination)
+      this.validateBackupDirectory(temporary, sha256(manifestBytes), backupId, 'sealed-zip')
+      const files = listControlledFiles(temporary).map((relativePath) => ({ relativePath, content: readFileSync(join(temporary, relativePath)) }))
+      const archive = createStoredZip(files, { maxEntries: MAX_RECOVERY_ARCHIVE_FILES, maxBytes: MAX_RECOVERY_ARCHIVE_BYTES })
+      if (archive.byteLength > MAX_RECOVERY_ARCHIVE_BYTES) throw new RecoveryRequestError('Recovery archive exceeds its byte limit', 409)
+      this.validateSealedArchiveBytes(archive, sha256(manifestBytes), backupId)
+      this.commitSealedArchive(destination, archive, '.backup-write')
       return backupSummary(this.validateBackup(backupId), this.restoreRoot)
     } catch (error) {
       if (existsSync(temporary)) rmSync(temporary, { recursive: true, force: true })
       throw wrapFailure(error, 'Local backup creation failed')
+    } finally {
+      if (existsSync(temporary)) rmSync(temporary, { recursive: true, force: true })
     }
   }
 
@@ -753,9 +823,12 @@ export class LocalRecoveryService {
   readBackupArchive(backupId: string): Buffer {
     const validated = this.validateBackup(backupId)
     try {
-      const files = listControlledFiles(validated.directory).map((relativePath) => ({
+      if (validated.storageKind === 'sealed-zip') return Buffer.from(validated.archiveBytes!)
+      if (!validated.directory) throw new RecoveryRequestError('Validated legacy backup storage is unavailable')
+      const directory = validated.directory
+      const files = listControlledFiles(directory).map((relativePath) => ({
         relativePath,
-        content: readFileSync(join(validated.directory, relativePath)),
+        content: readFileSync(join(directory, relativePath)),
       }))
       const archive = createStoredZip(files, { maxEntries: MAX_RECOVERY_ARCHIVE_FILES, maxBytes: MAX_RECOVERY_ARCHIVE_BYTES })
       if (archive.byteLength > MAX_RECOVERY_ARCHIVE_BYTES) throw new RecoveryRequestError('Recovery archive exceeds its byte limit', 409)
@@ -765,37 +838,34 @@ export class LocalRecoveryService {
     }
   }
 
-  importBackupArchive(content: Uint8Array): RecoveryBackupSummary {
+  importBackupArchive(content: Uint8Array): RecoveryValidBackupSummary {
     const bytes = Buffer.from(content)
     if (bytes.byteLength < 22 || bytes.byteLength > MAX_RECOVERY_ARCHIVE_BYTES) throw new RecoveryRequestError('Recovery archive size is invalid', 400)
     ensureWritableRoot(this.backupRoot, 'Recovery backup root')
-    let files: Map<string, Buffer>
+    let candidate: ValidatedBackup
     try {
-      files = readStoredZip(bytes, { maxEntries: MAX_RECOVERY_ARCHIVE_FILES, maxBytes: MAX_RECOVERY_ARCHIVE_BYTES })
+      candidate = this.validateSealedArchiveBytes(bytes)
     } catch (error) {
       throw wrapFailure(error, 'Recovery archive structure is invalid', 400)
     }
-    const manifestBytes = files.get(MANIFEST_RELATIVE_PATH)
-    if (!manifestBytes) throw new RecoveryRequestError('Recovery archive manifest is missing', 400)
-    const manifest = parseManifest(manifestBytes)
-    const expectedFiles = [MANIFEST_RELATIVE_PATH, DATABASE_RELATIVE_PATH, ...manifest.objects.map((object) => object.relativePath)].sort()
-    if (JSON.stringify([...files.keys()].sort()) !== JSON.stringify(expectedFiles)) throw new RecoveryRequestError('Recovery archive contains a missing or undeclared file', 400)
-
-    const destination = controlledChild(this.backupRoot, manifest.backupId, 'Backup id')
-    const manifestSha256 = sha256(manifestBytes)
-    if (existsSync(destination)) {
-      const existing = this.validateBackup(manifest.backupId, manifestSha256)
+    const backupId = candidate.manifest.backupId
+    const records = this.listBackupStorageRecords()
+    const existingRecord = records.find((record) => record.id === backupId)
+    if (existingRecord) {
+      if (existingRecord.directoryPath || !existingRecord.archivePath) throw new RecoveryRequestError('Recovery backup id already exists with different storage', 409)
+      let existing: ValidatedBackup
+      try { existing = this.validateStorageRecord(existingRecord) } catch { throw new RecoveryRequestError('Recovery backup id already exists but is invalid', 409) }
+      if (existing.manifestSha256 !== candidate.manifestSha256 || !existing.archiveBytes?.equals(bytes)) {
+        throw new RecoveryRequestError('Recovery backup id already exists with different archive bytes', 409)
+      }
       return backupSummary(existing, this.restoreRoot)
     }
-    const temporary = join(this.backupRoot, `.import-${randomUUID()}.tmp`)
+    this.assertBackupCapacity(backupId, records)
+    const destination = controlledArchivePath(this.backupRoot, backupId)
     try {
-      mkdirSync(temporary, { mode: 0o700 })
-      for (const relativePath of expectedFiles) writeExclusive(join(temporary, relativePath), files.get(relativePath)!)
-      this.validateBackupDirectory(temporary, manifestSha256, manifest.backupId)
-      renameSync(temporary, destination)
-      return backupSummary(this.validateBackup(manifest.backupId, manifestSha256), this.restoreRoot)
+      this.commitSealedArchive(destination, bytes, '.import-write')
+      return backupSummary(this.validateBackup(backupId, candidate.manifestSha256), this.restoreRoot)
     } catch (error) {
-      if (existsSync(temporary)) rmSync(temporary, { recursive: true, force: true })
       throw wrapFailure(error, 'Recovery archive import failed')
     }
   }
@@ -810,10 +880,10 @@ export class LocalRecoveryService {
     const temporary = join(this.restoreRoot, `.restore-${randomUUID()}.tmp`)
     try {
       mkdirSync(temporary, { mode: 0o700 })
-      writeExclusive(join(temporary, DATABASE_RELATIVE_PATH), readFileSync(join(validated.directory, DATABASE_RELATIVE_PATH)))
+      writeExclusive(join(temporary, DATABASE_RELATIVE_PATH), readValidatedBackupFile(validated, DATABASE_RELATIVE_PATH))
       let copied = 0
       for (const object of validated.manifest.objects) {
-        writeExclusive(join(temporary, object.relativePath), readFileSync(join(validated.directory, object.relativePath)))
+        writeExclusive(join(temporary, object.relativePath), readValidatedBackupFile(validated, object.relativePath))
         copied += 1
         this.faults.afterRestoreObject?.(copied)
       }
@@ -984,11 +1054,110 @@ export class LocalRecoveryService {
 
   private validateBackup(backupId: string, expectedManifestSha256?: string): ValidatedBackup {
     assertControlledId(backupId, 'Backup id')
-    const directory = controlledChild(this.backupRoot, backupId, 'Backup id')
-    return this.validateBackupDirectory(directory, expectedManifestSha256, backupId)
+    const record = this.listBackupStorageRecords().find((candidate) => candidate.id === backupId)
+    if (!record) throw new RecoveryRequestError('Recovery backup was not found', 404)
+    if (record.directoryPath && record.archivePath) throw new RecoveryRequestError(CONFLICT_DIAGNOSTIC, 409)
+    try {
+      return this.validateStorageRecord(record, expectedManifestSha256)
+    } catch (error) {
+      if (error instanceof RecoveryRequestError && (error.status === 400 || error.status === 404 || error.status === 500)) throw error
+      throw new RecoveryRequestError('Recovery backup is invalid or tampered and cannot be used', 409)
+    }
   }
 
-  private validateBackupDirectory(directory: string, expectedManifestSha256?: string, expectedBackupId?: string): ValidatedBackup {
+  private listBackupStorageRecords(): BackupStorageRecord[] {
+    if (!existsSync(this.backupRoot)) return []
+    assertDirectory(this.backupRoot, 'Recovery backup root')
+    const records = new Map<string, { id: string; directoryPath?: string; archivePath?: string }>()
+    for (const entry of readdirSync(this.backupRoot, { withFileTypes: true })) {
+      let id: string | undefined
+      let kind: 'directoryPath' | 'archivePath' | undefined
+      if (/^backup-[a-z0-9-]+$/.test(entry.name)) {
+        id = entry.name
+        kind = 'directoryPath'
+      } else if (/^backup-[a-z0-9-]+\.zip$/.test(entry.name)) {
+        id = entry.name.slice(0, -SEALED_BACKUP_SUFFIX.length)
+        kind = 'archivePath'
+      }
+      if (!id || !kind) continue
+      assertControlledId(id, 'Backup id')
+      const record = records.get(id) ?? { id }
+      record[kind] = kind === 'directoryPath'
+        ? controlledChild(this.backupRoot, id, 'Backup id')
+        : controlledArchivePath(this.backupRoot, id)
+      records.set(id, record)
+    }
+    if (records.size > MAX_BACKUPS) throw new RecoveryRequestError(`Recovery UI is limited to ${MAX_BACKUPS} local backups`)
+    return [...records.values()].sort((left, right) => left.id.localeCompare(right.id))
+  }
+
+  private assertBackupCapacity(backupId: string, records = this.listBackupStorageRecords()): void {
+    if (!records.some((record) => record.id === backupId) && records.length >= MAX_BACKUPS) {
+      throw new RecoveryRequestError(`Recovery UI is limited to ${MAX_BACKUPS} local backups`)
+    }
+  }
+
+  private validateStorageRecord(record: BackupStorageRecord, expectedManifestSha256?: string): ValidatedBackup {
+    if (record.directoryPath && record.archivePath) throw new RecoveryRequestError(CONFLICT_DIAGNOSTIC, 409)
+    if (record.archivePath) return this.validateSealedArchivePath(record.archivePath, expectedManifestSha256, record.id)
+    if (record.directoryPath) return this.validateBackupDirectory(record.directoryPath, expectedManifestSha256, record.id, 'legacy-directory')
+    throw new RecoveryRequestError('Recovery backup was not found', 404)
+  }
+
+  private validateSealedArchivePath(archivePath: string, expectedManifestSha256?: string, expectedBackupId?: string): ValidatedBackup {
+    assertRegularFile(archivePath, 'Sealed backup archive')
+    return this.validateSealedArchiveBytes(readFileSync(archivePath), expectedManifestSha256, expectedBackupId)
+  }
+
+  private validateSealedArchiveBytes(content: Buffer, expectedManifestSha256?: string, expectedBackupId?: string): ValidatedBackup {
+    if (content.byteLength < 22 || content.byteLength > MAX_RECOVERY_ARCHIVE_BYTES) throw new RecoveryRequestError('Recovery archive size is invalid')
+    let files: Map<string, Buffer>
+    try { files = readStoredZip(content, { maxEntries: MAX_RECOVERY_ARCHIVE_FILES, maxBytes: MAX_RECOVERY_ARCHIVE_BYTES }) }
+    catch (error) { throw wrapFailure(error, 'Recovery archive structure is invalid') }
+    const manifestBytes = files.get(MANIFEST_RELATIVE_PATH)
+    if (!manifestBytes) throw new RecoveryRequestError('Recovery archive manifest is missing')
+    const manifest = parseManifest(manifestBytes)
+    const manifestSha256 = sha256(manifestBytes)
+    if (expectedManifestSha256 && manifestSha256 !== expectedManifestSha256) throw new RecoveryRequestError('Backup manifest hash is stale or tampered')
+    if (expectedBackupId && manifest.backupId !== expectedBackupId) throw new RecoveryRequestError('Backup manifest id does not match its controlled archive')
+    const expectedFiles = [MANIFEST_RELATIVE_PATH, DATABASE_RELATIVE_PATH, ...manifest.objects.map((object) => object.relativePath)].sort()
+    if (JSON.stringify([...files.keys()].sort()) !== JSON.stringify(expectedFiles)) throw new RecoveryRequestError('Recovery archive contains a missing or undeclared file')
+
+    const validationRoot = mkdtempSync(join(tmpdir(), 'asset-library-sealed-backup-'))
+    try {
+      for (const relativePath of expectedFiles) writeExclusive(join(validationRoot, relativePath), files.get(relativePath)!)
+      const validated = this.validateBackupDirectory(validationRoot, manifestSha256, manifest.backupId, 'sealed-zip')
+      return { ...validated, directory: undefined, files, archiveBytes: Buffer.from(content) }
+    } finally {
+      rmSync(validationRoot, { recursive: true, force: true })
+    }
+  }
+
+  private commitSealedArchive(destination: string, content: Buffer, temporaryPrefix: string): void {
+    const lockPath = `${destination}.lock`
+    const temporary = join(this.backupRoot, `${temporaryPrefix}-${randomUUID()}.tmp`)
+    let lockDescriptor: number | undefined
+    try {
+      try { lockDescriptor = openSync(lockPath, 'wx', 0o600) }
+      catch { throw new RecoveryRequestError('Backup destination is locked or already being committed') }
+      if (existsSync(destination)) throw new RecoveryRequestError('Backup destination already exists')
+      writeExclusive(temporary, content)
+      this.faults.beforeArchiveCommit?.()
+      if (existsSync(destination)) throw new RecoveryRequestError('Backup destination already exists')
+      renameSync(temporary, destination)
+      fsyncDirectory(this.backupRoot)
+    } catch (error) {
+      if (existsSync(temporary)) unlinkSync(temporary)
+      throw error
+    } finally {
+      if (lockDescriptor !== undefined) {
+        closeSync(lockDescriptor)
+        if (existsSync(lockPath)) unlinkSync(lockPath)
+      }
+    }
+  }
+
+  private validateBackupDirectory(directory: string, expectedManifestSha256?: string, expectedBackupId?: string, storageKind: RecoveryBackupStorageKind = 'legacy-directory'): ValidatedBackup {
     try {
       assertDirectory(directory, 'Backup directory')
       const manifestPath = join(directory, MANIFEST_RELATIVE_PATH)
@@ -1020,7 +1189,7 @@ export class LocalRecoveryService {
         || JSON.stringify(manifest.derivatives) !== JSON.stringify(index.derivatives)
         || JSON.stringify(manifest.presentations) !== JSON.stringify(index.presentations)
         || JSON.stringify(manifest.exports) !== JSON.stringify(index.exports)) throw new RecoveryRequestError('Backup manifest does not match the restored database index')
-      return { directory, manifest, manifestSha256, index }
+      return { storageKind, directory, manifest, manifestSha256, index }
     } catch (error) {
       throw wrapFailure(error, 'Backup validation failed')
     }

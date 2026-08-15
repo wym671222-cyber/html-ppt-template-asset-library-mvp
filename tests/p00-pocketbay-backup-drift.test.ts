@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { migrateDatabase } from '../apps/api/src/db/migrate.js'
+import { readStoredZip } from '../apps/api/src/presentation-exports/offline-archive.js'
 import { LocalRecoveryService } from '../apps/api/src/recovery/local-recovery.js'
 
 type SQLite = {
@@ -46,8 +47,8 @@ function sourceFingerprint(databasePath: string, contentRoot: string): string {
   return createHash('sha256').update(JSON.stringify({ database: sha256File(databasePath), objects })).digest('hex')
 }
 
-describe('P00 PocketBay bare-backup physical drift baseline', () => {
-  it('fails closed on a logically equivalent SQLite physical rewrite without recovery, activation, or source side effects', async () => {
+describe('P00 PocketBay bare-backup physical drift regression', () => {
+  it('isolates a logically equivalent legacy SQLite physical rewrite without hiding current state or causing side effects', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'asset-library-p00-backup-drift-'))
     const databasePath = join(directory, 'source/asset-library.db')
     const contentRoot = join(directory, 'source/objects')
@@ -62,6 +63,15 @@ describe('P00 PocketBay bare-backup physical drift baseline', () => {
       const sourceBefore = sourceFingerprint(databasePath, contentRoot)
       const overviewBefore = service.inspectCurrent()
       const backup = await service.createBackup(overviewBefore.stateSha256)
+      const archivePath = join(backupRoot, `${backup.id}.zip`)
+      const legacyDirectory = join(backupRoot, backup.id)
+      const entries = readStoredZip(readFileSync(archivePath), { maxEntries: 5_002, maxBytes: 128 * 1024 * 1024 })
+      for (const [relativePath, content] of entries) {
+        const path = join(legacyDirectory, relativePath)
+        mkdirSync(dirname(path), { recursive: true })
+        writeFileSync(path, content)
+      }
+      unlinkSync(archivePath)
       const backupDatabasePath = join(backupRoot, backup.id, 'database/asset-library.db')
       const backupLogicalBefore = logicalTableState(backupDatabasePath)
       const backupHashBefore = sha256File(backupDatabasePath)
@@ -78,19 +88,25 @@ describe('P00 PocketBay bare-backup physical drift baseline', () => {
       expect(logicalTableState(backupDatabasePath)).toBe(backupLogicalBefore)
       expect(sha256File(backupDatabasePath)).not.toBe(backupHashBefore)
 
-      let originalError: Error | undefined
-      try {
-        service.inspectCurrent()
-      } catch (error) {
-        originalError = error as Error
-      }
-
-      expect(originalError?.message).toBe('Backup SQLite hash or size verification failed')
+      const overviewAfter = service.inspectCurrent()
+      expect(overviewAfter).toMatchObject({
+        stateSha256: overviewBefore.stateSha256,
+        databaseSha256: overviewBefore.databaseSha256,
+        migrationCount: overviewBefore.migrationCount,
+        objectCount: overviewBefore.objectCount,
+        backups: [{
+          id: backup.id,
+          integrity: 'invalid',
+          storageKind: 'legacy-directory',
+          diagnostic: 'Legacy backup failed integrity verification.',
+        }],
+      })
+      expect(overviewAfter.backups[0]).not.toHaveProperty('manifestSha256')
+      expect(overviewAfter.backups[0]).not.toHaveProperty('archiveUrl')
+      expect(overviewAfter.backups[0]).not.toHaveProperty('restored')
       expect(existsSync(restoreRoot)).toBe(false)
       expect(existsSync(activationRequestPath)).toBe(false)
       expect(sourceFingerprint(databasePath, contentRoot)).toBe(sourceBefore)
-      if (!originalError) throw new Error('Expected LocalRecoveryService.inspectCurrent() to fail closed')
-      throw originalError
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }

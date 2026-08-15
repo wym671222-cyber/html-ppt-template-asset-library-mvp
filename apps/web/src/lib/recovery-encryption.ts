@@ -1,4 +1,4 @@
-import { safeBackupArchiveUrl, type RecoveryBackup } from './recovery'
+import { safeBackupArchiveUrl, type RecoveryValidBackup } from './recovery'
 
 const MAGIC = new TextEncoder().encode('PBACKUP1')
 const SALT_BYTES = 16
@@ -66,7 +66,7 @@ export async function decryptRecoveryArchive(content: Uint8Array, passphrase: st
   }
 }
 
-export async function downloadEncryptedRecoveryBackup(backup: RecoveryBackup, passphrase: string): Promise<void> {
+export async function downloadEncryptedRecoveryBackup(backup: RecoveryValidBackup, passphrase: string): Promise<void> {
   const response = await fetch(safeBackupArchiveUrl(backup.archiveUrl), { credentials: 'include' })
   if (!response.ok || !(response.headers.get('content-type') ?? '').toLowerCase().startsWith('application/zip')) throw new Error(`恢复归档下载失败（${response.status}）。`)
   const archive = new Uint8Array(await response.arrayBuffer())
@@ -83,7 +83,7 @@ export async function downloadEncryptedRecoveryBackup(backup: RecoveryBackup, pa
   }
 }
 
-export async function importEncryptedRecoveryBackup(file: File, passphrase: string): Promise<RecoveryBackup> {
+export async function importEncryptedRecoveryBackup(file: File, passphrase: string): Promise<RecoveryValidBackup> {
   if (!file.name.toLowerCase().endsWith('.pba')) throw new Error('请选择 .pba 加密备份文件。')
   if (file.size < 1 || file.size > MAX_ENCRYPTED_BYTES) throw new Error('加密备份文件大小不符合限制。')
   const archive = await decryptRecoveryArchive(new Uint8Array(await file.arrayBuffer()), passphrase)
@@ -93,7 +93,7 @@ export async function importEncryptedRecoveryBackup(file: File, passphrase: stri
     headers: { 'Content-Type': 'application/zip' },
     body: new Blob([toArrayBuffer(archive)], { type: 'application/zip' }),
   })
-  const payload = await response.json().catch(() => ({ error: '恢复服务返回了无效响应' })) as { error?: string; backup?: RecoveryBackup }
+  const payload = await response.json().catch(() => ({ error: '恢复服务返回了无效响应' })) as { error?: string; backup?: RecoveryValidBackup }
   if (!response.ok) throw new Error(payload.error ?? `加密备份导入失败（${response.status}）。`)
   if (!payload.backup) throw new Error('恢复服务响应不符合备份契约。')
   return payload.backup

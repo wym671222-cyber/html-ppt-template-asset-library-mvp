@@ -1,5 +1,9 @@
-export type RecoveryBackup = Readonly<{
+export type RecoveryBackupStorageKind = 'sealed-zip' | 'legacy-directory'
+
+export type RecoveryValidBackup = Readonly<{
   id: string
+  integrity: 'valid'
+  storageKind: RecoveryBackupStorageKind
   createdAt: number
   stateSha256: string
   manifestSha256: string
@@ -11,6 +15,15 @@ export type RecoveryBackup = Readonly<{
   archiveUrl: string
   restored: boolean
 }>
+
+export type RecoveryInvalidBackup = Readonly<{
+  id: string
+  integrity: 'invalid'
+  storageKind: RecoveryBackupStorageKind | 'conflict'
+  diagnostic: 'Sealed backup failed integrity verification.' | 'Legacy backup failed integrity verification.' | 'Backup storage conflict requires operator review.'
+}>
+
+export type RecoveryBackup = RecoveryValidBackup | RecoveryInvalidBackup
 
 export type RecoveryOverview = Readonly<{
   stateSha256: string
@@ -43,7 +56,7 @@ export type RecoveryActivation = Readonly<{
   restartRequired: true
 }>
 
-type RecoveryPayload = { error?: string; recovery?: RecoveryOverview; backup?: RecoveryBackup; restore?: RecoveryRestore; activation?: RecoveryActivation }
+type RecoveryPayload = { error?: string; recovery?: RecoveryOverview; backup?: RecoveryValidBackup; restore?: RecoveryRestore; activation?: RecoveryActivation }
 
 async function request(path: string, method = 'GET', body?: Record<string, unknown>): Promise<RecoveryPayload> {
   const response = await fetch(path, { method, credentials: 'include', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
@@ -58,19 +71,19 @@ export async function loadRecoveryOverview(): Promise<RecoveryOverview> {
   return payload.recovery
 }
 
-export async function createLocalBackup(expectedStateSha256: string): Promise<RecoveryBackup> {
+export async function createLocalBackup(expectedStateSha256: string): Promise<RecoveryValidBackup> {
   const payload = await request('/api/recovery/backups', 'POST', { expectedStateSha256 })
   if (!payload.backup) throw new Error('备份服务响应不符合契约')
   return payload.backup
 }
 
-export async function runIsolatedRestore(backup: RecoveryBackup): Promise<RecoveryRestore> {
+export async function runIsolatedRestore(backup: RecoveryValidBackup): Promise<RecoveryRestore> {
   const payload = await request(`/api/recovery/backups/${backup.id}/restore`, 'POST', { expectedManifestSha256: backup.manifestSha256 })
   if (!payload.restore) throw new Error('恢复演练响应不符合契约')
   return payload.restore
 }
 
-export async function stageRecoveryActivation(backup: RecoveryBackup, confirmation: string): Promise<RecoveryActivation> {
+export async function stageRecoveryActivation(backup: RecoveryValidBackup, confirmation: string): Promise<RecoveryActivation> {
   const payload = await request(`/api/recovery/backups/${backup.id}/activate`, 'POST', { expectedManifestSha256: backup.manifestSha256, confirmation })
   if (!payload.activation || payload.activation.restartRequired !== true) throw new Error('恢复激活响应不符合契约')
   return payload.activation

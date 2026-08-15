@@ -5,7 +5,7 @@
   import { authMessage, type SessionUser } from '$lib/auth'
   import ThemeSwitcher from '$lib/components/library/ThemeSwitcher.svelte'
   import { loadTemplateImportJob, uploadTemplateHtml, uploadTemplateZip, validateTemplateHtml, type HtmlTemplateValidation, type TemplateImportJob, type TemplateImportResult } from '$lib/template-imports'
-  import { createLocalBackup, loadRecoveryOverview, runIsolatedRestore, safeBackupManifestUrl, stageRecoveryActivation, type RecoveryBackup, type RecoveryOverview } from '$lib/recovery'
+  import { createLocalBackup, loadRecoveryOverview, runIsolatedRestore, safeBackupManifestUrl, stageRecoveryActivation, type RecoveryOverview, type RecoveryValidBackup } from '$lib/recovery'
   import { downloadEncryptedRecoveryBackup, importEncryptedRecoveryBackup } from '$lib/recovery-encryption'
 
   let users = $state<SessionUser[]>([])
@@ -113,14 +113,14 @@
     catch (cause) { recoveryError = cause instanceof Error ? cause.message : '本机备份失败' }
     finally { recoveryLoading = false }
   }
-  async function restoreBackup(backup: RecoveryBackup): Promise<void> {
+  async function restoreBackup(backup: RecoveryValidBackup): Promise<void> {
     if (recoveryLoading || backup.restored) return
     recoveryLoading = true; recoveryError = ''; recoveryNotice = ''
     try { const result = await runIsolatedRestore(backup); if (recovery) recovery = { ...recovery, backups: recovery.backups.map((item) => item.id === backup.id ? { ...item, restored: true } : item) }; recoveryNotice = `隔离恢复通过：${result.objectCount} 个对象、${result.presentationCount} 个汇报。` }
     catch (cause) { recoveryError = cause instanceof Error ? cause.message : '隔离恢复失败' }
     finally { recoveryLoading = false }
   }
-  async function downloadEncryptedBackup(backup: RecoveryBackup): Promise<void> {
+  async function downloadEncryptedBackup(backup: RecoveryValidBackup): Promise<void> {
     recoveryLoading = true; recoveryError = ''
     try { await downloadEncryptedRecoveryBackup(backup, recoveryPassphrase); recoveryPassphrase = ''; recoveryNotice = '加密备份已下载。' }
     catch (cause) { recoveryError = cause instanceof Error ? cause.message : '加密备份下载失败' }
@@ -133,7 +133,7 @@
     catch (cause) { recoveryError = cause instanceof Error ? cause.message : '加密备份导入失败' }
     finally { recoveryLoading = false }
   }
-  async function prepareRecoveryActivation(backup: RecoveryBackup): Promise<void> {
+  async function prepareRecoveryActivation(backup: RecoveryValidBackup): Promise<void> {
     const expected = `ACTIVATE ${backup.id}`
     const confirmation = window.prompt(`请输入：${expected}`)
     if (confirmation === null) return
@@ -165,7 +165,7 @@
       {#if recoveryError}<p class="message error" role="alert">{recoveryError}</p>{/if}
       {#if recovery}<p class="recovery-summary">{recovery.migrationCount} 条 migration · {recovery.objectCount} 个对象 · {recovery.derivativeCount} 个派生物 · <code>{recovery.stateSha256.slice(0,12)}…</code></p>{/if}
       <div class="recovery-controls"><label>备份口令<input type="password" bind:value={recoveryPassphrase} minlength="14" maxlength="200" placeholder="至少 14 个字符" /></label><label>导入 .pba<input type="file" accept=".pba,application/x-pocketbay-backup" onchange={(event) => { recoveryImportFile = event.currentTarget.files?.[0] ?? null }} /></label><button type="button" disabled={!recoveryImportFile || recoveryPassphrase.length < 14 || recoveryLoading} onclick={() => void importEncryptedBackup()}>解密并导入</button></div>
-      {#if recovery?.backups.length}<ul class="backup-list">{#each recovery.backups as backup}<li><span>{backup.objectCount} 对象 · {backup.presentationCount} 汇报 · {backup.exportCount} 导出</span><div><a href={safeBackupManifestUrl(backup.manifestUrl)}>Manifest</a><button type="button" disabled={recoveryPassphrase.length < 14 || recoveryLoading} onclick={() => void downloadEncryptedBackup(backup)}>加密下载</button><button type="button" disabled={backup.restored || recoveryLoading} onclick={() => void restoreBackup(backup)}>{backup.restored ? '恢复已验证' : '隔离恢复'}</button><button type="button" disabled={!backup.restored || recoveryLoading} onclick={() => void prepareRecoveryActivation(backup)}>准备激活</button></div></li>{/each}</ul>{/if}
+      {#if recovery?.backups.length}<ul class="backup-list">{#each recovery.backups as backup}<li class:invalid-backup={backup.integrity === 'invalid'}>{#if backup.integrity === 'valid'}<span>{backup.objectCount} 对象 · {backup.presentationCount} 汇报 · {backup.exportCount} 导出 · {backup.storageKind === 'sealed-zip' ? '密封 ZIP' : '旧版目录'}</span><div><a href={safeBackupManifestUrl(backup.manifestUrl)}>Manifest</a><button type="button" disabled={recoveryPassphrase.length < 14 || recoveryLoading} onclick={() => void downloadEncryptedBackup(backup)}>加密下载</button><button type="button" disabled={backup.restored || recoveryLoading} onclick={() => void restoreBackup(backup)}>{backup.restored ? '恢复已验证' : '隔离恢复'}</button><button type="button" disabled={!backup.restored || recoveryLoading} onclick={() => void prepareRecoveryActivation(backup)}>准备激活</button></div>{:else}<span><strong>备份已隔离</strong> · {backup.storageKind === 'conflict' ? '存储冲突' : backup.storageKind === 'sealed-zip' ? '密封 ZIP' : '旧版目录'} · 未通过完整性校验，请联系管理员核查。</span>{/if}</li>{/each}</ul>{/if}
       {#if recoveryNotice}<p class="message success" role="status">{recoveryNotice}</p>{/if}
     </section>
   </main>
@@ -203,7 +203,7 @@
   .admin-section { margin-bottom: 24px; overflow: hidden; border: 1px solid var(--lib-border); border-radius: 9px; background: var(--lib-surface); }.admin-section > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; border-bottom: 1px solid var(--lib-border); }.admin-section h2 { color: var(--lib-text-strong); font-size: 16px; }.admin-section header p { margin-top: 5px; color: var(--lib-muted); font-size: 12px; }
   .table-wrap { overflow-x: auto; }table { width: 100%; border-collapse: collapse; }th,td { padding: 12px 15px; border-bottom: 1px solid var(--lib-border); color: var(--lib-text); text-align: left; font-size: 12px; }th { background: var(--lib-surface-soft); color: var(--lib-muted); }td button { margin-right: 6px; }
   .message { margin: 14px 18px; padding: 11px 12px; border-radius: 6px; font-size: 12px; line-height: 1.55; }.error { border: 1px solid color-mix(in srgb,var(--lib-danger) 35%,var(--lib-border)); background: color-mix(in srgb,var(--lib-danger) 9%,var(--lib-surface)); color: var(--lib-danger); }.success { border: 1px solid color-mix(in srgb,var(--lib-success) 35%,var(--lib-border)); background: color-mix(in srgb,var(--lib-success) 9%,var(--lib-surface)); color: var(--lib-success); }.message a { margin-left: 7px; color: inherit; font-weight: 800; }
-  .recovery { padding-bottom: 16px; }.recovery-summary { padding: 16px 18px 0; color: var(--lib-muted); font-size: 12px; }.recovery-controls { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 10px; padding: 16px 18px; }.recovery-controls label { display: grid; gap: 6px; color: var(--lib-muted); font-size: 12px; }.recovery-controls input { min-width: 0; height: 36px; border: 1px solid var(--lib-border); border-radius: 5px; background: var(--lib-surface); color: var(--lib-text); padding: 0 8px; }.backup-list { display: grid; gap: 7px; margin: 0; padding: 0 18px; list-style: none; }.backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px; border: 1px solid var(--lib-border); border-radius: 6px; color: var(--lib-muted); font-size: 11px; }.backup-list li div { display: flex; flex-wrap: wrap; gap: 6px; }.backup-list a { color: var(--lib-accent); font-weight: 700; }
+  .recovery { padding-bottom: 16px; }.recovery-summary { padding: 16px 18px 0; color: var(--lib-muted); font-size: 12px; }.recovery-controls { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 10px; padding: 16px 18px; }.recovery-controls label { display: grid; gap: 6px; color: var(--lib-muted); font-size: 12px; }.recovery-controls input { min-width: 0; height: 36px; border: 1px solid var(--lib-border); border-radius: 5px; background: var(--lib-surface); color: var(--lib-text); padding: 0 8px; }.backup-list { display: grid; gap: 7px; margin: 0; padding: 0 18px; list-style: none; }.backup-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px; border: 1px solid var(--lib-border); border-radius: 6px; color: var(--lib-muted); font-size: 11px; }.backup-list li.invalid-backup { border-color: color-mix(in srgb,var(--lib-danger) 35%,var(--lib-border)); background: color-mix(in srgb,var(--lib-danger) 7%,var(--lib-surface)); color: var(--lib-danger); }.backup-list li div { display: flex; flex-wrap: wrap; gap: 6px; }.backup-list a { color: var(--lib-accent); font-weight: 700; }
   .modal-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(2,7,14,.72); }.import-modal { width: min(720px,96vw); max-height: 94vh; overflow-y: auto; border: 1px solid var(--lib-border); border-radius: 10px; background: var(--lib-elevated); color: var(--lib-text); box-shadow: var(--lib-shadow-lg); }.import-modal > header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px 22px 16px; border-bottom: 1px solid var(--lib-border); }.import-modal h2 { color: var(--lib-text-strong); font-size: 19px; }.import-modal header p { margin-top: 5px; color: var(--lib-muted); font-size: 12px; }.import-modal header button { width: 34px; padding: 0; font-size: 22px; }
   .backdrop-close { position: absolute; inset: 0; width: 100%; height: 100%; border: 0 !important; border-radius: 0 !important; background: transparent !important; }
   .import-modal { position: relative; z-index: 1; }

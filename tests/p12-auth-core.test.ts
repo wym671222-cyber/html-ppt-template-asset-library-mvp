@@ -238,6 +238,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
     new PersistentAuthThrottle(database as never).consume('login:recovery_user', { limit: 1, windowMs: 60_000, blockMs: 60_000 }, 30)
     database.close()
 
+    mkdirSync(join(root, 'source/objects'), { recursive: true })
     const service = new LocalRecoveryService({
       databasePath: path,
       contentRoot: join(root, 'source/objects'),
