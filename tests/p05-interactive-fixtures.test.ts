@@ -168,10 +168,11 @@ describe.skipIf(!chromiumExecutablePath)('P05 production-ID interactive runtime 
     try {
       for (const fixture of P05_INTERACTIVE_FIXTURES) {
         const page = await browser.newPage()
+        await page.setViewportSize({ width: 1024, height: 768 })
         const blockedRequests: string[] = []
         page.on('request', (request) => { if (/^https?:/i.test(request.url())) blockedRequests.push(request.url()) })
         const compiled = compileInteractiveTemplateRuntime(createP05InteractiveSource(fixture.id), { offline: true })
-        await page.setContent(`<iframe id="p05-runtime" sandbox="allow-scripts" src="data:text/html;base64,${compiled.html.toString('base64')}"></iframe>`)
+        await page.setContent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden}#p05-runtime{display:block;width:960px;height:540px;border:0}</style><iframe id="p05-runtime" sandbox="allow-scripts" width="960" height="540" src="data:text/html;base64,${compiled.html.toString('base64')}"></iframe>`)
         await expect.poll(() => page.frame({ name: 'ppt-template-document' })?.url().startsWith('data:text/html') ?? false).toBe(true)
         const frame = page.frame({ name: 'ppt-template-document' })!
         await frame.locator('#stage').waitFor()
@@ -198,18 +199,34 @@ describe.skipIf(!chromiumExecutablePath)('P05 production-ID interactive runtime 
             expect(await frame.locator('html').getAttribute('data-flow-focus')).toBe('launch')
             break
           case 'star': {
-            const box = await frame.locator('#star-map').boundingBox()
-            if (!box) throw new Error('Star map is not visible')
-            await frame.locator('#star-map').dispatchEvent('pointerdown', { clientX: box.width / 2, clientY: box.height / 2 })
-            await frame.locator('#star-zoom').click()
-            expect(await frame.locator('html').getAttribute('data-star-dragged')).toBe('true')
-            expect(await frame.locator('html').getAttribute('data-star-zoom')).toMatch(/[0-9.]+/)
+            const svgBox = await frame.locator('#star-map').boundingBox()
+            const circle = frame.locator('#star-map circle').first()
+            const circleBox = await circle.boundingBox()
+            if (!svgBox || !circleBox) throw new Error('Star map is not visible')
+            const initialCx = await circle.getAttribute('cx')
+            await page.mouse.move(circleBox.x + circleBox.width / 2, circleBox.y + circleBox.height / 2)
+            await page.mouse.down()
+            await page.mouse.move(circleBox.x + circleBox.width / 2 + 52, circleBox.y + circleBox.height / 2 + 26, { steps: 6 })
+            await page.mouse.up()
+            await expect.poll(() => frame.locator('html').getAttribute('data-star-dragged')).toBe('true')
+            expect(await circle.getAttribute('cx')).not.toBe(initialCx)
+            await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 2)
+            await page.mouse.wheel(0, -240)
+            await expect.poll(async () => Number(await frame.locator('html').getAttribute('data-star-zoom') ?? '1')).toBeGreaterThan(1)
             break
           }
           case 'orbit': {
-            await frame.locator('#orbit-spin').click()
-            expect(await frame.locator('html').getAttribute('data-webgl')).toBe('ready')
-            expect(await frame.locator('html').getAttribute('data-orbit-angle')).toMatch(/[0-9.-]+/)
+            const canvas = frame.locator('#orbit-canvas')
+            const box = await canvas.boundingBox()
+            if (!box) throw new Error('Orbit canvas is not visible')
+            const startX = box.x + box.width / 2
+            const startY = box.y + box.height / 2
+            await page.mouse.move(startX, startY)
+            await page.mouse.down()
+            await page.mouse.move(startX + 64, startY + 24, { steps: 6 })
+            await expect.poll(() => frame.locator('html').getAttribute('data-webgl')).toBe('ready')
+            await expect.poll(async () => Number(await frame.locator('html').getAttribute('data-orbit-angle') ?? '0')).toBeGreaterThan(0)
+            await page.mouse.up()
             break
           }
           case 'particles':
@@ -229,8 +246,18 @@ describe.skipIf(!chromiumExecutablePath)('P05 production-ID interactive runtime 
             expect(await frame.locator('html').getAttribute('data-compare-position')).toBe('72')
             break
           case 'composer': {
-            await frame.locator('#layout-nudge').click()
-            expect(await frame.locator('html').getAttribute('data-layout-x')).toMatch(/[1-9][0-9]*/)
+            const card = frame.locator('#layout-card')
+            const box = await card.boundingBox()
+            if (!box) throw new Error('Composer card is not visible')
+            const startX = box.x + box.width / 2
+            const startY = box.y + box.height / 2
+            await page.mouse.move(startX, startY)
+            await page.mouse.down()
+            await page.mouse.move(startX + 46, startY + 26, { steps: 6 })
+            await page.mouse.up()
+            await expect.poll(async () => Number(await frame.locator('html').getAttribute('data-layout-x') ?? '0')).toBeGreaterThan(0)
+            await expect.poll(async () => Number(await frame.locator('html').getAttribute('data-layout-y') ?? '0')).toBeGreaterThan(0)
+            expect(await card.getAttribute('style')).toMatch(/translate\(/)
             break
           }
         }
