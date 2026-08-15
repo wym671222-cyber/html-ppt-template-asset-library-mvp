@@ -5,9 +5,9 @@
 - 用户批准版本：2.0（2026-08-14T17:56:07+08:00）
 - 当前阶段：P06 全量候选与独立门禁已通过；P07 正在进行写前只读核验，尚未执行生产写入
 - 活动线程：沿用已登记的 P07 阶段线程标识 `01a00120-bf9d-7950-a479-c15a213bed6d`；当前主任务负责执行与复核
-- 最后核实结论：P05 重开候选 `626ae6d53b4d52b63d7e618386b499e2387a4a43` 已证明 D3/Three.js/Interact.js 的真实手势；P06 全量 Vitest `43/43 files, 826/826 tests`、shell `8/8`、真实 Chrome `12/12`、生产依赖审计、扫描和构建均已完成并通过独立门禁。
+- 最后核实结论：P05 重开候选 `626ae6d53b4d52b63d7e618386b499e2387a4a43` 已证明 D3/Three.js/Interact.js 的真实手势；P06 全量 Vitest `43/43 files, 826/826 tests`、shell `8/8`、真实 Chrome `12/12`、生产依赖审计、扫描和构建均已完成并通过独立门禁。P07 写前核验发现公开入口仍处于 HTTP 204 睡眠层，未获得健康 200 或可验证认证 UI。
 - 本轮授权：用户于 2026-08-15 明确授权按原合同重开 P05；范围仅限测试视口、真实手势断言、辅助探针移除、摘要刷新和 P05 门禁复跑。
-- 下一安全动作：完成 PocketBay/Release/健康状态、认证权限、权威映射和写前备份条件的只读核验；任何一项缺失都停止，不执行生产写入。
+- 下一安全动作：等待/恢复可验证的 PocketBay 应用健康与控制面，再完成认证权限、权威映射和写前备份条件的只读核验；任何一项缺失都停止，不执行生产写入。
 
 ### 历史 P05 worker 有界修复证据（父级已否决）
 
@@ -35,7 +35,7 @@
 | P04 | passed | `1045dd6752657add984d4a89504ef9aa357697fa` | `01a000d0-a46a-7e00-bb94-fbf9f548477f` | passed | 父级复核：v3 自包含 HTML/ZIP、v1 data:image 与 v2 opaque 离线 runtime、旧 v2 读取兼容、P08 10/10（含真实 Chromium v1/v2）、定向 36/36、全量 42 文件/822 tests、build/check、shell 8/8、validator 通过 |
 | P05 | passed | `626ae6d53b4d52b63d7e618386b499e2387a4a43` | `01a000e9-37c1-7361-914f-9d40d844a6ac` | passed | 固定 `1024×768` 浏览器与 `960×540` iframe；D3 拖拽/滚轮、Three pointer drag、Interact drag 均真实改变状态；P05 4/4、全量 43/826、shell 8/8、build/check 通过 |
 | P06 | passed | `66135d5add134da929cb2da7e4810bad340e9ba3` | `01a00110-abc1-74b3-b71b-e88f9a02bee6` | passed | 全量 Vitest 43/826、shell 8/8、Chrome 12/12、生产审计全零、扫描和构建通过；候选边界与 validator 通过 |
-| P07 | in_progress | — | `01a00120-bf9d-7950-a479-c15a213bed6d` | pending | 已启动写前只读核验；当前已知 Release 264/项目身份保留，但健康 200、认证会话、权威映射和备份条件仍需现场确认 |
+| P07 | in_progress | — | `01a00120-bf9d-7950-a479-c15a213bed6d` | pending | 公开入口 `/`、`/login`、`/api/health/ready` 于 2026-08-15 09:51:48 返回 204；浏览器未出现可验证 UI，健康 200、认证会话、权威映射和备份条件缺失 |
 
 ## 阻塞与不确定性
 
@@ -43,6 +43,7 @@
 - 历史 P05 候选曾用 `pointerdown`/辅助按钮绕过真实处理器；该 blocker 已由用户授权的重开修复关闭。当前 P05 候选已删除辅助路径并通过真实 D3/Three/Interact 手势验收。
 - Release 264 的已审计导入记录已恢复十二项标题到精确 assetId 映射；三个合同续签 retire ID 仍为 `html-4d353ff9f58e974d4e8a`、`html-ef7410b3f4732cb7df31`、`html-221e1002d8e216bfefde`。既有 v1 PresentationItem 验收目标仍须在生产唤醒和认证只读查询后固定。
 - PocketBay 控制会话可读，项目身份为 `html-ppt-template-asset-library`、Release 264；连续真实访问仍为 HTTP 204 且控制面为 sleeping。未执行备份、部署、导入、晋升、退役或任何 DB/CAS 写入。
+- P07 本轮公开入口与受控浏览器只读检查均未跨过睡眠层；没有读取 Cookie/storage/凭据，也没有提交表单、唤醒控制面以外的写操作或生产请求。
 - 全依赖审计（非 `--prod`）真实 exit `1`，当前 metadata severity 为 low `2`、moderate `6`、high `1`、critical `1`；该结果已与 production 全零审计分开记录，未进行依赖升级或豁免。
 - 保存项目列表没有该子仓库条目；父监督器挂载到 `HTML - PPT` 本地项目，但 prompt 和链状态固定子仓库路径。
 

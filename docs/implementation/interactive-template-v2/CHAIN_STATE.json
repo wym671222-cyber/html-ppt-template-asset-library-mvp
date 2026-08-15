@@ -210,11 +210,13 @@
         "evidence": [
           "P07 started after P06 passed on the current candidate; scope is write-before read-only verification only",
           "the current known PocketBay project identity is html-ppt-template-asset-library / Release 264; public access has previously remained at the platform HTTP 204 sleep layer and no production write has occurred",
+          "2026-08-15T09:51:48+08:00 focused public probes for /, /login and /api/health/ready returned HTTP 204 with PocketBay/Cloudflare sleep-layer headers; no application-layer 200 was obtained",
+          "a controlled in-app browser navigation waited 8 seconds without a verifiable UI and was cleaned up; no cookies, storage, passwords or tokens were read, and no form or production action was submitted",
           "before any write, P07 must revalidate live/ready 200, authenticated owner/admin access, authoritative 12-to-12 asset mapping, SQLite/CAS integrity and backup/rollback space; fixture evidence cannot substitute for production proof"
         ]
       }
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-15T09:49:20+08:00"
+  "updatedAt": "2026-08-15T09:54:04+08:00"
 }
