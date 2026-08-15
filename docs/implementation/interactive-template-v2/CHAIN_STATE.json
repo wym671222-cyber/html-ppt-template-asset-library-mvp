@@ -212,13 +212,13 @@
           "the current known PocketBay project identity is html-ppt-template-asset-library / Release 264; public access has previously remained at the platform HTTP 204 sleep layer and no production write has occurred",
           "2026-08-15T09:51:48+08:00 focused public probes for /, /login and /api/health/ready returned HTTP 204 with PocketBay/Cloudflare sleep-layer headers; no application-layer 200 was obtained",
           "a controlled in-app browser navigation waited 8 seconds without a verifiable UI and was cleaned up; no cookies, storage, passwords or tokens were read, and no form or production action was submitted",
-          "after the user supplied the backup passphrase in the visible UI, admin/active access generated a production backup manifest and isolated restore verification for 90 objects and 1 presentation; encrypted archive download returned HTTP 401 and a subsequent catalog API read returned HTTP 401, after which the page returned to login",
-          "no encrypted .pba backup was obtained, and no deployment, import, promotion, retirement, database/CAS business write or Release switch was executed",
+          "after the user supplied the backup passphrase in the visible UI, admin/active access generated a current production backup manifest and isolated restore verification for 90 objects and 1 presentation; live/ready and catalog briefly returned 200, but the current encrypted archive download returned HTTP 401 twice, including immediately after a fresh user login, followed by catalog/recovery reads returning HTTP 401",
+          "no current encrypted .pba backup was obtained, and no deployment, import, promotion, retirement, database/CAS business write or Release switch was executed; the prior stale backup UI success is not treated as a current rollback artifact",
           "before any write, P07 must revalidate live/ready 200, authenticated owner/admin access, authoritative 12-to-12 asset mapping, SQLite/CAS integrity and backup/rollback space; fixture evidence cannot substitute for production proof"
         ]
       }
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-15T10:43:24+08:00"
+  "updatedAt": "2026-08-15T11:00:46+08:00"
 }
