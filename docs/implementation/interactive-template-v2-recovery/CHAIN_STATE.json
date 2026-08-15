@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P00",
-    "activePhaseThreadId": "/root/p00_recovery_baseline",
+    "currentPhaseId": "P01",
+    "activePhaseThreadId": "/root/p01_sealed_backup",
     "terminalPhaseId": "P03B"
   },
   "phases": [
@@ -30,27 +30,35 @@
       "id": "P00",
       "title": "恢复链初始化与失败基线",
       "objective": "固化 PocketBay 裸 SQLite 物理漂移而逻辑状态不变的精确失败回归",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "high",
       "estimatedContextPercent": 30,
       "dependsOn": [],
       "successor": "P01",
       "threadId": "/root/p00_recovery_baseline",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "3979fd68d90cdb1902870482300a47d7d82c1543",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to baseline a743702 exactly one atomic P00 commit across the approved new-chain documents, handoff and red-test path",
+          "parent Node 22.23.2/pnpm 9.15.0 rerun: P00 1/1 failed only with the exact Backup SQLite hash or size verification failed error and real exit 1",
+          "parent P09 recovery regression passed 10/10; official validator passed; legacy interactive and PocketBay chain hashes were unchanged",
+          "tracked worktree was clean and retained only the pre-existing untracked .workbuddy directory"
+        ]
+      }
     },
     {
       "id": "P01",
       "title": "密封备份架构",
       "objective": "实现密封 ZIP 备份、旧目录兼容、无效备份隔离和恢复管理接口",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 50,
       "dependsOn": ["P00"],
       "successor": "P02",
-      "threadId": null,
+      "threadId": "/root/p01_sealed_backup",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -98,5 +106,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-15T15:55:11+08:00"
+  "updatedAt": "2026-08-15T16:03:30+08:00"
 }

@@ -3,17 +3,17 @@
 - 工作流阶段：executing
 - 计划版本：2.1
 - 用户批准版本：2.1
-- 当前阶段：P00 恢复链初始化与失败基线
-- 活动线程：`/root/p00_recovery_baseline`
-- 最后核实提交：`a7437024d471f6f4679202824ddd30a060642055`
-- 下一安全动作：P00 只创建精确红测和 handoff，父级独立复核后才允许 P01。
+- 当前阶段：P01 密封备份架构
+- 活动线程：`/root/p01_sealed_backup`
+- 最后核实提交：`3979fd68d90cdb1902870482300a47d7d82c1543`
+- 下一安全动作：P01 只实现密封 ZIP、旧备份隔离与恢复 API/UI 合同；不得开始生产或 P02。
 
 ## 阶段账本
 
 | 阶段 | 状态 | 提交 | 线程 | 门禁 | 证据 |
 |---|---|---|---|---|---|
-| P00 | in_progress | worker candidate pending commit | `/root/p00_recovery_baseline` | worker passed; parent pending | Node v22.23.2 / pnpm 9.15.0 下精确红测 1/1 按设计失败并重新抛出 `Backup SQLite hash or size verification failed`；既有 P09 10/10 通过；等待父级独立复跑 |
-| P01 | pending | — | — | pending | 依赖 P00 |
+| P00 | passed | `3979fd68d90cdb1902870482300a47d7d82c1543` | `/root/p00_recovery_baseline` | passed | 父级复跑红测精确失败且 exit 1；P09 10/10、validator、旧链哈希和工作树门禁通过 |
+| P01 | in_progress | — | `/root/p01_sealed_backup` | pending | 依赖 P00；实现密封备份架构 |
 | P02 | pending | — | — | pending | 依赖 P01 |
 | P03A | pending | — | — | pending | 依赖 P02 |
 | P03B | pending | — | — | pending | 依赖 P03A |
@@ -32,3 +32,9 @@
 - 当前 `LocalRecoveryService.inspectCurrent()` 只因精确错误 `Backup SQLite hash or size verification failed` 失败；测试先断言无 restore 目录、无 activation request、源数据库/CAS 指纹不变，再重新抛出原错误，故命令真实退出 `1`。
 - 既有 `tests/p09-local-recovery.test.ts` 为 `10/10` 通过；新链 validator 为 `OK`。旧 `docs/implementation/CHAIN_STATE.json` 与 `docs/implementation/interactive-template-v2/CHAIN_STATE.json` SHA-256 分别保持 `18c97c83c47bfe61b86fb388e5efee5046566b26bd4f13657fa814d04062d53c`、`d60fcb50327aef29cc8aa86ed37fbdabb9e46fd8503d841cb34ef7b131e5cd6f`。
 - 本 worker 未修改 `CHAIN_STATE.json`、产品源码、旧链、生产、远端、`.workbuddy/` 或两个真实来源目录；P01 仍为 pending，须由父级独立验收后决定是否启动。
+
+## P00 parent gate
+
+- 父级在固定 Node `v22.23.2` / pnpm `9.15.0` 下独立复跑：P00 红测唯一失败为精确错误，真实 exit `1`；P09 为 `10/10` 通过。
+- P00 提交为 `3979fd68d90cdb1902870482300a47d7d82c1543`；tracked worktree 干净，仅保留既有 `.workbuddy/`。
+- 官方 validator 通过；旧 interactive 与 PocketBay chain 哈希保持不变。P00 通过并由父级启动 P01。
