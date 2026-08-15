@@ -7,7 +7,7 @@
     "implementationBranch": "feat/interactive-template-v2-export",
     "baselineCommit": "a427b530e05d79ae00b1d7196081f4a03c06451b"
   },
-  "workflowPhase": "executing",
+  "workflowPhase": "blocked",
   "plan": {
     "version": "2.0",
     "approved": true,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P07",
-    "activePhaseThreadId": "01a00120-bf9d-7950-a479-c15a213bed6d",
+    "currentPhaseId": null,
+    "activePhaseThreadId": null,
     "terminalPhaseId": "P07"
   },
   "phases": [
@@ -197,7 +197,7 @@
       "id": "P07",
       "title": "PocketBay 迁移与终局验收",
       "objective": "备份部署迁移并验证线上二十七个活动模板",
-      "status": "in_progress",
+      "status": "failed",
       "model": "gpt-5.6-sol",
       "reasoning": "max",
       "estimatedContextPercent": 45,
@@ -206,7 +206,7 @@
       "threadId": "01a00120-bf9d-7950-a479-c15a213bed6d",
       "commit": null,
       "gate": {
-        "result": "pending",
+        "result": "failed",
         "evidence": [
           "P07 started after P06 passed on the current candidate; scope is write-before read-only verification only",
           "the current known PocketBay project identity is html-ppt-template-asset-library / Release 264; public access has previously remained at the platform HTTP 204 sleep layer and no production write has occurred",
@@ -214,11 +214,17 @@
           "a controlled in-app browser navigation waited 8 seconds without a verifiable UI and was cleaned up; no cookies, storage, passwords or tokens were read, and no form or production action was submitted",
           "after the user supplied the backup passphrase in the visible UI, admin/active access generated a current production backup manifest and isolated restore verification for 90 objects and 1 presentation; after waking and re-login, live/ready, catalog, recovery and the current archive returned 200, and the UI completed client-side AES-GCM encryption",
           "the current encrypted .pba was obtained at /Users/rosswang/Downloads/backup-1786762483091-db42e892-f2e2-4d2c-9ff3-ce60df48acdd.pba; it is 11912171 bytes, starts with PBACKUP1 and has SHA-256 785f87082d0f5e2d65e04f3e4cdf6030fadae1f437b1be662062fe4b5a7b41fb; no deployment, import, promotion, retirement, database/CAS business write or Release switch was executed",
-          "before any write, P07 must revalidate live/ready 200, authenticated owner/admin access, authoritative 12-to-12 asset mapping, SQLite/CAS integrity and backup/rollback space; fixture evidence cannot substitute for production proof"
+          "before any write, P07 must revalidate live/ready 200, authenticated owner/admin access, authoritative 12-to-12 asset mapping, SQLite/CAS integrity and backup/rollback space; fixture evidence cannot substitute for production proof",
+          "write-before production preflight passed on Release 264: 30 active templates were exactly 15 Workshop plus 12 component v1 plus the three approved retire targets; the twelve production IDs matched the P05 v2 packages; the fixed presentation presentation-b81c6fc5-7c77-48d8-bed0-d79182e642e1 remained revision 18 with four v1 items",
+          "authenticated recovery inspection passed before deployment with 7 migrations, 90 content objects, 60 derivatives, 1 presentation and 0 exports; a current server backup matched state SHA-256 0c1ec65b1ac39b74ca919b6afc21030ad064d296c7b7e864e9119eaeb53efb98, database hash was stable before and after, SQLite quick_check was ok and foreign_key_check was empty",
+          "the exact P06 product candidate 66135d5add134da929cb2da7e4810bad340e9ba3 was packaged as 530 tracked files; forbidden paths, env files, credential paths, private keys, PocketBay tokens and bootstrap values were all zero, and package SHA-256 was 428f0e3d91776e5327371c6e2753fac91b07e73cc4ab4c0ea45ed60967dacb07",
+          "PocketBay accepted the first P07 upload and switched from active Release 264 to Release 326 with next_action done, project_status running and no failure stage; live and ready returned 200 after the documented wake flow",
+          "the immediate post-deploy recovery gate failed closed: /api/recovery and the two previously valid backup manifests returned 409 Backup SQLite hash or size verification failed, while one older backup directory was missing; catalog and presentation reads still proved 30 active templates, zero v2 current versions and the unchanged revision-18 all-v1 presentation",
+          "because the Release 326 data copy changed or omitted backup SQLite files, P07 stopped before all twelve imports, promotions and three retire calls; this is production-state drift that may require a backup storage-format or PocketBay data-sync architecture change, so the single bounded repair path is not applicable"
         ]
       }
     }
   ],
-  "blockedReason": null,
-  "updatedAt": "2026-08-15T12:15:42+08:00"
+  "blockedReason": "P07 failed its production recovery gate after PocketBay switched the exact P06 candidate to Release 326. Business data remains readable and unchanged at 30 active templates, zero current v2 versions and one revision-18 all-v1 presentation, but /api/recovery now fails because two previously valid server backup SQLite files no longer match their manifests and one older backup directory is missing after /data version synchronization. No v2 import, promotion or retire operation was executed. The chain is stopped pending user-authenticated PocketBay console review and an explicit rollback/architecture decision; the agent must not trigger PocketBay version rollback automatically.",
+  "updatedAt": "2026-08-15T13:32:37+08:00"
 }

@@ -1,13 +1,13 @@
 # 交互模板与导出修复状态
 
-- 工作流阶段：executing
+- 工作流阶段：blocked
 - 计划版本：2.0
 - 用户批准版本：2.0（2026-08-14T17:56:07+08:00）
-- 当前阶段：P06 全量候选与独立门禁已通过；P07 正在进行写前只读核验，尚未执行生产写入
-- 活动线程：沿用已登记的 P07 阶段线程标识 `01a00120-bf9d-7950-a479-c15a213bed6d`；当前主任务负责执行与复核
-- 最后核实结论：P05 重开候选 `626ae6d53b4d52b63d7e618386b499e2387a4a43` 已证明 D3/Three.js/Interact.js 的真实手势；P06 全量 Vitest `43/43 files, 826/826 tests`、shell `8/8`、真实 Chrome `12/12`、生产依赖审计、扫描和构建均已完成并通过独立门禁。P07 唤醒登录后 live/ready、目录、恢复与当前归档均返回成功；当前 `.pba` 已落地并完成文件级校验，但尚未进入部署写入。
+- 当前阶段：P07 生产恢复门禁失败；自动执行链已停止，不存在后继
+- 活动线程：无；P07 阶段线程 `01a00120-bf9d-7950-a479-c15a213bed6d` 已停止
+- 最后核实结论：P05/P06 仍通过。P07 在 Release 264 上完成 30 项活动目录、12 对 12 组件映射、固定历史 v1 汇报和 SQLite/CAS/备份只读门禁；精确候选 `66135d5add134da929cb2da7e4810bad340e9ba3` 已成功切换为 PocketBay Release 326。切换后业务目录和汇报仍完整，但 `/api/recovery` 及两个原有效备份 manifest 均因备份 SQLite 哈希/尺寸不符返回 409，另一个旧备份目录缺失，因此未执行 12 项 v2 导入/晋升和 3 项 retire。
 - 本轮授权：用户于 2026-08-15 明确授权按原合同重开 P05；范围仅限测试视口、真实手势断言、辅助探针移除、摘要刷新和 P05 门禁复跑。
-- 下一安全动作：在不改变当前 `.pba` 回滚文件的前提下，重新取得写入前稳定的 12 对 12 版本快照、SQLite/CAS 只读完整性和上一 Release 回滚点；父级复核后再执行部署、迁移、晋升或退役。
+- 下一安全动作：用户先在 PocketBay 控制台登录；父级只读核对 Release 326/264 与数据恢复范围，再由用户在动作时明确决定是否回滚到 264。不得自动回滚，不得继续导入、晋升或退役；若继续使用 PocketBay 版本同步，需另行批准备份 SQLite 存储格式/同步策略的架构修复。
 
 ### 历史 P05 worker 有界修复证据（父级已否决）
 
@@ -35,21 +35,22 @@
 | P04 | passed | `1045dd6752657add984d4a89504ef9aa357697fa` | `01a000d0-a46a-7e00-bb94-fbf9f548477f` | passed | 父级复核：v3 自包含 HTML/ZIP、v1 data:image 与 v2 opaque 离线 runtime、旧 v2 读取兼容、P08 10/10（含真实 Chromium v1/v2）、定向 36/36、全量 42 文件/822 tests、build/check、shell 8/8、validator 通过 |
 | P05 | passed | `626ae6d53b4d52b63d7e618386b499e2387a4a43` | `01a000e9-37c1-7361-914f-9d40d844a6ac` | passed | 固定 `1024×768` 浏览器与 `960×540` iframe；D3 拖拽/滚轮、Three pointer drag、Interact drag 均真实改变状态；P05 4/4、全量 43/826、shell 8/8、build/check 通过 |
 | P06 | passed | `66135d5add134da929cb2da7e4810bad340e9ba3` | `01a00110-abc1-74b3-b71b-e88f9a02bee6` | passed | 全量 Vitest 43/826、shell 8/8、Chrome 12/12、生产审计全零、扫描和构建通过；候选边界与 validator 通过 |
-| P07 | in_progress | — | `01a00120-bf9d-7950-a479-c15a213bed6d` | pending | 当前 `.pba` 已落地并通过 `PBACKUP1`/大小/SHA-256 校验；部署、12 项 current v2、3 项 retire、固定历史演示和生产写入条件仍未完成 |
+| P07 | failed | — | `01a00120-bf9d-7950-a479-c15a213bed6d` | failed | 精确候选已切换到 Release 326，但版本数据同步破坏/遗漏服务器备份 SQLite 完整性；业务数据仍为 30 active、0 v2、历史汇报 revision 18 全 v1；导入/晋升/retire 均为 0 |
 
 ## 阻塞与不确定性
 
 - P00–P04 仍通过；P02 的 self-frame navigation 缺口与 P04 的 v1 `data:image` 导出回归均保持闭环。
 - 历史 P05 候选曾用 `pointerdown`/辅助按钮绕过真实处理器；该 blocker 已由用户授权的重开修复关闭。当前 P05 候选已删除辅助路径并通过真实 D3/Three/Interact 手势验收。
-- Release 264 的已审计导入记录已恢复十二项标题到精确 assetId 映射；三个合同续签 retire ID 仍为 `html-4d353ff9f58e974d4e8a`、`html-ef7410b3f4732cb7df31`、`html-221e1002d8e216bfefde`。既有 v1 PresentationItem 验收目标仍须在生产唤醒和认证只读查询后固定。
-- PocketBay 控制会话可读，项目身份为 `html-ppt-template-asset-library`、Release 264；首轮访问曾处于 HTTP 204 睡眠层，唤醒后后台可读。未执行部署、导入、晋升、退役或任何 DB/CAS 业务写入。
-- P07 唤醒登录后，health live/ready、目录、恢复概览和当前归档均返回 200；当前 `.pba` 已落地到用户 Downloads，并完成大小、`PBACKUP1` 封装头与 SHA-256 校验。没有读取 Cookie/storage/凭据，也没有执行生产部署请求。
+- Release 264 写前审计已固定十二项标题到精确 assetId 映射；三个合同续签 retire ID 仍为 `html-4d353ff9f58e974d4e8a`、`html-ef7410b3f4732cb7df31`、`html-221e1002d8e216bfefde`。历史验收目标已固定为 revision 18、4 项全 v1 的生产 presentation。
+- PocketBay 控制会话确认项目 `html-ppt-template-asset-library` 已从 Release 264 切换到 Release 326；平台返回过 `next_action=done`、`project_status=running`，无 failure stage。休眠后按官方表单唤醒，live/ready 返回 200。
+- 写前生产基线为 30 active（15 Workshop + 12 组件 v1 + 3 retire 目标）、0 v2、1 个 revision 18 且 4 项全固定 v1 的汇报；恢复检查为 7 migrations、90 objects、60 derivatives、1 presentation、0 exports，写前数据库 SHA-256 前后一致。
+- 部署后目录和历史汇报仍完整，但 `/api/recovery` 和两个已验证备份 manifest 返回 409 `Backup SQLite hash or size verification failed`，另一个旧备份目录缺失。P07 因生产状态漂移停止；12 个导入、12 个 current 晋升和 3 个 retire 均未发生。
 - 先前旧页面会话的 401 已通过唤醒、重新登录和当前归档精确请求复核；未据此修改 BFF 源码，当前结论是睡眠/旧会话状态已恢复，不宣称存在已修复的代码缺陷。
 - 全依赖审计（非 `--prod`）真实 exit `1`，当前 metadata severity 为 low `2`、moderate `6`、high `1`、critical `1`；该结果已与 production 全零审计分开记录，未进行依赖升级或豁免。
 - 保存项目列表没有该子仓库条目；父监督器挂载到 `HTML - PPT` 本地项目，但 prompt 和链状态固定子仓库路径。
 
 ## 范围与外部状态
 
-- 工作树：P05 原子候选与 P06 证据提交已形成；amend 回填最终 SHA 后，既有未跟踪 `.workbuddy/` 保持原样。
-- 远端/部署：历史远端候选 `68358b95123db8735766b4443f0359a79d2a0653` 保留、不覆盖、不删除；本次新候选尚未推送。P07 未部署、未导入、未迁移、未 retire，也未写生产 DB/CAS；当前仅完成备份/恢复和文件级验证。
+- 工作树：P05/P06 候选和 P07 阻塞证据均保持原子边界；既有未跟踪 `.workbuddy/` 保持原样。
+- 远端/部署：精确 P06 产品候选 `66135d5add134da929cb2da7e4810bad340e9ba3` 的安全归档已部署为 PocketBay Release 326；包 SHA-256 `428f0e3d91776e5327371c6e2753fac91b07e73cc4ab4c0ea45ed60967dacb07`。P07 没有导入、晋升或 retire；Release 回滚尚未执行，等待用户在 PocketBay 控制台确认。
 - 无关改动：无。
