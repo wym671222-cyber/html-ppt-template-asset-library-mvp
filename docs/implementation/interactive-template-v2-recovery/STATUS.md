@@ -3,10 +3,10 @@
 - 工作流阶段：executing
 - 计划版本：2.1
 - 用户批准版本：2.1
-- 当前阶段：P02 候选与独立门禁
-- 活动线程：`/root/p02_candidate_gate`
-- 最后核实提交：`87ba2e0373f749d9198d38bde9020703b282c703`
-- 下一安全动作：父级独立复核 P02 候选 B、A/B 一致性与门禁证据，随后打包并决定是否精确推送及启动 P03A；不得触碰生产。
+- 当前阶段：P03A PocketBay 双版本同步证明
+- 活动线程：`/root/p03a_pocketbay_sync`
+- 最后核实提交：`b3b33347db436c3f515b1ef3fd6476b1d4704fad`
+- 下一安全动作：精确推送当前协调提交，并只在当前 PocketBay 项目依次部署候选 A/B，证明密封归档跨版本字节不变且可隔离恢复；任何失败都停止，禁止导入或退役。
 
 ## 阶段账本
 
@@ -14,8 +14,8 @@
 |---|---|---|---|---|---|
 | P00 | passed | `3979fd68d90cdb1902870482300a47d7d82c1543` | `/root/p00_recovery_baseline` | passed | 父级复跑红测精确失败且 exit 1；P09 10/10、validator、旧链哈希和工作树门禁通过 |
 | P01 | passed | `87ba2e0373f749d9198d38bde9020703b282c703` | `/root/p01_sealed_backup` | passed | 父级定向 38/38、Shared/API build、Web check/build 与代码合同复核通过 |
-| P02 | in_progress | — | `/root/p02_candidate_gate` | pending | 全量门禁、审计、候选一致性和推送 |
-| P03A | pending | — | — | pending | 依赖 P02 |
+| P02 | passed | `b3b33347db436c3f515b1ef3fd6476b1d4704fad` | `/root/p02_candidate_gate` | passed | 父级全量 835/835、Shell、Turbo、Chrome 13/13、prod audit 五级全零与 A/B 运行时一致性通过 |
+| P03A | in_progress | — | `/root/p03a_pocketbay_sync` | pending | 候选 A/B 跨版本 `/data` 同步和隔离恢复 |
 | P03B | pending | — | — | pending | 依赖 P03A |
 
 ## 当前边界
@@ -65,3 +65,10 @@
 - production audit `pnpm audit --prod --json` 真实 exit `0`，370 个生产依赖，info/low/moderate/high/critical 全 `0`。完整 audit 真实 exit `1`，638 个依赖，依次为 `0/2/6/1/1`；未 ignore、force、降阈值、override 或修改依赖。
 - tracked-file 扫描覆盖候选 B 的 544 个路径：高置信 token 和私钥均 `0`；deployable 凭据赋值、绝对用户路径及禁止真实目录名均 `0`。全 tracked 的 credential-like assignment 为 22 处/6 个测试或 QA 路径；absolute user path 为 36 处/25 个文档、QA 或其他 tracked 路径；未输出任何匹配值。
 - `.workbuddy/` tracked/staged 均为 `0`，未读取内容；未触碰生产、远端、旧链、其他项目或两个真实来源目录。父级须从精确 B SHA 独立复核、打包和决定后继。
+
+## P02 parent gate
+
+- 父级在固定 Node `v22.23.2` / pnpm `9.15.0` 下独立复跑：全量 Vitest `45/45 files、835/835 tests`，Shell 全套、Turbo `3/3` 和 production audit 均 exit `0`；生产依赖 `370`，五级严重度全零。
+- 真实 Google Chrome 主套件 `12/12`，显式指定 Chrome 的 P02 补充套件 `1/1`；一次未指定浏览器可执行路径的环境调用因本机 Playwright bundled Chromium 不存在而未启动测试，补正为批准的真实 Chrome 后通过，不属于产品回归。
+- 候选 A `87ba2e0373f749d9198d38bde9020703b282c703` 与候选 B `b3b33347db436c3f515b1ef3fd6476b1d4704fad` 的运行时和部署输入 diff 为空；从精确提交生成的 tracked ZIP SHA-256 分别为 `d8c4ddd6c80ac3f4293684c66e0cf3c18f590be744218e5ffb976721a7ef61e1`、`d8a8b15bfbd6a84f197588825b2c8656956397b0f72e7c451174b043467dab89`。
+- validator 与 tracked-clean 门禁通过；P02 passed，父级启动 P03A。候选归档只位于隔离临时目录，未纳入 Git。
