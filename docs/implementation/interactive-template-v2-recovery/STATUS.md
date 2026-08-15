@@ -6,7 +6,7 @@
 - 当前阶段：P02 候选与独立门禁
 - 活动线程：`/root/p02_candidate_gate`
 - 最后核实提交：`87ba2e0373f749d9198d38bde9020703b282c703`
-- 下一安全动作：完成全量本地门禁、审计、候选 A/B 运行时代码一致性和精确分支推送；不得触碰生产。
+- 下一安全动作：父级独立复核 P02 候选 B、A/B 一致性与门禁证据，随后打包并决定是否精确推送及启动 P03A；不得触碰生产。
 
 ## 阶段账本
 
@@ -54,3 +54,14 @@
 - 父级固定 Node `v22.23.2` / pnpm `9.15.0` 复跑 P00/P01/P09/P12/P14/encryption：`6 files / 38 tests` 全通过。
 - Shared/API build 通过；Web check 为 `0 errors / 9` 条既有 warning；Web adapter-node build 通过。
 - 代码复核确认 portable manifest v1 未变、sealed 每次重新验证、legacy invalid 无操作能力且精确请求 409。P01 通过并启动 P02。
+
+## P02 worker evidence
+
+- worker 只执行 P02；阶段账本保持 `in_progress/pending`，`CHAIN_STATE.json` 未改，等待父级独立门禁。
+- 候选 A 为 `87ba2e0373f749d9198d38bde9020703b282c703`；起始协调 SHA 为 `09c192f6f2d40ec2c1b90b066bbdf42493a7aadf`。A 到协调 SHA 仅有新恢复链文档差异，本阶段仅新增 `handoffs/P02.md` 并更新本文件。
+- A 与候选 B 的 `Dockerfile`、package manifests/lock、workspace/Turbo 输入、`apps/**`、`packages/**`、`fixtures/**`、`ops/pocketbay/**`、`templates/**` 逐字一致；B 仅由新恢复链 gate evidence 形成不同版本输入。
+- 固定 Node `v22.23.2` / pnpm `9.15.0`，且 `pnpm exec node --version` 为 `v22.23.2`：全量 Vitest `45 files / 835 tests`；shell `8/8 suites`；Shared/API/Web build、Web check、root Turbo build 全部 exit `0`。Web check 为 `0 errors / 9` 条既有 warning，Turbo 为 `3/3` successful。
+- 真实 Google Chrome：P06/P07/P08/P09 分别 `5/5`、`2/2`、`3/3`、`2/2`，合计 `12/12`；补充 P02 `1/1`。专用端口 `3017/5174/3018/5175` 在对应测试前后均为零 listener。
+- production audit `pnpm audit --prod --json` 真实 exit `0`，370 个生产依赖，info/low/moderate/high/critical 全 `0`。完整 audit 真实 exit `1`，638 个依赖，依次为 `0/2/6/1/1`；未 ignore、force、降阈值、override 或修改依赖。
+- tracked-file 扫描覆盖候选 B 的 544 个路径：高置信 token 和私钥均 `0`；deployable 凭据赋值、绝对用户路径及禁止真实目录名均 `0`。全 tracked 的 credential-like assignment 为 22 处/6 个测试或 QA 路径；absolute user path 为 36 处/25 个文档、QA 或其他 tracked 路径；未输出任何匹配值。
+- `.workbuddy/` tracked/staged 均为 `0`，未读取内容；未触碰生产、远端、旧链、其他项目或两个真实来源目录。父级须从精确 B SHA 独立复核、打包和决定后继。
