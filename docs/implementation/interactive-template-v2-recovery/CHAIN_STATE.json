@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "交互模板 v2 终局恢复与上线",
+    "workspacePath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "repositoryPath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "implementationBranch": "feat/interactive-template-v2-export",
+    "baselineCommit": "a7437024d471f6f4679202824ddd30a060642055"
+  },
+  "workflowPhase": "executing",
+  "plan": {
+    "version": "2.1",
+    "approved": true,
+    "approvedVersion": "2.1",
+    "approvedAt": "2026-08-15T15:50:00+08:00"
+  },
+  "contextPolicy": {
+    "targetPercent": 50,
+    "hardLimitPercent": 70
+  },
+  "orchestration": {
+    "mode": "parent-supervisor",
+    "workspaceStrategy": "single-implementation-branch",
+    "currentPhaseId": "P00",
+    "activePhaseThreadId": "/root/p00_recovery_baseline",
+    "terminalPhaseId": "P03B"
+  },
+  "phases": [
+    {
+      "id": "P00",
+      "title": "恢复链初始化与失败基线",
+      "objective": "固化 PocketBay 裸 SQLite 物理漂移而逻辑状态不变的精确失败回归",
+      "status": "in_progress",
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "estimatedContextPercent": 30,
+      "dependsOn": [],
+      "successor": "P01",
+      "threadId": "/root/p00_recovery_baseline",
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P01",
+      "title": "密封备份架构",
+      "objective": "实现密封 ZIP 备份、旧目录兼容、无效备份隔离和恢复管理接口",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P00"],
+      "successor": "P02",
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P02",
+      "title": "候选与独立门禁",
+      "objective": "完成全量验证并形成两个运行时代码一致的可部署候选",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 40,
+      "dependsOn": ["P01"],
+      "successor": "P03A",
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P03A",
+      "title": "PocketBay 双版本同步证明",
+      "objective": "在两个运行时一致版本间证明密封备份字节不变并可隔离恢复",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "max",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P02"],
+      "successor": "P03B",
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P03B",
+      "title": "业务迁移与终局验收",
+      "objective": "完成十二项 v2 晋升、三项软退役、交互导出和最终恢复验收",
+      "status": "pending",
+      "model": "gpt-5.6-sol",
+      "reasoning": "max",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P03A"],
+      "successor": null,
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    }
+  ],
+  "blockedReason": null,
+  "updatedAt": "2026-08-15T15:55:11+08:00"
+}
