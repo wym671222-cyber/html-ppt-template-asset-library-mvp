@@ -11,6 +11,7 @@ import {
 } from '@slide-maker/shared'
 import { compileInteractiveTemplateRuntime } from '../templates/interactive-template-runtime.js'
 import { renderInteractiveSecurePreview } from './interactive-secure-preview.js'
+import { capturePageThumbnail } from './scaled-screenshot.js'
 
 const PREVIEW_CSP = "default-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'none'; script-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; form-action 'none'; navigate-to 'none'; base-uri 'none'; frame-ancestors 'none'"
 const FORBIDDEN_HTML = /<(?:script|iframe|frame|object|embed|form|base)\b|<meta\b[^>]*\bhttp-equiv\s*=|\son[a-z][a-z0-9_-]*\s*=|\b(?:srcdoc|srcset|target|action|formaction|download|style)\s*=/i
@@ -311,9 +312,8 @@ export class SecurePreviewRenderer {
       if (newWindowCount > 0) throw new PreviewPolicyError('Chromium preview attempted to open a new window')
 
       const previewPng = await page.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', type: 'png' })
-      await page.setViewportSize({ width: 320, height: 180 })
-      const thumbnailPng = await page.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', type: 'png' })
-      const rendererVersion = `p05-chromium-v1:${browser.version()}`
+      const thumbnailPng = await capturePageThumbnail(page)
+      const rendererVersion = `p05-chromium-v1:scaled-v2:${browser.version()}`
       await context.close()
       return { previewPng, thumbnailPng, rendererVersion, diagnostic }
     } finally {

@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { chromium } from '@playwright/test'
 import { describe, expect, it } from 'vitest'
 import { AssetCatalogRepository } from '../apps/api/src/assets/catalog-repository.js'
 import { LocalContentStore } from '../apps/api/src/assets/content-store.js'
@@ -18,6 +19,7 @@ import {
   SecurePreviewRenderer,
   type SecurePreviewRender,
 } from '../apps/api/src/previews/secure-preview.js'
+import { queueCurrentPreviewRefresh } from '../apps/api/src/previews/requeue-current-previews.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
 
 type SQLite = {
@@ -126,6 +128,20 @@ describe('P05 stored package and Chromium request policy', () => {
 })
 
 describe('P05 preview Job lifecycle and append-only derivatives', () => {
+  it('plans and idempotently queues a bounded current-template thumbnail refresh', () => {
+    const { database, store } = openMigratedDatabase()
+    try {
+      registeredFixture(database, store)
+      expect(() => queueCurrentPreviewRefresh(database as never, 2, true)).toThrow(/expected 2, received 1/)
+      expect(new LocalJobRepository(database as never).claim('must-stay-empty', 1_000, [TEMPLATE_PREVIEW_JOB_TYPE])).toBeUndefined()
+      expect(queueCurrentPreviewRefresh(database as never, 1, false)).toEqual({ targetCount: 1, existingCount: 0, queuedCount: 1, applied: false })
+      expect(queueCurrentPreviewRefresh(database as never, 1, true)).toEqual({ targetCount: 1, existingCount: 0, queuedCount: 1, applied: true })
+      expect(queueCurrentPreviewRefresh(database as never, 1, true)).toEqual({ targetCount: 1, existingCount: 1, queuedCount: 0, applied: true })
+    } finally {
+      database.close()
+    }
+  })
+
   it('migrates an empty and an existing target database with integrity and foreign keys intact', () => {
     const directory = mkdtempSync(join(tmpdir(), 'asset-library-p05-migration-'))
     const path = join(directory, 'asset-library.db')
@@ -228,6 +244,38 @@ describe.skipIf(!chromiumExecutablePath)('P05 controlled Chromium integration', 
       expect(readFileSync(join(store.root, store.relativePathFor(preview.content_digest)))).toEqual(store.read(preview.content_digest))
     } finally {
       database.close()
+    }
+  }, 60_000)
+
+  it('scales the full-size composition into the thumbnail without triggering a narrow-viewport layout', async () => {
+    const template = adaptSimulatedTemplatePackage(fixture)
+    const source = {
+      ...template.source,
+      files: {
+        ...template.source.files,
+        'styles.css': `${template.source.files['styles.css']}\nhtml,body,.report{background:#ff0000!important}\n@media (max-width:500px){html,body,.report{background:#0000ff!important}}`,
+      },
+    }
+    const renderer = new SecurePreviewRenderer({ chromiumExecutablePath, navigationTimeoutMs: 20_000 })
+    const render = await renderer.render(source)
+    const browser = await chromium.launch({ executablePath: chromiumExecutablePath, headless: true })
+    try {
+      const page = await browser.newPage()
+      const centerPixel = (png: Buffer) => page.evaluate(async (base64) => {
+        const image = new Image()
+        image.src = `data:image/png;base64,${base64}`
+        await image.decode()
+        const canvas = document.createElement('canvas')
+        canvas.width = image.naturalWidth
+        canvas.height = image.naturalHeight
+        const context = canvas.getContext('2d')!
+        context.drawImage(image, 0, 0)
+        return [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data]
+      }, png.toString('base64'))
+      expect(await centerPixel(render.previewPng)).toEqual([255, 0, 0, 255])
+      expect(await centerPixel(render.thumbnailPng)).toEqual([255, 0, 0, 255])
+    } finally {
+      await browser.close()
     }
   }, 60_000)
 })

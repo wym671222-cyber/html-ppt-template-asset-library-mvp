@@ -6,9 +6,17 @@ import {
   TEMPLATE_RUNTIME_SESSION_HEADER,
   TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS,
 } from '../packages/shared/src/index.js'
-import { isTemplateRuntimePath, MAX_WRITE_BYTES, normalizedClientAddress, readBoundedBody, trustedApiHeaders, validatedTemplateRuntimeHeaders, validateBrowserWrite } from '../apps/web/src/lib/server/bff-boundary.js'
+import { ASSET_LIBRARY_PAGE_CSP, isTemplateRuntimePath, MAX_WRITE_BYTES, normalizedClientAddress, readBoundedBody, trustedApiHeaders, validatedTemplateRuntimeHeaders, validateBrowserWrite } from '../apps/web/src/lib/server/bff-boundary.js'
 
 describe('P15 BFF boundary', () => {
+  it('permits only the same-origin reviewed runtime iframe on the asset-library page', () => {
+    expect(ASSET_LIBRARY_PAGE_CSP).toContain("frame-src 'self'")
+    expect(ASSET_LIBRARY_PAGE_CSP).not.toContain("frame-src 'none'")
+    expect(ASSET_LIBRARY_PAGE_CSP).not.toMatch(/frame-src[^;]*(?:https?:|data:|blob:|\*)/)
+    expect(ASSET_LIBRARY_PAGE_CSP).toContain("object-src 'none'")
+    expect(ASSET_LIBRARY_PAGE_CSP).toContain("frame-ancestors 'self'")
+  })
+
   it('rejects hostile Origin and non-JSON input before the loopback API', async () => {
     expect(validateBrowserWrite(new Headers({ 'content-type': 'application/json' }), 'http://127.0.0.1:5173')?.status).toBe(403)
     expect(validateBrowserWrite(new Headers({ origin: 'https://attacker.example', 'content-type': 'application/json' }), 'http://127.0.0.1:5173')?.status).toBe(403)

@@ -12,6 +12,7 @@ import {
 } from '@slide-maker/shared'
 import type { CompiledInteractiveTemplateRuntime } from '../templates/interactive-template-runtime.js'
 import type { SecurePreviewRender, SecurePreviewRendererOptions } from './secure-preview.js'
+import { captureElementThumbnail } from './scaled-screenshot.js'
 
 const HARNESS_CSP = (nonce: string) => [
   "default-src 'none'",
@@ -283,8 +284,7 @@ export async function renderInteractiveSecurePreview(
 
     const frameElement = page.locator('#ppt-runtime-frame')
     const previewPng = await frameElement.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', type: 'png' })
-    await page.setViewportSize({ width: 320, height: 180 })
-    const thumbnailPng = await frameElement.screenshot({ animations: 'disabled', caret: 'hide', scale: 'css', type: 'png' })
+    const thumbnailPng = await captureElementThumbnail(page, frameElement)
 
     const sendCommand = (sessionId: string, type: string, sequence: number) => page.evaluate(({ sessionId: commandSession, type: commandType, sequence: commandSequence }) => {
       const frame = document.getElementById('ppt-runtime-frame') as HTMLIFrameElement | null
@@ -379,7 +379,7 @@ export async function renderInteractiveSecurePreview(
       forgedCommandRejected: forgedCommandRejected && postNavigationForgeryRejected,
       allowScriptsOnlySandbox: iframeSandbox === 'allow-scripts' && supervisorAudit.innerIframeSandbox === 'allow-scripts',
     } as const
-    const rendererVersion = `p02-chromium-v2:${browser.version()}`
+    const rendererVersion = `p02-chromium-v2:scaled-v2:${browser.version()}`
     await context.close()
     return { previewPng, thumbnailPng, rendererVersion, diagnostic }
   } finally {

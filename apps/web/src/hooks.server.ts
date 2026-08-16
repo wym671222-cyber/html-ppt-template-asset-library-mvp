@@ -1,6 +1,7 @@
 import type { Handle } from '@sveltejs/kit'
 import { redirect } from '@sveltejs/kit'
 import { sessionFromApi } from '$lib/server/bff'
+import { ASSET_LIBRARY_PAGE_CSP } from '$lib/server/bff-boundary'
 
 // Deployed on a public domain (ppt.ajjy-ai.site) behind Caddy.
 // The original loopback-only guard is intentionally removed so the app
@@ -47,6 +48,6 @@ export const handle: Handle = async ({ event, resolve }) => {
   response.headers.set('X-Frame-Options', 'SAMEORIGIN')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'no-referrer')
-  response.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'none'")
+  response.headers.set('Content-Security-Policy', ASSET_LIBRARY_PAGE_CSP)
   return response
 }

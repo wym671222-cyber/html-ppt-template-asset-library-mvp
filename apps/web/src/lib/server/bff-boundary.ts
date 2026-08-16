@@ -9,6 +9,7 @@ import {
 } from '@slide-maker/shared'
 
 export const MAX_WRITE_BYTES = 16_384
+export const ASSET_LIBRARY_PAGE_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'none'"
 const TEMPLATE_RUNTIME_PATH = /^\/api\/catalog\/assets\/[a-z0-9]+(?:-[a-z0-9]+)*\/runtime$/
 
 export function isTemplateRuntimePath(value: unknown): value is string {
