@@ -28,6 +28,7 @@ import {
   P05_INTERACTIVE_FIXTURE_IDS,
   P05_INTERACTIVE_FIXTURES,
   P05_LOCAL_LIBRARY_VERSIONS,
+  P05_PRODUCTION_METADATA,
   createP05InteractivePackage,
   createP05InteractiveSource,
   createP05PackageZip,
@@ -119,7 +120,7 @@ describe('P05 deterministic interactive fixture catalogue', () => {
     for (const assetId of P05_INTERACTIVE_FIXTURE_IDS) {
       const source = createP05InteractiveSource(assetId)
       assertSafeInteractiveTemplatePackage(source)
-      expect(source.manifest).toMatchObject({ id: assetId, version: 2, contractVersion: 'html-template/v2', runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 } } })
+      expect(source.manifest).toMatchObject({ id: assetId, version: 2, contractVersion: 'html-template/v2', runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 } }, ...P05_PRODUCTION_METADATA[assetId] })
       expect(source.manifest.files).toContain('index.html')
       expect(source.manifest.files).toContain('styles.css')
       expect(source.manifest.files).toContain('runtime.js')

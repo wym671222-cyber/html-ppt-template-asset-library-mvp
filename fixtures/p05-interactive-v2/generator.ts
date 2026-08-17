@@ -76,6 +76,76 @@ export const P05_INTERACTIVE_FIXTURES: readonly P05InteractiveFixtureDefinition[
   { id: 'html-9173e7af18834a740e1e', title: '实时组件编排器', kind: 'composer', vendor: 'interact', accent: '#16a34a' },
 ]
 
+/**
+ * Metadata already present for these production asset IDs in PocketBay.
+ *
+ * v1 remains a repository-local baseline fixture. v2 must reuse the existing
+ * asset metadata so the idempotent import path can register a new version
+ * without mutating the catalog identity of an existing asset.
+ */
+export const P05_PRODUCTION_METADATA: Readonly<Record<(typeof P05_INTERACTIVE_FIXTURE_IDS)[number], { title: string; summary: string; category: string }>> = {
+  'html-cb836d2ecd89f92a83a9': {
+    title: '组件 · 动态标题导演',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 1 个组件。GSAP 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/叙事',
+  },
+  'html-6d4b6ae2a990d98ea2b7': {
+    title: '组件 · 叙事时间线',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 2 个组件。GSAP 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/叙事',
+  },
+  'html-ccda92d7e32ddb4309fe': {
+    title: '组件 · 数据变形叙事',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 3 个组件。ECharts 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/数据',
+  },
+  'html-e9ec34af4df7e188bb18': {
+    title: '组件 · 决策象限',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 4 个组件。ECharts 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/数据',
+  },
+  'html-f2e631d324202a04d9c4': {
+    title: '组件 · 流向探索器',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 5 个组件。ECharts 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/数据',
+  },
+  'html-0fbaff089533f945253b': {
+    title: '组件 · 关系星图',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 6 个组件。D3 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/关系',
+  },
+  'html-c40a2c04cde43a117003': {
+    title: '组件 · 3D 系统轨道',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 7 个组件。Three 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/空间',
+  },
+  'html-281f8b3a9fe4d477c8b6': {
+    title: '组件 · 生成式品牌场',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 8 个组件。p5 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/视觉',
+  },
+  'html-694cd877bd5e926108df': {
+    title: '组件 · 物理优先级场',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 9 个组件。Matter 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/创作',
+  },
+  'html-01ee4e7b1e70f75fbc18': {
+    title: '组件 · 图像焦点地图',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 10 个组件。GSAP 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/视觉',
+  },
+  'html-14e4e0160a908d23186b': {
+    title: '组件 · 转型对照镜',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 11 个组件。Native 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/叙事',
+  },
+  'html-9173e7af18834a740e1e': {
+    title: '组件 · 实时组件编排器',
+    summary: '来源：02_HTML_PPT_组件与模板/component-lab.html，第 12 个组件。Interact 实验的安全静态 16:9 快照，不携带 CDN、脚本或交互运行时。',
+    category: '组件/创作',
+  },
+}
+
 const vendorCache = new Map<VendorName, string>()
 
 function definition(assetId: string): P05InteractiveFixtureDefinition {
@@ -165,9 +235,9 @@ function sourceFor(def: P05InteractiveFixtureDefinition, version: 1 | 2): Templa
   }
   const metadata = {
     id: def.id,
-    title: def.title,
-    summary: `${def.title} repository-local deterministic migration fixture`,
-    category: 'p05/interactive-components',
+    title: interactive ? P05_PRODUCTION_METADATA[def.id].title : def.title,
+    summary: interactive ? P05_PRODUCTION_METADATA[def.id].summary : `${def.title} repository-local deterministic migration fixture`,
+    category: interactive ? P05_PRODUCTION_METADATA[def.id].category : 'p05/interactive-components',
     tags: ['interactive', 'p05-fixture'],
     entry: 'index.html',
     files: manifestFiles.sort(),
