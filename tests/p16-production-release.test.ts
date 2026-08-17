@@ -69,6 +69,7 @@ describe('P16 production runtime and release contract', () => {
       triggersThroughMigration5: string[]
       migration6TriggerAdditions: string[]
       migration7TriggerAdditions: string[]
+      migration8TriggerAdditions: string[]
     }
     expect(deploy).toContain('git -C "$source_root" archive --format=tar "$commit"')
     expect(deploy).toContain('install --frozen-lockfile')
@@ -116,14 +117,16 @@ describe('P16 production runtime and release contract', () => {
     expect(TARGET_DATABASE_TRIGGER_SETS['5']).toHaveLength(24)
     expect(TARGET_DATABASE_TRIGGER_SETS['6']).toHaveLength(27)
     expect(TARGET_DATABASE_TRIGGER_SETS['7']).toHaveLength(29)
-    expect(TARGET_DATABASE_TRIGGER_SETS['7']).toEqual(TARGET_DATABASE_TRIGGERS)
+    expect(TARGET_DATABASE_TRIGGER_SETS['8']).toHaveLength(29)
+    expect(TARGET_DATABASE_TRIGGER_SETS['8']).toEqual(TARGET_DATABASE_TRIGGERS)
     expect(TARGET_DATABASE_TRIGGER_SETS['5']).toEqual([...triggerContract.triggersThroughMigration5].sort())
     expect(TARGET_DATABASE_TRIGGER_SETS['6']).toEqual([...triggerContract.triggersThroughMigration5, ...triggerContract.migration6TriggerAdditions].sort())
     expect(TARGET_DATABASE_TRIGGER_SETS['7']).toEqual([...triggerContract.triggersThroughMigration5, ...triggerContract.migration6TriggerAdditions, ...triggerContract.migration7TriggerAdditions].sort())
+    expect(TARGET_DATABASE_TRIGGER_SETS['8']).toEqual([...triggerContract.triggersThroughMigration5, ...triggerContract.migration6TriggerAdditions, ...triggerContract.migration7TriggerAdditions, ...triggerContract.migration8TriggerAdditions].sort())
 
     const verifier = join(root, 'ops/workbuddy/verify-trigger-contract.mjs')
     const contract = join(root, 'apps/api/drizzle/schema-trigger-contract.json')
-    for (const migrationCount of ['5', '6', '7'] as const) {
+    for (const migrationCount of ['5', '6', '7', '8'] as const) {
       const result = spawnSync(process.execPath, [verifier, '--contract', contract, '--migration-count', migrationCount], {
         encoding: 'utf8',
         input: `${TARGET_DATABASE_TRIGGER_SETS[migrationCount].join('\n')}\n`,
@@ -131,15 +134,15 @@ describe('P16 production runtime and release contract', () => {
       expect(result.status).toBe(0)
       expect(result.stdout).toContain(`migration ledger ${migrationCount}`)
     }
-    const unknownTrigger = spawnSync(process.execPath, [verifier, '--contract', contract, '--migration-count', '7'], {
+    const unknownTrigger = spawnSync(process.execPath, [verifier, '--contract', contract, '--migration-count', '8'], {
       encoding: 'utf8',
-      input: `${TARGET_DATABASE_TRIGGER_SETS['7'].join('\n')}\nunexpected_p16_trigger\n`,
+      input: `${TARGET_DATABASE_TRIGGER_SETS['8'].join('\n')}\nunexpected_p16_trigger\n`,
     })
     expect(unknownTrigger.status).not.toBe(0)
     expect(unknownTrigger.stderr).toContain('unapproved trigger')
     const wrongLedger = spawnSync(process.execPath, [verifier, '--contract', contract, '--migration-count', '6'], {
       encoding: 'utf8',
-      input: `${TARGET_DATABASE_TRIGGER_SETS['7'].join('\n')}\n`,
+      input: `${TARGET_DATABASE_TRIGGER_SETS['8'].join('\n')}\n`,
     })
     expect(wrongLedger.status).not.toBe(0)
   })

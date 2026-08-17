@@ -201,6 +201,54 @@ describe('P05 preview Job lifecycle and append-only derivatives', () => {
       database.close()
     }
   })
+
+  it('keeps identical PNG bytes as distinct immutable derivatives across renderer versions', async () => {
+    const { database, store } = openMigratedDatabase()
+    try {
+      const { template, registered } = registeredFixture(database, store)
+      const jobs = new LocalJobRepository(database as never)
+      const snapshot = { templateVersionId: template.version.id, contentObjectDigest: registered.contentObject.digest }
+
+      jobs.enqueue({ id: 'legacy-renderer', type: TEMPLATE_PREVIEW_JOB_TYPE, inputSnapshot: snapshot, inputRevision: 0 })
+      const legacyWorker = new TemplatePreviewJobWorker(
+        database as never,
+        jobs,
+        store,
+        { render: async () => fakeRender('p05-test-renderer') },
+        'p05-legacy-worker',
+        30_000,
+      )
+      await expect(legacyWorker.runOnce()).resolves.toBe(true)
+      expect(jobs.get('legacy-renderer')).toMatchObject({ status: 'succeeded' })
+
+      jobs.enqueue({ id: 'scaled-renderer', type: TEMPLATE_PREVIEW_JOB_TYPE, inputSnapshot: snapshot, inputRevision: 0 })
+      const scaledWorker = new TemplatePreviewJobWorker(
+        database as never,
+        jobs,
+        store,
+        { render: async () => fakeRender('p05-test-renderer:scaled-v2') },
+        'p05-scaled-worker',
+        30_000,
+      )
+      await expect(scaledWorker.runOnce()).resolves.toBe(true)
+      expect(jobs.get('scaled-renderer')).toMatchObject({ status: 'succeeded' })
+
+      const derivatives = database.prepare(`
+        SELECT kind, content_digest, renderer_version
+        FROM template_preview_derivatives
+        ORDER BY renderer_version, kind
+      `).all() as Array<{ kind: string; content_digest: string; renderer_version: string }>
+      expect(derivatives).toHaveLength(4)
+      expect(new Set(derivatives.map((row) => row.renderer_version))).toEqual(new Set([
+        'p05-test-renderer',
+        'p05-test-renderer:scaled-v2',
+      ]))
+      expect(new Set(derivatives.filter((row) => row.kind === 'preview').map((row) => row.content_digest))).toHaveLength(1)
+      expect(new Set(derivatives.filter((row) => row.kind === 'thumbnail').map((row) => row.content_digest))).toHaveLength(1)
+    } finally {
+      database.close()
+    }
+  })
 })
 
 describe.skipIf(!chromiumExecutablePath)('P05 controlled Chromium integration', () => {

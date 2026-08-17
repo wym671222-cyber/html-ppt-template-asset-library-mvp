@@ -32,6 +32,7 @@ type TriggerContract = {
   triggersThroughMigration5: unknown
   migration6TriggerAdditions: unknown
   migration7TriggerAdditions: unknown
+  migration8TriggerAdditions: unknown
 }
 
 function triggerNames(value: unknown, label: string): string[] {
@@ -47,14 +48,16 @@ const triggerContract = JSON.parse(readFileSync(join(MIGRATIONS_DIRECTORY, 'sche
 const migration5Triggers = triggerNames(triggerContract.triggersThroughMigration5, 'triggersThroughMigration5')
 const migration6TriggerAdditions = triggerNames(triggerContract.migration6TriggerAdditions, 'migration6TriggerAdditions')
 const migration7TriggerAdditions = triggerNames(triggerContract.migration7TriggerAdditions, 'migration7TriggerAdditions')
+const migration8TriggerAdditions = triggerNames(triggerContract.migration8TriggerAdditions, 'migration8TriggerAdditions')
 
-export const TARGET_DATABASE_TRIGGER_SETS: Readonly<Record<'5' | '6' | '7', readonly string[]>> = {
+export const TARGET_DATABASE_TRIGGER_SETS: Readonly<Record<'5' | '6' | '7' | '8', readonly string[]>> = {
   '5': migration5Triggers,
   '6': [...migration5Triggers, ...migration6TriggerAdditions].sort(),
   '7': [...migration5Triggers, ...migration6TriggerAdditions, ...migration7TriggerAdditions].sort(),
+  '8': [...migration5Triggers, ...migration6TriggerAdditions, ...migration7TriggerAdditions, ...migration8TriggerAdditions].sort(),
 }
 
-export const TARGET_DATABASE_TRIGGERS = TARGET_DATABASE_TRIGGER_SETS['7']
+export const TARGET_DATABASE_TRIGGERS = TARGET_DATABASE_TRIGGER_SETS['8']
 
 const targetTriggers = new Set<string>(TARGET_DATABASE_TRIGGERS)
 
@@ -127,7 +130,7 @@ export function preflightDatabase(path = LOCAL_DATABASE_PATH): DatabasePreflight
   }
   if (tables.includes('__drizzle_migrations')) {
     const migrationKey = String(appliedMigrationCount)
-    if (migrationKey !== '5' && migrationKey !== '6' && migrationKey !== '7') {
+    if (migrationKey !== '5' && migrationKey !== '6' && migrationKey !== '7' && migrationKey !== '8') {
       throw new Error('Migration stopped before execution: migration ledger is outside the supported preflight states')
     }
     const expectedTriggers = TARGET_DATABASE_TRIGGER_SETS[migrationKey]

@@ -348,7 +348,7 @@ describe('P08 API and migration boundary', () => {
       expect(database.pragma('quick_check', { simple: true })).toBe('ok')
       expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
+      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 8 })
       expect(database.prepare("SELECT count(*) AS count FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'presentation_exports_%'").get()).toEqual({ count: 4 })
     } finally { database.close() }
   })

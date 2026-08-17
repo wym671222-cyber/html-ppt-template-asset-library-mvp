@@ -131,7 +131,7 @@ if [ -e "$database" ]; then
     case " $known " in *" $table "*) ;; *) fail "unknown production table: $table" ;; esac
   done
   migration_count=$(sqlite3 "$uri" 'SELECT count(*) FROM __drizzle_migrations;')
-  [ "$migration_count" -ge 5 ] && [ "$migration_count" -le 7 ] || fail 'production migration ledger count is outside the approved 5..7 preflight range'
+  [ "$migration_count" -ge 5 ] && [ "$migration_count" -le 8 ] || fail 'production migration ledger count is outside the approved 5..8 preflight range'
   triggers=$(sqlite3 "$uri" "SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name;")
   printf '%s\n' "$triggers" | /usr/bin/node "$SCRIPT_DIR/verify-trigger-contract.mjs" \
     --contract "$REPO_ROOT/apps/api/drizzle/schema-trigger-contract.json" \
