@@ -23,8 +23,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P04A",
-    "activePhaseThreadId": "/root/p04a_live_preview_ui",
+    "currentPhaseId": "P04B",
+    "activePhaseThreadId": "/root/p04b_catalog_transfer",
     "terminalPhaseId": "P06"
   },
   "phases": [
@@ -120,27 +120,36 @@
       "id": "P04A",
       "title": "实时预览与大尺寸弹窗",
       "objective": "完成 v1/v2 runtime 判别联合、大尺寸弹窗、焦点和真实浏览器验收",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.1-codex-max",
       "reasoning": "high",
       "estimatedContextPercent": 35,
       "dependsOn": ["P03R"],
       "successor": "P04B",
       "threadId": "/root/p04a_live_preview_ui",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "966bcf95c2e28663286a2dd08f244000b1ae8aa0",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "parent independently built shared, API and Web under Node 22.23.2 and pnpm 9.15.0 with exit 0; Web check reported 0 errors and 9 pre-existing warnings",
+          "parent reran 4 focused files with 23 of 23 tests passing and the 12-component real click, drag and wheel fixture gate with zero HTTP(S) requests",
+          "parent reran the specified Google Chrome suite with 8 of 8 tests passing, including real fullscreen, two-step Escape, focus restoration and both required desktop viewports",
+          "parent application Browser inspection confirmed three visible columns, two-card grid, no horizontal overflow, PNG-only cards, real v1 and v2 runtime pages, replay/reset, iframe destruction and zero console warnings or errors",
+          "official validator and git diff check passed; tracked worktree remained clean with only the pre-existing untracked .workbuddy directory"
+        ]
+      }
     },
     {
       "id": "P04B",
       "title": "模板资产目录传输",
       "objective": "完成密封目录包、管理员 API/BFF、只读保护、事务指纹和全部负测",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.1-codex-max",
       "reasoning": "high",
       "estimatedContextPercent": 45,
       "dependsOn": ["P04A"],
       "successor": "P05A",
-      "threadId": null,
+      "threadId": "/root/p04b_catalog_transfer",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -217,5 +226,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-17T13:02:39+08:00"
+  "updatedAt": "2026-08-17T13:48:30+08:00"
 }

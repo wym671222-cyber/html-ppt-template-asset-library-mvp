@@ -3,10 +3,10 @@
 - 工作流阶段：executing
 - 计划版本：3.1（机械拆分）
 - 用户批准版本：3.0
-- 当前阶段：P04A 实时预览与大尺寸弹窗
-- 活动线程：`/root/p04a_live_preview_ui`
-- 最后核实提交：`e7d6189728ded87dbccffce38bb191aeac935bd3`
-- 下一安全动作：只完成并验证 P04A runtime/UI；P04B transfer 草稿隔离保留，不得启动 P04B 或操作生产、远端、真实素材目录。
+- 当前阶段：P04B 模板资产目录传输
+- 活动线程：`/root/p04b_catalog_transfer`
+- 最后核实提交：`966bcf95c2e28663286a2dd08f244000b1ae8aa0`
+- 下一安全动作：恢复隔离的 P04B transfer 草稿，只完成本地密封目录包、管理员 API/BFF、只读保护、事务/指纹及负测；不得启动 P05A 或操作生产、远端、真实素材目录。
 
 ## 阶段账本
 
@@ -16,8 +16,8 @@
 | P01 | passed | `87ba2e0373f749d9198d38bde9020703b282c703` | `/root/p01_sealed_backup` | passed | 父级定向 38/38、Shared/API build、Web check/build 与代码合同复核通过 |
 | P02 | passed | `b3b33347db436c3f515b1ef3fd6476b1d4704fad` | `/root/p02_candidate_gate` | passed | 父级全量 835/835、Shell、Turbo、Chrome 13/13、prod audit 五级全零与 A/B 运行时一致性通过 |
 | P03R | passed | `33a6f5ff0a52d3d9f0abeefbe4ad446966689457` | `/root/p03r_v3_rebaseline` | passed | 六文件边界、validator、diff check、历史状态和工作树门禁通过 |
-| P04A | in_progress | — | `/root/p04a_live_preview_ui` | pending | v1/v2 runtime、大尺寸弹窗、焦点和浏览器验收 |
-| P04B | pending | — | — | pending | 目录传输草稿隔离保留；依赖 P04A |
+| P04A | passed | `966bcf95c2e28663286a2dd08f244000b1ae8aa0` | `/root/p04a_live_preview_ui` | passed | 父级 23/23、build、Chrome 8/8、12 v2 真交互、应用内 Browser 及工作树门禁通过 |
+| P04B | in_progress | — | `/root/p04b_catalog_transfer` | pending | 只恢复并完成目录传输本地实现；依赖 P04A 已满足 |
 | P05A | pending | — | — | pending | 未启动；依赖 P04B |
 | P05B | pending | — | — | pending | 未启动；依赖 P05A |
 | P06 | pending | — | — | pending | 未启动；依赖 P05B；terminal |
@@ -53,6 +53,14 @@
 - 明确指定 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` 执行 `pnpm exec playwright test --config playwright.p06.config.ts e2e/p06-asset-library.spec.ts`：exit `0`，`8/8`；真实全屏进入、退出按钮、第一次 Esc 退出全屏且保留弹窗、第二次 Esc 关闭并归还焦点全部通过，1440×900/1920×1080 与静态 runtime 外连零请求也通过。
 - 明确指定同一 Google Chrome 执行 `pnpm exec vitest run tests/p05-interactive-fixtures.test.ts -t "uses a sandboxed offline document and proves every component changes its own observable state"`：exit `0`，过滤后 `1 passed / 3 skipped`；该一项逐个覆盖 12 个确定性 v2，真实 click、drag、wheel 状态变化均通过且 HTTP(S) 请求数组为空。
 - 未读取、修改或暂存 `.workbuddy/`；未访问两个真实素材目录、P04B 隔离草稿、生产、PocketBay、云服务器或任何远端，也未 push、部署、回滚或创建后继线程。
+
+## P04A parent gate
+
+- 父级逐文件复核提交 `966bcf95c2e28663286a2dd08f244000b1ae8aa0`，确认 20 文件均属于 runtime、UI、BFF、测试与阶段证据边界；validator 与 `git diff --check` exit `0`。
+- 父级在固定 Node `v22.23.2` / pnpm `9.15.0` 下先构建 Shared，再独立复跑 23/23 聚焦测试、API/Web build、Web check `0 errors / 9 pre-existing warnings`，全部 exit `0`。
+- 父级真实 Google Chrome 复跑 `8/8`，覆盖全屏、两步 Esc、关闭销毁 iframe、焦点归还和两个桌面视口；12 个 v2 的真实 click/drag/wheel 状态变化与 HTTP(S) 外连零请求门禁 exit `0`。
+- 父级应用内 Browser 复核 1440×900 与 1920×1080 三栏双列、无横向溢出、卡片 iframe `0`、v1 真实 DOM/CSS、v2 replay/reset、关闭销毁及 console error/warn `0`。该容器对 Esc 的自动化注入会在页面处理后把焦点重置到 `BODY`，故焦点结论采用指定真实 Google Chrome 的直接 E2E，不伪造容器通过。
+- 提交与验收后 tracked worktree 干净，仅保留既有 `?? .workbuddy/`。P04A 通过；父级现按固定顺序启动 P04B，本结论不授权 P05A 或任何生产操作。
 
 ## P00 worker evidence
 
