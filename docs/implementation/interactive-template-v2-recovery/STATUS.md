@@ -1,12 +1,12 @@
 # 交互模板 v2 终局恢复与上线状态
 
 - 工作流阶段：executing
-- 计划版本：3.0
+- 计划版本：3.1（机械拆分）
 - 用户批准版本：3.0
-- 当前阶段：P04 实时预览与目录传输实现
-- 活动线程：`/root/p04_live_preview_catalog_transfer`
-- 最后核实提交：`33a6f5ff0a52d3d9f0abeefbe4ad446966689457`
-- 下一安全动作：只执行 P04 本地产品实现、隔离测试与一个原子提交；不得启动 P05A、操作生产、远端或真实素材目录。
+- 当前阶段：P04A 实时预览与大尺寸弹窗
+- 活动线程：`/root/p04a_live_preview_ui`
+- 最后核实提交：`e7d6189728ded87dbccffce38bb191aeac935bd3`
+- 下一安全动作：只完成并验证 P04A runtime/UI；P04B transfer 草稿隔离保留，不得启动 P04B 或操作生产、远端、真实素材目录。
 
 ## 阶段账本
 
@@ -16,8 +16,9 @@
 | P01 | passed | `87ba2e0373f749d9198d38bde9020703b282c703` | `/root/p01_sealed_backup` | passed | 父级定向 38/38、Shared/API build、Web check/build 与代码合同复核通过 |
 | P02 | passed | `b3b33347db436c3f515b1ef3fd6476b1d4704fad` | `/root/p02_candidate_gate` | passed | 父级全量 835/835、Shell、Turbo、Chrome 13/13、prod audit 五级全零与 A/B 运行时一致性通过 |
 | P03R | passed | `33a6f5ff0a52d3d9f0abeefbe4ad446966689457` | `/root/p03r_v3_rebaseline` | passed | 六文件边界、validator、diff check、历史状态和工作树门禁通过 |
-| P04 | in_progress | — | `/root/p04_live_preview_catalog_transfer` | pending | 大尺寸 v1/v2 runtime 与目录传输本地实现 |
-| P05A | pending | — | — | pending | 未启动；依赖 P04 |
+| P04A | in_progress | — | `/root/p04a_live_preview_ui` | pending | v1/v2 runtime、大尺寸弹窗、焦点和浏览器验收 |
+| P04B | pending | — | — | pending | 目录传输草稿隔离保留；依赖 P04A |
+| P05A | pending | — | — | pending | 未启动；依赖 P04B |
 | P05B | pending | — | — | pending | 未启动；依赖 P05A |
 | P06 | pending | — | — | pending | 未启动；依赖 P05B；terminal |
 
@@ -29,11 +30,16 @@
 
 ## 当前边界
 
-- v3.0 的 PocketBay/云端生产阶段尚未启动；P04 只允许本地产品实现与隔离测试。
+- v3.0 的 PocketBay/云端生产阶段尚未启动；P04A/P04B 只允许本地产品实现与隔离测试。
 - 后继固定顺序为 PocketBay 恢复证明、PocketBay 迁移与目录导出、云端 `119.29.241.146` / `ppt.ajjy-ai.site` 同 SHA 同步。
 - 旧 interactive-template-v2 链保持 blocked/failed 历史，不重写。
 - 工作树原有 `.workbuddy/` 未跟踪目录保持不读、不改、不暂存。
-- 两个真实素材目录保持不读、不改；P03R 禁止产品源码、测试、ops、生产和远端操作。
+- 两个真实素材目录保持不读、不改；P04A/P04B 禁止生产、远端和真实素材目录操作。
+
+## P04 split_required
+
+- 原 P04 worker 在约 55–60% 上下文主动停止，没有提交或后继；`git diff --check` exit `0`，未修改 CHAIN_STATE、生产、远端、真实素材目录或 `.workbuddy/`。
+- 已有 runtime 与 transfer 草稿均未经过完整测试，不作为通过证据。父级按执行协议机械拆分为 P04A/P04B，批准目标、范围和验收保持不变。
 
 ## P00 worker evidence
 

@@ -1,7 +1,7 @@
 # 交互模板 v2 终局恢复与上线主计划
 
-- 状态：v3.0 已批准并执行 P03R
-- 计划版本：3.0
+- 状态：批准版本 v3.0 执行中；机械拆分计划 v3.1
+- 计划版本：3.1；批准版本：3.0
 - 实施分支：`feat/interactive-template-v2-export`
 - 实施基线：`bdd9acf35174fefe7953aa59c5d7bb670d4cf901`
 - 终局阶段：P06
@@ -22,9 +22,10 @@
 | P00 | 恢复链初始化与失败基线 | gpt-5.6-sol | high | 30% | 无 | P01 |
 | P01 | 密封备份架构 | gpt-5.6-sol | xhigh | 50% | P00 | P02 |
 | P02 | 候选与独立门禁 | gpt-5.6-sol | xhigh | 40% | P01 | P03R |
-| P03R | v3.0 恢复链重基线 | gpt-5.1-codex-max | high | 20% | P02 | P04 |
-| P04 | 实时预览与目录传输实现 | gpt-5.1-codex-max | high | 50% | P03R | P05A |
-| P05A | PocketBay 双候选密封恢复证明 | gpt-5.1-codex-max | high | 45% | P04 | P05B |
+| P03R | v3.0 恢复链重基线 | gpt-5.1-codex-max | high | 20% | P02 | P04A |
+| P04A | 实时预览与大尺寸弹窗 | gpt-5.1-codex-max | high | 35% | P03R | P04B |
+| P04B | 模板资产目录传输 | gpt-5.1-codex-max | high | 45% | P04A | P05A |
+| P05A | PocketBay 双候选密封恢复证明 | gpt-5.1-codex-max | high | 45% | P04B | P05B |
 | P05B | PocketBay 迁移与目录导出 | gpt-5.1-codex-max | high | 50% | P05A | P06 |
 | P06 | 云服务器同步与终局验收 | gpt-5.1-codex-max | high | 50% | P05B | 无 |
 
@@ -37,13 +38,18 @@
 - 保持 P00–P02 的 passed 提交和门禁证据不变；P04 继续 pending，禁止创建后继线程。
 - 门禁：官方 validator、`git diff --check`、显式 staged diff 审查、单个 Conventional Commit、提交后仅保留既有 `.workbuddy/`。
 
-### P04 — 实时预览与目录传输实现
+### P04A — 实时预览与大尺寸弹窗
 
 - 列表仅使用 PNG 缩略图；眼睛按钮打开居中大尺寸 16:9 弹窗，交互页面位于首屏，元数据进入可收起信息区。
 - 弹窗提供关闭、全屏和适应窗口；v2 提供重播、重置。Esc 先退出全屏、再关闭，关闭后销毁 iframe 并归还焦点。
 - v1 真实 HTML/CSS 使用不允许脚本的 opaque sandbox；v2 保持 `sandbox="allow-scripts"` 双层运行时，禁止外网、导航、下载和宿主存储。
 - 扩展目录 runtime：`mode = sandboxed-static | sandboxed-js`，并声明 `viewport`、`url` 和 `commands`。
-- 实现仅管理员可用的 `asset-library-catalog-transfer/v1` 密封 ZIP 导出、暂存校验和显式 apply；P04 只做本地实现与隔离测试，不接触生产。
+- 只完成 runtime/UI/BFF 安全路径与真实浏览器验收；目录传输留给 P04B，不接触生产。
+
+### P04B — 模板资产目录传输
+
+- 实现仅管理员可用的 `asset-library-catalog-transfer/v1` 密封 ZIP 导出、暂存校验和显式 apply。
+- 完成 API composition、精确 BFF、APP_READ_ONLY fail-closed、SQLite transaction、敏感表指纹与所有负测；不接触生产。
 
 ## 公共接口与传输合同
 

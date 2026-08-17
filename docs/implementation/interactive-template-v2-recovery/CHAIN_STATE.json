@@ -9,11 +9,12 @@
   },
   "workflowPhase": "executing",
   "plan": {
-    "version": "3.0",
+    "version": "3.1",
     "approved": true,
     "approvedVersion": "3.0",
     "approvedAt": "2026-08-17T12:37:50+08:00",
-    "approvalEvidence": "User explicitly approved the complete PocketBay 形态统一与云服务器资产同步方案 v3.0 following PLEASE IMPLEMENT THIS PLAN:."
+    "approvalEvidence": "User explicitly approved the complete PocketBay 形态统一与云服务器资产同步方案 v3.0 following PLEASE IMPLEMENT THIS PLAN:.",
+    "mechanicalSplit": "P04 exceeded its safe single-phase context budget and was split without changing objective, scope, model class or acceptance."
   },
   "contextPolicy": {
     "targetPercent": 50,
@@ -22,8 +23,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P04",
-    "activePhaseThreadId": "/root/p04_live_preview_catalog_transfer",
+    "currentPhaseId": "P04A",
+    "activePhaseThreadId": "/root/p04a_live_preview_ui",
     "terminalPhaseId": "P06"
   },
   "phases": [
@@ -102,7 +103,7 @@
       "reasoning": "high",
       "estimatedContextPercent": 20,
       "dependsOn": ["P02"],
-      "successor": "P04",
+      "successor": "P04A",
       "threadId": "/root/p03r_v3_rebaseline",
       "commit": "33a6f5ff0a52d3d9f0abeefbe4ad446966689457",
       "gate": {
@@ -116,16 +117,30 @@
       }
     },
     {
-      "id": "P04",
-      "title": "实时预览与目录传输实现",
-      "objective": "实现大尺寸安全实时预览、v1/v2 runtime 合同和模板资产目录传输包",
+      "id": "P04A",
+      "title": "实时预览与大尺寸弹窗",
+      "objective": "完成 v1/v2 runtime 判别联合、大尺寸弹窗、焦点和真实浏览器验收",
       "status": "in_progress",
       "model": "gpt-5.1-codex-max",
       "reasoning": "high",
-      "estimatedContextPercent": 50,
+      "estimatedContextPercent": 35,
       "dependsOn": ["P03R"],
+      "successor": "P04B",
+      "threadId": "/root/p04a_live_preview_ui",
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P04B",
+      "title": "模板资产目录传输",
+      "objective": "完成密封目录包、管理员 API/BFF、只读保护、事务指纹和全部负测",
+      "status": "pending",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P04A"],
       "successor": "P05A",
-      "threadId": "/root/p04_live_preview_catalog_transfer",
+      "threadId": null,
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -137,7 +152,7 @@
       "model": "gpt-5.1-codex-max",
       "reasoning": "high",
       "estimatedContextPercent": 45,
-      "dependsOn": ["P04"],
+      "dependsOn": ["P04B"],
       "successor": "P05B",
       "threadId": null,
       "commit": null,
@@ -174,6 +189,15 @@
   ],
   "supersededPhases": [
     {
+      "id": "P04",
+      "planVersion": "3.0",
+      "priorStatus": "in_progress",
+      "priorThreadId": "/root/p04_live_preview_catalog_transfer",
+      "priorCommit": null,
+      "priorGateResult": "pending",
+      "disposition": "split_required_into_P04A_and_P04B_without_scope_change"
+    },
+    {
       "id": "P03A",
       "planVersion": "2.1",
       "priorStatus": "in_progress",
@@ -193,5 +217,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-17T12:47:21+08:00"
+  "updatedAt": "2026-08-17T13:02:39+08:00"
 }
