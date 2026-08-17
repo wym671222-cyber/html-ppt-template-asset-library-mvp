@@ -2,12 +2,14 @@
   import { onMount } from 'svelte'
   import { TEMPLATE_RUNTIME_PROTOCOL, isTemplateRuntimeEventMessage } from '@slide-maker/shared'
   import type { CatalogItem } from '$lib/asset-library'
-  import { safeDerivativeUrl, safeRuntimeUrl } from '$lib/asset-library'
+  import { runtimeViewportScale, safeDerivativeUrl, safeRuntimeUrl } from '$lib/asset-library'
 
   let { item, open, isAdmin, onClose, onRetired }: { item: CatalogItem | null; open: boolean; isAdmin: boolean; onClose: () => void; onRetired: () => void } = $props()
   let failedItemId = $state<string | null>(null)
   let closeButton: HTMLButtonElement | undefined = $state()
   let runtimeFrame: HTMLIFrameElement | undefined = $state()
+  let runtimeViewportHost: HTMLDivElement | undefined = $state()
+  let runtimeScale = $state(1)
   let runtimeSessionId = $state<string | null>(null)
   let runtimeError = $state('')
   let runtimeReady = $state(false)
@@ -26,6 +28,18 @@
     runtimeReady = false
     runtimeSequence = 0
     retireError = ''
+  })
+  $effect(() => {
+    const host = runtimeViewportHost
+    const viewportWidth = item?.runtime?.viewport.width
+    if (!open || !host || !viewportWidth) return
+    const resize = (): void => {
+      if (host.clientWidth > 0) runtimeScale = runtimeViewportScale(host.clientWidth, viewportWidth)
+    }
+    resize()
+    const observer = new ResizeObserver(resize)
+    observer.observe(host)
+    return () => observer.disconnect()
   })
 
   function runtimeMessage(event: MessageEvent): void {
@@ -89,7 +103,16 @@
       {#if item.runtime}
         <section class="interactive-runtime" aria-label="交互模板运行时">
           <header><div><h3>交互预览</h3><p>{runtimeReady ? '运行时已就绪' : '正在建立隔离运行时…'}</p></div><div><button type="button" disabled={!runtimeReady} onclick={() => sendRuntimeCommand('replay')}>重播</button><button type="button" disabled={!runtimeReady} onclick={() => sendRuntimeCommand('reset')}>重置</button></div></header>
-          <iframe bind:this={runtimeFrame} title={`${item.title} 的隔离交互预览`} sandbox="allow-scripts" src={safeRuntimeUrl(item.runtime.url)}></iframe>
+          <div bind:this={runtimeViewportHost} class="runtime-viewport" style:aspect-ratio={`${item.runtime.viewport.width} / ${item.runtime.viewport.height}`}>
+            <div
+              class="runtime-stage"
+              style:width={`${item.runtime.viewport.width}px`}
+              style:height={`${item.runtime.viewport.height}px`}
+              style:transform={`scale(${runtimeScale})`}
+            >
+              <iframe bind:this={runtimeFrame} title={`${item.title} 的隔离交互预览`} sandbox="allow-scripts" src={safeRuntimeUrl(item.runtime.url)}></iframe>
+            </div>
+          </div>
           {#if runtimeError}<p class="runtime-error" role="alert">交互运行时报告错误：{runtimeError}</p>{/if}
         </section>
       {/if}
@@ -130,7 +153,9 @@
   .interactive-runtime header > div:last-child { display: flex; gap: 6px; }
   .interactive-runtime button, .retire-panel button { min-height: 31px; border: 1px solid var(--lib-border); border-radius: 5px; background: var(--lib-elevated); color: var(--lib-text); padding: 0 9px; font: 700 11px var(--font-body); cursor: pointer; }
   .interactive-runtime button:disabled, .retire-panel button:disabled { opacity: .48; cursor: not-allowed; }
-  iframe { display: block; width: 100%; aspect-ratio: 16/9; border: 0; border-top: 1px solid var(--lib-border); background: #fff; }
+  .runtime-viewport { width: 100%; overflow: hidden; border-top: 1px solid var(--lib-border); background: #fff; }
+  .runtime-stage { transform-origin: top left; }
+  iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
   .runtime-error { margin: 0; padding: 10px 13px; color: var(--lib-danger); font-size: 12px; }
   .retire-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
   .retire-panel button { border-color: var(--lib-danger); color: var(--lib-danger); }

@@ -59,6 +59,12 @@ export function safeRuntimeUrl(value: string): string {
   return value
 }
 
+export function runtimeViewportScale(containerWidth: number, viewportWidth: number): number {
+  if (!Number.isFinite(containerWidth) || containerWidth <= 0) throw new Error('Runtime container width must be positive')
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) throw new Error('Runtime viewport width must be positive')
+  return Math.min(1, containerWidth / viewportWidth)
+}
+
 export function catalogQuery(filters: CatalogFilters): string {
   const parameters = new URLSearchParams()
   const search = filters.search.trim()

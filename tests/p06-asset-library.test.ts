@@ -13,7 +13,7 @@ import { TemplatePreviewJobWorker, TEMPLATE_PREVIEW_JOB_TYPE, type PreviewRender
 import type { SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
 import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
-import { catalogQuery, safeDerivativeUrl, safeRuntimeUrl } from '../apps/web/src/lib/asset-library.js'
+import { catalogQuery, runtimeViewportScale, safeDerivativeUrl, safeRuntimeUrl } from '../apps/web/src/lib/asset-library.js'
 
 type SQLite = {
   pragma(statement: string, options?: { simple: true }): unknown
@@ -95,6 +95,22 @@ describe('P06 bounded deterministic catalog query', () => {
       expect(() => safeDerivativeUrl(value)).toThrow(/unsafe/)
       expect(() => safeRuntimeUrl(value)).toThrow(/unsafe/)
     }
+  })
+
+  it('fits the fixed 1920x1080 runtime viewport into the detail panel without changing the iframe viewport', () => {
+    expect(runtimeViewportScale(494, 1920)).toBeCloseTo(494 / 1920)
+    expect(runtimeViewportScale(1920, 1920)).toBe(1)
+    expect(runtimeViewportScale(2560, 1920)).toBe(1)
+    expect(() => runtimeViewportScale(0, 1920)).toThrow(/container width/i)
+    expect(() => runtimeViewportScale(494, 0)).toThrow(/viewport width/i)
+
+    const detail = readFileSync(join(process.cwd(), 'apps/web/src/lib/components/library/AssetDetail.svelte'), 'utf8')
+    expect(detail).toContain('class="runtime-viewport"')
+    expect(detail).toContain('class="runtime-stage"')
+    expect(detail).toContain('style:width={`${item.runtime.viewport.width}px`}')
+    expect(detail).toContain('style:height={`${item.runtime.viewport.height}px`}')
+    expect(detail).toContain('style:transform={`scale(${runtimeScale})`}')
+    expect(detail).toContain('transform-origin: top left')
   })
 })
 
