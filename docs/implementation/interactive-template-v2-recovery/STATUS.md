@@ -3,10 +3,10 @@
 - 工作流阶段：executing
 - 计划版本：3.1（机械拆分）
 - 用户批准版本：3.0
-- 当前阶段：P04B 模板资产目录传输
-- 活动线程：`/root/p04b_catalog_transfer`
-- 最后核实提交：`966bcf95c2e28663286a2dd08f244000b1ae8aa0`
-- 下一安全动作：父级从 P04B 原子提交独立复核目录传输、负测、全量回归、构建和工作树门禁；worker 不启动 P05A，不操作生产、远端或真实素材目录。
+- 当前阶段：P05A PocketBay 双候选密封恢复证明
+- 活动线程：`/root/p05a_pocketbay_sealed_backup`
+- 最后核实提交：`699796b929fc6d3951e16dae4a164fa611ef9905`
+- 下一安全动作：冻结候选 C/D 的运行时与部署输入，先只读核对 PocketBay 发布、备份、归档和隔离恢复入口；涉及 PocketBay 登录或备份口令时由用户手工完成，任一完整性门禁失败立即停止且不自动回滚。
 
 ## 阶段账本
 
@@ -17,8 +17,8 @@
 | P02 | passed | `b3b33347db436c3f515b1ef3fd6476b1d4704fad` | `/root/p02_candidate_gate` | passed | 父级全量 835/835、Shell、Turbo、Chrome 13/13、prod audit 五级全零与 A/B 运行时一致性通过 |
 | P03R | passed | `33a6f5ff0a52d3d9f0abeefbe4ad446966689457` | `/root/p03r_v3_rebaseline` | passed | 六文件边界、validator、diff check、历史状态和工作树门禁通过 |
 | P04A | passed | `966bcf95c2e28663286a2dd08f244000b1ae8aa0` | `/root/p04a_live_preview_ui` | passed | 父级 23/23、build、Chrome 8/8、12 v2 真交互、应用内 Browser 及工作树门禁通过 |
-| P04B | in_progress | — | `/root/p04b_catalog_transfer` | pending | 只恢复并完成目录传输本地实现；依赖 P04A 已满足 |
-| P05A | pending | — | — | pending | 未启动；依赖 P04B |
+| P04B | passed | `699796b929fc6d3951e16dae4a164fa611ef9905` | `/root/p04b_catalog_transfer` | passed | 父级 853/853、Shell 8/8、build 3/3、prod audit 五级全零、validator 与工作树门禁通过 |
+| P05A | in_progress | — | `/root/p05a_pocketbay_sealed_backup` | pending | 已启动；先冻结 C/D 并执行只读发布与恢复预检 |
 | P05B | pending | — | — | pending | 未启动；依赖 P05A |
 | P06 | pending | — | — | pending | 未启动；依赖 P05B；terminal |
 
@@ -30,7 +30,7 @@
 
 ## 当前边界
 
-- v3.0 的 PocketBay/云端生产阶段尚未启动；P04A/P04B 只允许本地产品实现与隔离测试。
+- P05A 已由父级启动，但尚未执行 PocketBay 或云端写入；发布前只允许冻结候选和只读预检，登录与备份口令仍由用户手工完成。
 - 后继固定顺序为 PocketBay 恢复证明、PocketBay 迁移与目录导出、云端 `119.29.241.146` / `ppt.ajjy-ai.site` 同 SHA 同步。
 - 旧 interactive-template-v2 链保持 blocked/failed 历史，不重写。
 - 工作树原有 `.workbuddy/` 未跟踪目录保持不读、不改、不暂存。
@@ -77,6 +77,14 @@
 - 被驳回候选的 API build、Web check/build 和 root Turbo build 均曾 exit `0`，Turbo 为 `3/3 successful`。本次修补已重新通过 Shared/API/Web；修补后 root Turbo 留给父级独立复跑。首次 root Turbo 调用被内部 fallback 解析为 Node 24/pnpm 11，真实 exit `1` 且只触发 engine guard；使用临时 PATH 明确绑定 Node 22/pnpm 9 后从头重跑通过，不把环境误调用记为产品失败或通过证据。
 - 全量测试首次发现 P04A 的旧 `runtime:null` 断言，真实为 `1 failed / 850 passed`；更新为批准的静态 runtime 合同后从头重跑为 `851/851`。未执行 production audit，因为本 worker 明确禁止网络；该门禁留给父级/P05A 的获准候选流程。
 - 未读取、修改或暂存 `.workbuddy/`；未访问两个真实素材目录，也未触碰 PocketBay、云服务器、生产、凭据、远端、push、deploy、rollback 或后继线程。
+
+## P04B parent gate
+
+- 父级从精确候选 `699796b929fc6d3951e16dae4a164fa611ef9905` 独立复核。固定 Node `v22.23.2` / pnpm `9.15.0`，先构建 Shared；P04B 目录传输 `9/9`、聚焦 integration `17/17`、全量 Vitest `47/47 files、853/853 tests` 与 shell `8/8 suites` 均 exit `0`。
+- Web check exit `0`，为 `0 errors / 9 pre-existing warnings`；首次 root Turbo 因子进程误选 Codex fallback Node 24/pnpm 11 被 engine guard 拒绝，绑定临时 pnpm 9 入口与 Node 22 PATH 后从头重跑为 `3/3 successful`，没有放宽引擎合同。
+- `pnpm audit --prod --json` 真实 exit `0`：370 个 production dependencies，info/low/moderate/high/critical 全零。完整 audit 真实 exit `1`：638 个 dependencies，依次为 `0/2/6/1/1`，作为既有开发依赖残余明确保留，不以生产审计绿色掩盖。
+- 父级确认 exact trigger SQL 恢复、版本状态同步、来源 renderer 集合权威、受保护表指纹、stale target/read-only/API 边界均有当前提交回归；validator 和 `git diff --check` exit `0`，tracked worktree 仅保留既有 `?? .workbuddy/`。
+- P04B passed，候选 C 固定为 `699796b...`；父级只启动 P05A。到此仍未读取 `.workbuddy/` 或两个真实素材目录，未写 PocketBay/云端、未 push、未部署、未回滚，也未输出凭据。
 
 ## P00 worker evidence
 
