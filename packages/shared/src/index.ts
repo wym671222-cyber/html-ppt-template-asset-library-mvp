@@ -10,6 +10,7 @@ export * from './module-registry.js'
 export * from './artifact-runtime.js'
 export * from './style-helpers.js'
 export * from './template-package.js'
+export * from './template-runtime.js'
 export {
   buildArtifactBlockData,
   buildAtRef,

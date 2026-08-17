@@ -147,23 +147,23 @@ NODE
 }
 
 emit_contract_triggers() {
-  node -e 'const c=require(process.argv[1]); const count=process.argv[2]; const names=[...c.triggersThroughMigration5]; if (Number(count)>=6) names.push(...c.migration6TriggerAdditions); if (Number(count)>=7) names.push(...c.migration7TriggerAdditions); process.stdout.write(`${names.sort().join("\n")}\n`)' \
+  node -e 'const c=require(process.argv[1]); const count=process.argv[2]; const names=[...c.triggersThroughMigration5]; if (Number(count)>=6) names.push(...c.migration6TriggerAdditions); if (Number(count)>=7) names.push(...c.migration7TriggerAdditions); if (Number(count)>=8) names.push(...c.migration8TriggerAdditions); process.stdout.write(`${names.sort().join("\n")}\n`)' \
     "$REPO_ROOT/apps/api/drizzle/schema-trigger-contract.json" "$1"
 }
 
 trigger_verifier="$REPO_ROOT/ops/workbuddy/verify-trigger-contract.mjs"
 trigger_contract="$REPO_ROOT/apps/api/drizzle/schema-trigger-contract.json"
-emit_database_triggers "$data_root/asset-library.db" | node "$trigger_verifier" --contract "$trigger_contract" --migration-count 7 >/dev/null
-for migration_count in 5 6 7; do
+emit_database_triggers "$data_root/asset-library.db" | node "$trigger_verifier" --contract "$trigger_contract" --migration-count 8 >/dev/null
+for migration_count in 5 6 7 8; do
   emit_contract_triggers "$migration_count" | node "$trigger_verifier" --contract "$trigger_contract" --migration-count "$migration_count" >/dev/null
 done
-if { emit_contract_triggers 7; printf 'unexpected_p16_trigger\n'; } | node "$trigger_verifier" --contract "$trigger_contract" --migration-count 7 > /dev/null 2>"$P16_TEMP_ROOT/unknown-trigger.stderr"; then
+if { emit_contract_triggers 8; printf 'unexpected_p16_trigger\n'; } | node "$trigger_verifier" --contract "$trigger_contract" --migration-count 8 > /dev/null 2>"$P16_TEMP_ROOT/unknown-trigger.stderr"; then
   printf 'ERROR: unknown trigger passed the approved trigger contract\n' >&2
   exit 1
 fi
 grep -F 'unapproved trigger' "$P16_TEMP_ROOT/unknown-trigger.stderr" >/dev/null
-if emit_contract_triggers 7 | node "$trigger_verifier" --contract "$trigger_contract" --migration-count 6 > /dev/null 2>"$P16_TEMP_ROOT/wrong-ledger.stderr"; then
-  printf 'ERROR: migration 7 trigger set passed the migration 6 contract\n' >&2
+if emit_contract_triggers 8 | node "$trigger_verifier" --contract "$trigger_contract" --migration-count 6 > /dev/null 2>"$P16_TEMP_ROOT/wrong-ledger.stderr"; then
+  printf 'ERROR: migration 8 trigger set passed the migration 6 contract\n' >&2
   exit 1
 fi
 

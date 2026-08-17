@@ -7,7 +7,7 @@
     "implementationBranch": "feat/production-auth-hardening",
     "baselineCommit": "9c88b48aafd3bf2529cc31c5db9e346a915bf3aa"
   },
-  "workflowPhase": "executing",
+  "workflowPhase": "blocked",
   "plan": {
     "version": "2.2",
     "approved": true,
@@ -21,8 +21,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P16T",
-    "activePhaseThreadId": "/root/p16t_ci_stabilization",
+    "currentPhaseId": null,
+    "activePhaseThreadId": null,
     "terminalPhaseId": "P17"
   },
   "phases": [
@@ -184,31 +184,47 @@
       "id": "P16T",
       "title": "CI 确定性修复与候选重建",
       "objective": "保持 P13 bootstrap 真实编译断言与覆盖不变，仅设置确定性测试时限并形成新的本地候选 SHA",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 20,
       "dependsOn": ["P16S"],
       "successor": "P17",
       "threadId": "/root/p16t_ci_stabilization",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "72eadaa476a83b4a58f320149d7a5d0e0ad980ad",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to approval baseline f331b98 exactly one atomic commit across the three approved paths; tracked worktree clean",
+          "test diff only adds the 15000 ms per-test timeout; real tsc, manifest, tsconfig and emitted bootstrap assertions are unchanged",
+          "parent rerun P13 three consecutive times, full Vitest 35 files/779, shell 8/8, shared/API tsc, Web check/build and root build passed",
+          "parent production audit real exit 0 with 369 dependencies and zero findings at every severity; P16 rehearsal/preflight and Chrome 2/2 plus 10/10 passed"
+        ]
+      }
     },
     {
       "id": "P17",
       "title": "生产迁移切换与终局验收",
       "objective": "经独立生产审批后推送精确提交、迁移腾讯服务器并验证可靠性和权限终局",
-      "status": "pending",
+      "status": "blocked",
       "model": "gpt-5.6-sol",
       "reasoning": "xhigh",
       "estimatedContextPercent": 45,
       "dependsOn": ["P16T"],
       "successor": null,
       "threadId": "/root/p17_production_release",
-      "commit": null,
-      "gate": {"result": "pending", "evidence": []}
+      "commit": "8a389d54861648ea4c537a872e7ce831eb31bc6e",
+      "gate": {
+        "result": "blocked",
+        "evidence": [
+          "exact product SHA 72eadaa was non-force pushed to both origin refs; feature CI 31371260100 and personal CI 31371448617 succeeded on that SHA",
+          "root and ubuntu BatchMode SSH read-only probes both failed with publickey refusal; no session was established",
+          "WorkBuddy historical task was visible but its Computer Use composer could not reliably submit a read-only command; no WorkBuddy or server command was sent",
+          "production preflight, backup, migration, deploy, Caddy/systemd/PM2, DB/CAS and admin operations were not executed; resume requires a restored auditable channel"
+        ]
+      }
     }
   ],
-  "blockedReason": null,
-  "updatedAt": "2026-08-10T14:19:02+08:00"
+  "blockedReason": "P17 passed both same-SHA GitHub CI gates but cannot begin production preflight because root/ubuntu SSH probes are rejected by publickey and WorkBuddy's composer cannot reliably submit a read-only command. Restore an auditable SSH or WorkBuddy channel, then resume from read-only preflight; do not force-revert the two updated refs.",
+  "updatedAt": "2026-08-10T16:55:07+08:00"
 }

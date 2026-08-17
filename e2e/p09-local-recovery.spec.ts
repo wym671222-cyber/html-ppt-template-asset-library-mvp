@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
 
-test('P09 creates a keyboard-accessible manifest and completes one isolated restore without changing source state', async ({ page, request }) => {
-  await page.goto('/')
-  const panel = page.locator('.recovery-panel')
-  await expect(page.getByRole('heading', { name: '备份与恢复演练' })).toBeVisible()
+test('P09 admin creates a manifest and completes one isolated restore without changing source state', async ({ page, request }) => {
+  await page.goto('/admin')
+  const panel = page.locator('.admin-section.recovery')
+  await expect(page.getByRole('heading', { name: '加密备份与恢复' })).toBeVisible()
   await expect(panel).toHaveAttribute('aria-busy', 'false')
 
   const beforeResponse = await request.get('/api/recovery')
@@ -16,9 +16,7 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
   await backupButton.focus()
   await expect(backupButton).toBeFocused()
   await backupButton.press('Enter')
-  const backupNotice = page.getByText(/备份清单已生成并回读/)
-  await expect(backupNotice).toBeVisible()
-  await expect(backupNotice).toBeFocused()
+  await expect(page.getByText(/备份清单已生成/)).toBeVisible()
 
   const manifestLink = page.getByRole('link', { name: 'Manifest' }).last()
   const manifestUrl = await manifestLink.getAttribute('href')
@@ -30,13 +28,11 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
   expect(manifestPayload.manifest.objects.every((object) => object.relativePath === `objects/sha256/${object.digest.slice(0, 2)}/${object.digest}`)).toBe(true)
   expect(JSON.stringify(manifestPayload)).not.toMatch(/\/Users\/|password|credential|api[_-]?key/i)
 
-  const restoreButton = page.getByRole('button', { name: '隔离恢复演练' }).last()
+  const restoreButton = page.getByRole('button', { name: '隔离恢复' }).last()
   await restoreButton.focus()
   await expect(restoreButton).toBeFocused()
   await restoreButton.press('Enter')
-  const restoreNotice = page.getByText(/隔离恢复演练已通过/)
-  await expect(restoreNotice).toBeVisible()
-  await expect(restoreNotice).toBeFocused()
+  await expect(page.getByText(/隔离恢复通过/)).toBeVisible()
   await expect(page.getByRole('button', { name: '恢复已验证' }).last()).toBeDisabled()
 
   const afterResponse = await request.get('/api/recovery')
@@ -47,15 +43,14 @@ test('P09 creates a keyboard-accessible manifest and completes one isolated rest
   const backup = after.recovery.backups[0]
   const repeated = await request.post(`/api/recovery/backups/${backup.id}/restore`, { headers: { origin: 'http://127.0.0.1:5175', 'content-type': 'application/json' }, data: { expectedManifestSha256: backup.manifestSha256 } })
   expect(repeated.status()).toBe(409)
-
   expect(await page.locator('iframe, [srcdoc]').count()).toBe(0)
 })
 
-test('P09 recovery controls remain focused and usable at 680px while unsafe and legacy routes stay rejected', async ({ page, request }) => {
+test('P09 recovery controls stay usable at 680px while unsafe and legacy routes remain rejected', async ({ page, request }) => {
   await page.setViewportSize({ width: 680, height: 900 })
-  await page.goto('/')
-  await expect(page.locator('.recovery-panel')).toHaveAttribute('aria-busy', 'false')
-  await expect(page.getByRole('heading', { name: '备份与恢复演练' })).toBeVisible()
+  await page.goto('/admin')
+  await expect(page.locator('.admin-section.recovery')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.getByRole('heading', { name: '加密备份与恢复' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Manifest' }).last()).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 

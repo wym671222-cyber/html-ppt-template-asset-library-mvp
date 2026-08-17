@@ -42,7 +42,7 @@ describe('P07 presentation persistence and revision CAS', () => {
     expect(repeated.backupPath).toBeUndefined()
     const database = new Database(path)
     try {
-      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
+      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 8 })
       expect(database.prepare("SELECT count(*) AS count FROM sqlite_master WHERE type = 'trigger' AND name IN ('presentation_items_position_fixed', 'presentation_items_non_last_delete_forbidden')").get()).toEqual({ count: 0 })
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     } finally { database.close() }

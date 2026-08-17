@@ -33,5 +33,6 @@
   "migration7TriggerAdditions": [
     "presentations_owner_immutable",
     "presentations_owner_required_insert"
-  ]
+  ],
+  "migration8TriggerAdditions": []
 }

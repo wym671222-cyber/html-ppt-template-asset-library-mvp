@@ -18,6 +18,7 @@
     "seed:admin": "pnpm --filter @slide-maker/api seed:admin",
     "audit:a11y": "node scripts/a11y-theme-audit.mjs",
     "start": "tsx apps/api/src/index.ts",
+    "start:pocketbay": "node ops/pocketbay/start.mjs",
     "api:dev": "pnpm --filter @slide-maker/api dev",
     "api:bedrock": "AI_PROVIDER=bedrock pnpm --filter @slide-maker/api dev",
     "api:anthropic": "AI_PROVIDER=anthropic pnpm --filter @slide-maker/api dev",
@@ -30,6 +31,13 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "d3": "7.9.0",
+    "echarts": "5.6.0",
+    "gsap": "3.13.0",
+    "interactjs": "1.10.27",
+    "matter-js": "0.20.0",
+    "p5": "2.1.1",
+    "three": "0.152.2",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

@@ -1,4 +1,9 @@
 export const TEMPLATE_PACKAGE_CONTRACT_VERSION = 'html-template/v1' as const
+export const INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION = 'html-template/v2' as const
+
+export type TemplatePackageContractVersion =
+  | typeof TEMPLATE_PACKAGE_CONTRACT_VERSION
+  | typeof INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
 
 export type TemplateSlotType = 'text' | 'color'
 
@@ -10,8 +15,7 @@ export interface TemplateSlotDefinition {
   default?: string
 }
 
-export interface TemplatePackageManifest {
-  contractVersion: typeof TEMPLATE_PACKAGE_CONTRACT_VERSION
+interface TemplatePackageManifestBase {
   id: string
   version: number
   title: string
@@ -23,6 +27,25 @@ export interface TemplatePackageManifest {
   slots: TemplateSlotDefinition[]
 }
 
+export interface StaticTemplatePackageManifest extends TemplatePackageManifestBase {
+  contractVersion: typeof TEMPLATE_PACKAGE_CONTRACT_VERSION
+}
+
+export interface InteractiveTemplatePackageManifest extends TemplatePackageManifestBase {
+  contractVersion: typeof INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
+  runtime: {
+    mode: 'sandboxed-js'
+    viewport: {
+      width: 1920
+      height: 1080
+    }
+  }
+}
+
+export type TemplatePackageManifest =
+  | StaticTemplatePackageManifest
+  | InteractiveTemplatePackageManifest
+
 export interface TemplatePackageSource {
   manifest: TemplatePackageManifest
   files: Readonly<Record<string, string>>
@@ -33,8 +56,15 @@ export interface TemplatePackageValidationError {
   message: string
 }
 
+export function isInteractiveTemplatePackageManifest(
+  manifest: TemplatePackageManifest,
+): manifest is InteractiveTemplatePackageManifest {
+  return manifest.contractVersion === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
+}
+
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{1,63}$/
-const SAFE_CATEGORY = /^[a-z0-9][a-z0-9/_-]{0,63}$/
+const SAFE_CATEGORY = /^[\p{L}\p{N}][\p{L}\p{N}/_-]{0,79}$/u
+const SAFE_TAG = /^[\p{L}\p{N}][\p{L}\p{N} _-]{0,39}$/u
 const SAFE_TEXT = /^[^\u0000-\u001f\u007f]*$/
 const SAFE_PACKAGE_FILE = /^(?:[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*)+$/
 
@@ -70,14 +100,32 @@ function validateSlot(slot: unknown, index: number): TemplatePackageValidationEr
 export function validateTemplatePackage(source: TemplatePackageSource): TemplatePackageValidationError[] {
   const { manifest, files } = source
   const errors: TemplatePackageValidationError[] = []
-  if (manifest.contractVersion !== TEMPLATE_PACKAGE_CONTRACT_VERSION) errors.push({ field: 'contractVersion', message: `must be ${TEMPLATE_PACKAGE_CONTRACT_VERSION}` })
+  if (manifest.contractVersion !== TEMPLATE_PACKAGE_CONTRACT_VERSION && manifest.contractVersion !== INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) {
+    errors.push({ field: 'contractVersion', message: `must be ${TEMPLATE_PACKAGE_CONTRACT_VERSION} or ${INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION}` })
+  }
+  if (manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION && 'runtime' in manifest) {
+    errors.push({ field: 'runtime', message: 'is available only for html-template/v2' })
+  }
+  if (manifest.contractVersion === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) {
+    const runtime = manifest.runtime
+    if (!isRecord(runtime) || Object.keys(runtime).sort().join(',') !== 'mode,viewport' || runtime.mode !== 'sandboxed-js') {
+      errors.push({ field: 'runtime', message: 'must contain only mode=sandboxed-js and viewport' })
+    }
+    const viewport = isRecord(runtime) && runtime.viewport
+    if (!isRecord(viewport)
+      || Object.keys(viewport).sort().join(',') !== 'height,width'
+      || viewport.width !== 1920
+      || viewport.height !== 1080) {
+      errors.push({ field: 'runtime.viewport', message: 'must be exactly 1920x1080' })
+    }
+  }
   if (!SAFE_ID.test(manifest.id)) errors.push({ field: 'id', message: 'must be a lowercase kebab-case identifier' })
   if (!Number.isInteger(manifest.version) || manifest.version < 1) errors.push({ field: 'version', message: 'must be a positive integer' })
   for (const field of ['title', 'summary'] as const) {
     if (typeof manifest[field] !== 'string' || !manifest[field].trim() || !SAFE_TEXT.test(manifest[field])) errors.push({ field, message: 'must be non-empty plain text' })
   }
-  if (typeof manifest.category !== 'string' || !SAFE_CATEGORY.test(manifest.category)) errors.push({ field: 'category', message: 'must be a safe category path' })
-  if (!Array.isArray(manifest.tags) || manifest.tags.some((tag) => typeof tag !== 'string' || !SAFE_ID.test(tag))) errors.push({ field: 'tags', message: 'must contain only lowercase kebab-case identifiers' })
+  if (typeof manifest.category !== 'string' || manifest.category !== manifest.category.normalize('NFC') || !SAFE_CATEGORY.test(manifest.category)) errors.push({ field: 'category', message: 'must be an NFC category label or path' })
+  if (!Array.isArray(manifest.tags) || manifest.tags.length > 20 || new Set(manifest.tags).size !== manifest.tags.length || manifest.tags.some((tag) => typeof tag !== 'string' || tag !== tag.normalize('NFC') || !SAFE_TAG.test(tag))) errors.push({ field: 'tags', message: 'must contain unique NFC text labels' })
   if (!Array.isArray(manifest.files) || manifest.files.length === 0 || new Set(manifest.files).size !== manifest.files.length) errors.push({ field: 'files', message: 'must be a non-empty list of unique files' })
   for (const file of manifest.files ?? []) if (!isSafePackageFile(file)) errors.push({ field: 'files', message: `unsafe package path: ${String(file)}` })
   if (!isSafePackageFile(manifest.entry) || manifest.entry !== 'index.html') errors.push({ field: 'entry', message: 'must be the package-local index.html' })
@@ -93,7 +141,12 @@ export function validateTemplatePackage(source: TemplatePackageSource): Template
     for (const match of entry.matchAll(/data-template-slot=["']([^"']+)["']/g)) {
       if (!slotIds.has(match[1])) errors.push({ field: 'entry', message: `unknown slot binding: ${match[1]}` })
     }
-    if (/<script\b/i.test(entry) || /(?:src|href)=["'](?:https?:|\/\/|file:)/i.test(entry)) errors.push({ field: 'entry', message: 'simulated v1 packages cannot contain scripts or external URLs' })
+    if ((manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION && /<script\b/i.test(entry))
+      || /(?:src|href)=["'](?:https?:|\/\/|file:)/i.test(entry)) {
+      errors.push({ field: 'entry', message: manifest.contractVersion === TEMPLATE_PACKAGE_CONTRACT_VERSION
+        ? 'simulated v1 packages cannot contain scripts or external URLs'
+        : 'template packages cannot contain external URLs' })
+    }
   }
   return errors
 }

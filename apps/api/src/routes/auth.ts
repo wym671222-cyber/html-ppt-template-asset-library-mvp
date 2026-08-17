@@ -28,10 +28,15 @@ function errorResponse(context: Context, error: unknown, service: AuthApplicatio
   return context.json({ error: 'AUTH_SERVICE_ERROR' }, 500)
 }
 
-export function createAuthRouter(service: AuthApplicationService): Hono<AuthVariables> {
+export function createAuthRouter(service: AuthApplicationService, options: { registrationEnabled?: boolean } = {}): Hono<AuthVariables> {
   const auth = new Hono<AuthVariables>()
+  const registrationEnabled = options.registrationEnabled ?? true
 
   auth.post('/register', async (context) => {
+    if (!registrationEnabled) {
+      context.header('Cache-Control', 'no-store')
+      return context.json({ error: 'REGISTRATION_DISABLED' }, 403)
+    }
     const ip = resolveTrustedClientIp(context.req.raw.headers)
     try {
       let body: Record<string, unknown>

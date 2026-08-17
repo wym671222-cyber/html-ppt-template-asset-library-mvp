@@ -33,10 +33,14 @@
 
 1. **G0 计划审批**：v2.0/v2.1 已授权并完成至 P16S；用户现已批准 v2.2，授权 P16T 仅修改一条 P13 测试的单测级确定性时限、完整复验和单一原子候选提交。该批准不授权 push 或生产写操作。
 2. **G1 临时保护审批**：用户回复“批准应用临时只读保护”。才允许 WorkBuddy 备份、验证并 reload Caddy，为该域名启用访问日志和只读 allowlist；不迁移数据库、不重启应用。
-3. **G2 生产发布审批**：P16S 通过、production audit high/critical 为 0 后，由父监督者报告新的精确候选提交号、CI、备份与回滚点；用户回复“批准提交 `<sha>` 推送并部署到 `ppt.ajjy-ai.site`”。才允许 push、生产备份、迁移、systemd/Caddy 切换和管理员交互式初始化。
+3. **G2 生产发布审批**：P16T 通过、production audit 全 severity 为 0 后，由父监督者报告新的精确候选提交号、门禁、备份与回滚设计；用户回复“批准提交 `<sha>` 推送并部署到 `ppt.ajjy-ai.site`”。才允许 push、生产备份、迁移、systemd/Caddy 切换和管理员交互式初始化。
 
 上一轮 G2 状态：`closed_without_deployment`。用户于 2026-08-10T10:06:13+08:00 明确回复“批准提交 `8d125d2d9afb213f449dbdc2d32c4939f5407441` 推送并部署到 `ppt.ajjy-ai.site`”。该审批仅授权 P17 计划内的精确 SHA；因发布分支 CI 红灯在生产 preflight 前安全停止，不适用于 P16T 形成的任何新 SHA。
 
 G2 执行结果：两个 origin 分支已无 force 指向上述 SHA，但 personal 分支 CI run `31349153227` 在原 run 与一次有界重跑中重复失败，故 P17 在生产 preflight 前安全停止。该审批不适用于任何修复后的新 SHA；最小测试稳定性修复及新的精确 SHA G2 均需用户另行授权。
+
+当前 G2 状态：`approved`。用户于 2026-08-10T16:40:05+08:00 明确批准“批准提交 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad` 推送并部署到 `ppt.ajjy-ai.site`”。授权仅涵盖该精确 SHA；先推送并等待同 SHA CI 全绿，再执行生产 preflight、备份、迁移、原子切换和终局验收；不允许 force push、删除旧 release/PM2/备份或输出凭据。
+
+当前 P17 执行结果：两个 origin ref 已精确指向 `72eadaa476a83b4a58f320149d7a5d0e0ad980ad`，feature CI `31371260100` 与 personal CI `31371448617` 均成功；root/ubuntu 只读 SSH 均被 `publickey` 拒绝，WorkBuddy composer 无法可靠提交只读命令，因此 P17 在 production preflight 前 `blocked`。未执行服务器、WorkBuddy agent、备份、迁移、部署、Caddy/systemd/PM2、DB/CAS 或管理员操作。恢复可审计通道后从只读 preflight 重启。
 
 旧发布目录、旧 PM2 配置和历史备份的删除不属于 G0/G1/G2，始终需要新的独立授权。

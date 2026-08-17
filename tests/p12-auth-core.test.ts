@@ -80,7 +80,7 @@ function businessCounts(database: SQLite): Record<string, number> {
   return Object.fromEntries(tables.map((table) => [table, scalar(database, `SELECT count(*) AS count FROM ${table}`)]))
 }
 
-function createMigrationDatabase(path: string, migrationCount: 5 | 6): void {
+function createMigrationDatabase(path: string, migrationCount: 5 | 6 | 7): void {
   const migrations = join(temporaryRoot(`p12-${migrationCount}-migrations`), 'drizzle')
   mkdirSync(join(migrations, 'meta'), { recursive: true })
   for (let index = 0; index < migrationCount; index += 1) {
@@ -119,7 +119,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
       expect(schemaNames(database, 'table')).toEqual([...TARGET_DATABASE_TABLES].sort())
       expect(schemaNames(database, 'trigger')).toEqual([...TARGET_DATABASE_TRIGGERS].sort())
-      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
       expect(scalar(database, 'SELECT count(*) AS count FROM users')).toBe(0)
       expect(scalar(database, 'SELECT count(*) AS count FROM sessions')).toBe(0)
       expect(scalar(database, 'SELECT count(*) AS count FROM auth_throttle')).toBe(0)
@@ -153,7 +153,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
       expect(schemaNames(database, 'trigger')).toEqual([...TARGET_DATABASE_TRIGGERS].sort())
       const migratedDefinitions = new Map(triggerDefinitions(database).map((trigger) => [trigger.name, trigger.sql]))
       expect(oldTriggerDefinitions.every((trigger) => migratedDefinitions.get(trigger.name) === trigger.sql)).toBe(true)
-      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
       expect(businessCounts(database)).toEqual(countsBefore)
       expect(database.pragma('quick_check', { simple: true })).toBe('ok')
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
@@ -164,9 +164,36 @@ describe('P12 numbered migration and recovery boundaries', () => {
     expect(databaseSha256(path)).toBe(beforeRepeat)
     const repeated = openDatabase(path)
     try {
-      expect(scalar(repeated, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(scalar(repeated, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
       expect(businessCounts(repeated)).toEqual(countsBefore)
     } finally { repeated.close() }
+  })
+
+  it('upgrades a seven-migration derivative table and permits CAS digest reuse across renderer identities', () => {
+    const path = databasePath('p17-existing-seven')
+    createMigrationDatabase(path, 7)
+    const before = openDatabase(path)
+    const now = Date.now()
+    const sourceDigest = 'a'.repeat(64)
+    const pngDigest = 'b'.repeat(64)
+    before.prepare('INSERT INTO content_objects (digest, media_type, byte_size, relative_path, created_at) VALUES (?, ?, ?, ?, ?)').run(sourceDigest, 'application/zip', 1, `sha256/aa/${sourceDigest}`, now)
+    before.prepare('INSERT INTO content_objects (digest, media_type, byte_size, relative_path, created_at) VALUES (?, ?, ?, ?, ?)').run(pngDigest, 'image/png', 1, `sha256/bb/${pngDigest}`, now)
+    before.prepare('INSERT INTO template_assets (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)').run('asset-p17', 'P17', now, now)
+    before.prepare("INSERT INTO template_versions (id, asset_id, version_number, contract_version, source_digest, content_object_digest, slot_schema, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'verified', ?)").run('version-p17', 'asset-p17', 1, 'v1', sourceDigest, sourceDigest, '{"slots":[]}', now)
+    before.prepare("UPDATE template_assets SET current_version_id = 'version-p17' WHERE id = 'asset-p17'").run()
+    before.prepare('INSERT INTO template_preview_derivatives (template_version_id, kind, source_digest, content_digest, renderer_version, security_diagnostic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run('version-p17', 'preview', sourceDigest, pngDigest, 'legacy-renderer', '{}', now)
+    before.close()
+
+    expect(migrateDatabase(path)).toMatchObject({ existed: true, pendingMigrationCount: 1 })
+    const after = openDatabase(path)
+    try {
+      expect(scalar(after, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
+      after.prepare('INSERT INTO template_preview_derivatives (template_version_id, kind, source_digest, content_digest, renderer_version, security_diagnostic, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run('version-p17', 'preview', sourceDigest, pngDigest, 'legacy-renderer:scaled-v2', '{}', now + 1)
+      expect(scalar(after, 'SELECT count(*) AS count FROM template_preview_derivatives')).toBe(2)
+      expect(after.pragma('quick_check', { simple: true })).toBe('ok')
+      expect(after.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      expect(schemaNames(after, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['8'])
+    } finally { after.close() }
   })
 
   it('binds each supported ledger count to its trigger set and rejects a downgraded full-ledger schema without a no-op backup', () => {
@@ -177,12 +204,12 @@ describe('P12 numbered migration and recovery boundaries', () => {
       expect(schemaNames(sixBefore, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['6'])
     } finally { sixBefore.close() }
     const sixUpgrade = migrateDatabase(sixPath)
-    expect(sixUpgrade).toMatchObject({ existed: true, pendingMigrationCount: 1 })
+    expect(sixUpgrade).toMatchObject({ existed: true, pendingMigrationCount: 2 })
     expect(sixUpgrade.backupPath && existsSync(sixUpgrade.backupPath)).toBe(true)
     const sixAfter = openDatabase(sixPath)
     try {
-      expect(scalar(sixAfter, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
-      expect(schemaNames(sixAfter, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['7'])
+      expect(scalar(sixAfter, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
+      expect(schemaNames(sixAfter, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['8'])
     } finally { sixAfter.close() }
 
     const mismatchedPath = databasePath('p12-full-ledger-six-triggers')
@@ -190,10 +217,10 @@ describe('P12 numbered migration and recovery boundaries', () => {
     expect(preflightDatabase(mismatchedPath)).toMatchObject({ pendingMigrationCount: 0, backupPath: undefined })
     const mismatched = openDatabase(mismatchedPath)
     try {
-      for (const trigger of TARGET_DATABASE_TRIGGER_SETS['7'].filter((name) => !TARGET_DATABASE_TRIGGER_SETS['6'].includes(name))) {
+      for (const trigger of TARGET_DATABASE_TRIGGER_SETS['8'].filter((name) => !TARGET_DATABASE_TRIGGER_SETS['6'].includes(name))) {
         mismatched.exec(`DROP TRIGGER "${trigger}"`)
       }
-      expect(scalar(mismatched, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(scalar(mismatched, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
       expect(schemaNames(mismatched, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['6'])
     } finally { mismatched.close() }
 
@@ -201,7 +228,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
     expect(existsSync(join(dirname(mismatchedPath), 'backups'))).toBe(false)
     const unchanged = openDatabase(mismatchedPath)
     try {
-      expect(scalar(unchanged, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(scalar(unchanged, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
       expect(schemaNames(unchanged, 'trigger')).toEqual(TARGET_DATABASE_TRIGGER_SETS['6'])
     } finally { unchanged.close() }
   })
@@ -226,7 +253,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
     }
   })
 
-  it('includes the seventh ledger and revokes restored sessions without secret diagnostics', async () => {
+  it('includes the eighth ledger and revokes restored sessions without secret diagnostics', async () => {
     const root = temporaryRoot('p12-recovery')
     const path = join(root, 'source/asset-library.db')
     migrateDatabase(path)
@@ -238,6 +265,7 @@ describe('P12 numbered migration and recovery boundaries', () => {
     new PersistentAuthThrottle(database as never).consume('login:recovery_user', { limit: 1, windowMs: 60_000, blockMs: 60_000 }, 30)
     database.close()
 
+    mkdirSync(join(root, 'source/objects'), { recursive: true })
     const service = new LocalRecoveryService({
       databasePath: path,
       contentRoot: join(root, 'source/objects'),
@@ -245,10 +273,10 @@ describe('P12 numbered migration and recovery boundaries', () => {
       restoreRoot: join(root, 'restores'),
     })
     const overview = service.inspectCurrent()
-    expect(overview.migrationCount).toBe(7)
+    expect(overview.migrationCount).toBe(8)
     const backup = await service.createBackup(overview.stateSha256)
     const { manifest } = service.readBackupManifest(backup.id)
-    expect(manifest.database.migrationLedger.at(-1)?.tag).toBe('0006_p14_presentation_ownership')
+    expect(manifest.database.migrationLedger.at(-1)?.tag).toBe('0007_p17_derivative_renderer_identity')
     const serializedManifest = JSON.stringify(manifest)
     expect(serializedManifest).not.toContain(rawPassword)
     expect(serializedManifest).not.toContain(created.token)

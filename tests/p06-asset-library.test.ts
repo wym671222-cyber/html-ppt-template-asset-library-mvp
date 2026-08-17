@@ -13,7 +13,7 @@ import { TemplatePreviewJobWorker, TEMPLATE_PREVIEW_JOB_TYPE, type PreviewRender
 import type { SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
 import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
-import { catalogQuery, safeDerivativeUrl } from '../apps/web/src/lib/asset-library.js'
+import { catalogQuery, isCatalogRuntime, runtimeViewportScale, safeDerivativeUrl, safeRuntimeUrl } from '../apps/web/src/lib/asset-library.js'
 
 type SQLite = {
   pragma(statement: string, options?: { simple: true }): unknown
@@ -73,8 +73,8 @@ async function fixtureApp(): Promise<{ app: ReturnType<typeof createApp>; databa
 
 describe('P06 bounded deterministic catalog query', () => {
   it('parses only bounded, unique, known parameters', () => {
-    expect(parseCatalogQuery('http://127.0.0.1/api/catalog?search=quarterly&category=report%2Fquarterly&tags=brief%2Csimulated&limit=12')).toEqual({
-      search: 'quarterly', category: 'report/quarterly', tags: ['brief', 'simulated'], limit: 12,
+    expect(parseCatalogQuery('http://127.0.0.1/api/catalog?search=quarterly&category=report%2Fquarterly&tags=brief%2Csimulated&status=verified&sort=title-asc&limit=12&offset=24')).toEqual({
+      search: 'quarterly', category: 'report/quarterly', tags: ['brief', 'simulated'], status: 'verified', sort: 'title-asc', limit: 12, offset: 24,
     })
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?limit=49')).toThrow(/between 1 and 48/)
     expect(() => parseCatalogQuery(`http://127.0.0.1/api/catalog?search=${'x'.repeat(101)}`)).toThrow(/search is invalid/)
@@ -82,15 +82,39 @@ describe('P06 bounded deterministic catalog query', () => {
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?tags=a,a')).toThrow(/unique/)
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?tags=a,,b')).toThrow(/empty values/)
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?search=a&search=b')).toThrow(/must not repeat/)
+    expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?offset=10001')).toThrow(/between 0 and 10000/)
+    expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?sort=random')).toThrow(/sort/)
     expect(() => parseCatalogQuery('http://127.0.0.1/api/catalog?digest=' + 'a'.repeat(64))).toThrow(/Unknown/)
   })
 
   it('builds same-origin queries and rejects untrusted derivative URLs', () => {
     expect(catalogQuery({ search: ' quarterly ', category: 'report/quarterly', tags: ['simulated', 'brief'] })).toBe('/api/catalog?search=quarterly&category=report%2Fquarterly&tags=brief%2Csimulated')
     expect(safeDerivativeUrl('/api/catalog/assets/simulated-quarterly-brief/preview')).toContain('/preview')
+    expect(safeRuntimeUrl('/api/catalog/assets/simulated-quarterly-brief/runtime')).toContain('/runtime')
     for (const value of ['https://example.test/a.png', 'file:///tmp/a.png', 'blob:http://127.0.0.1/id', '/api/catalog/assets/' + 'a'.repeat(64)]) {
       expect(() => safeDerivativeUrl(value)).toThrow(/unsafe/)
+      expect(() => safeRuntimeUrl(value)).toThrow(/unsafe/)
     }
+    expect(isCatalogRuntime({ mode: 'sandboxed-static', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: [] })).toBe(true)
+    expect(isCatalogRuntime({ mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: ['replay', 'reset'] })).toBe(true)
+    expect(isCatalogRuntime({ mode: 'sandboxed-static', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: ['reset'] })).toBe(false)
+    expect(isCatalogRuntime({ mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: [] })).toBe(false)
+  })
+
+  it('fits the fixed 1920x1080 runtime viewport into the detail panel without changing the iframe viewport', () => {
+    expect(runtimeViewportScale(494, 1920)).toBeCloseTo(494 / 1920)
+    expect(runtimeViewportScale(1920, 1920)).toBe(1)
+    expect(runtimeViewportScale(2560, 1920)).toBe(1)
+    expect(() => runtimeViewportScale(0, 1920)).toThrow(/container width/i)
+    expect(() => runtimeViewportScale(494, 0)).toThrow(/viewport width/i)
+
+    const detail = readFileSync(join(process.cwd(), 'apps/web/src/lib/components/library/AssetDetail.svelte'), 'utf8')
+    expect(detail).toContain('class="runtime-viewport"')
+    expect(detail).toContain('class="runtime-stage"')
+    expect(detail).toContain('style:width={`${item.runtime.viewport.width}px`}')
+    expect(detail).toContain('style:height={`${item.runtime.viewport.height}px`}')
+    expect(detail).toContain('style:transform={`scale(${runtimeScale})`}')
+    expect(detail).toContain('transform-origin: top left')
   })
 })
 
@@ -109,13 +133,14 @@ describe('P06 read-only catalog API and PNG trust boundary', () => {
       `).run(incompletePreview.digest)
       const response = await state.app.request('http://127.0.0.1:3001/api/catalog', { headers: { origin: 'http://127.0.0.1:5173' } })
       expect(response.status).toBe(200)
-      const body = await response.json() as { items: Array<Record<string, unknown>>; facets: { categories: string[]; tags: string[] }; total: number }
-      expect(body).toMatchObject({ total: 1, facets: { categories: ['report/quarterly'], tags: ['brief', 'quarterly', 'simulated'] } })
+      const body = await response.json() as { items: Array<Record<string, unknown>>; facets: { categories: Array<{ value: string; count: number }>; tags: Array<{ value: string; count: number }> }; total: number }
+      expect(body).toMatchObject({ total: 1, limit: 24, offset: 0, facets: { categories: [{ value: 'report/quarterly', count: 1 }], tags: [{ value: 'brief', count: 1 }, { value: 'quarterly', count: 1 }, { value: 'simulated', count: 1 }] } })
       expect(body).not.toHaveProperty('owner')
       expect(body.items[0]).toMatchObject({
         id: state.assetId,
         title: 'Simulated Quarterly Brief',
         version: { id: state.versionId, number: 1, status: 'verified', contractVersion: 'html-template/v1' },
+        runtime: { mode: 'sandboxed-static', viewport: { width: 1920, height: 1080 }, commands: [] },
         derivative: { rendererVersion: 'p05-p06-test-renderer' },
       })
       expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{64}|relative_path|file:|https?:\/\//)
@@ -198,13 +223,13 @@ describe('P06 schema and Web execution boundary', () => {
       expect(database.pragma('quick_check', { simple: true })).toBe('ok')
       expect(database.pragma('foreign_keys', { simple: true })).toBe(1)
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
+      expect(database.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 8 })
     } finally {
       database.close()
     }
   })
 
-  it('does not inject or execute template HTML in the P06 Web surface', () => {
+  it('keeps template HTML inside exact opaque sandbox variants in the P06 Web surface', () => {
     const paths = [
       'apps/web/src/routes/(app)/+page.svelte',
       'apps/web/src/lib/components/library/AssetCard.svelte',
@@ -212,7 +237,10 @@ describe('P06 schema and Web execution boundary', () => {
       'apps/web/src/lib/asset-library.ts',
     ]
     const source = paths.map((path) => readFileSync(join(process.cwd(), path), 'utf8')).join('\n')
-    expect(source).not.toMatch(/<iframe|srcdoc|\{@html|innerHTML|blob:|createObjectURL|file:\/\//i)
+    expect(source).toContain('{#if open && item}')
+    expect(source).toContain('sandbox="allow-scripts"')
+    expect(source).toContain('sandbox=""')
+    expect(source).not.toMatch(/allow-same-origin|srcdoc|\{@html|innerHTML|blob:|createObjectURL|file:\/\//i)
     expect(source).not.toMatch(/https?:\/\//i)
   })
 })

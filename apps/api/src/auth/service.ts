@@ -20,10 +20,13 @@ export type AuthAction =
   | 'admin.user_approve'
   | 'admin.user_disable'
   | 'admin.user_reset_password'
+  | 'admin.template_retire'
+  | 'catalog-transfer.access'
   | 'auth.bootstrap_admin'
   | 'security.origin'
   | 'business.access'
   | 'recovery.access'
+  | 'template-import.access'
 
 export type AuthErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500
 // Internal-only hop contract: the P15 BFF must remove any inbound copy and inject

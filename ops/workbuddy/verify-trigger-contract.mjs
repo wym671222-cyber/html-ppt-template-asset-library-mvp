@@ -17,7 +17,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 }
 
 if (!contractPath) fail('--contract is required')
-if (!['5', '6', '7'].includes(migrationCount)) fail('migration count must be in the approved 5..7 range')
+if (!['5', '6', '7', '8'].includes(migrationCount)) fail('migration count must be in the approved 5..8 range')
 
 let contract
 try {
@@ -38,10 +38,12 @@ function names(value, label) {
 const migration5 = names(contract.triggersThroughMigration5, 'triggersThroughMigration5')
 const migration6Additions = names(contract.migration6TriggerAdditions, 'migration6TriggerAdditions')
 const migration7Additions = names(contract.migration7TriggerAdditions, 'migration7TriggerAdditions')
+const migration8Additions = names(contract.migration8TriggerAdditions, 'migration8TriggerAdditions')
 const expectedByMigration = {
   '5': migration5,
   '6': [...migration5, ...migration6Additions].sort(),
   '7': [...migration5, ...migration6Additions, ...migration7Additions].sort(),
+  '8': [...migration5, ...migration6Additions, ...migration7Additions, ...migration8Additions].sort(),
 }
 
 const actual = readFileSync(0, 'utf8').split(/\r?\n/).filter(Boolean)

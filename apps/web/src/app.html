@@ -1,9 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script>
+			(() => {
+				if (location.pathname !== '/' && location.pathname !== '/admin') return
+				const match = document.cookie.match(/(?:^|;\s*)asset-library-theme=(dark|light|system)(?:;|$)/)
+				const choice = match?.[1] ?? 'system'
+				const resolved = choice === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : choice
+				document.documentElement.dataset.assetThemeChoice = choice
+				document.documentElement.dataset.assetTheme = resolved
+				document.documentElement.style.colorScheme = resolved
+				document.documentElement.style.backgroundColor = resolved === 'dark' ? '#09111b' : '#ffffff'
+			})()
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

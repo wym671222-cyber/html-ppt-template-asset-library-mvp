@@ -52,4 +52,20 @@ describe('P03 simulated HTML template package adapter', () => {
     const errors = validateTemplatePackage({ manifest, files: { 'index.html': '<h1></h1>', 'styles.css': '' } })
     expect(errors.map((error) => error.field)).toContain('slots[0].type')
   })
+
+  it('accepts the exact v2 runtime contract and rejects viewport drift', () => {
+    const source = {
+      manifest: {
+        contractVersion: 'html-template/v2', id: 'interactive-fixture', version: 1,
+        title: 'Interactive fixture', summary: 'Repository-local v2 protocol fixture',
+        category: 'fixture', tags: [], entry: 'index.html', files: ['index.html', 'runtime.js'], slots: [],
+        runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 } },
+      },
+      files: { 'index.html': '<script src="runtime.js"></script>', 'runtime.js': 'document.body.dataset.ready = "true"' },
+    }
+    expect(validateTemplatePackage(source as never)).toEqual([])
+    const drifted = structuredClone(source)
+    drifted.manifest.runtime.viewport.width = 1280
+    expect(validateTemplatePackage(drifted as never).map((error) => error.field)).toContain('runtime.viewport')
+  })
 })

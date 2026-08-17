@@ -68,7 +68,7 @@ describe('P02 SQL migrations', () => {
       const names = tables.map((table) => table.name)
       expect(names).toEqual(expect.arrayContaining(['template_assets', 'template_versions', 'presentation_items', 'content_objects', 'jobs', 'audit_events', 'users', 'sessions', 'auth_throttle']))
       expect(names.join(',')).not.toMatch(/organization|role_binding|approval|rbac/i)
-      expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 7 })
+      expect(sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 8 })
 
       const now = Date.now()
       const user = seedTestUser(sqlite as never)

@@ -257,10 +257,10 @@ describe('P14 authenticated user ownership', () => {
       })
       expect(exportResponse.status).toBe(201)
       const exported = await exportResponse.json() as { export: { id: string }; manifest: { contractVersion: string; ownerUserId: string } }
-      expect(exported.manifest).toMatchObject({ contractVersion: 'html-presentation-export/v2', ownerUserId: state.users.memberA.id })
+      expect(exported.manifest).toMatchObject({ contractVersion: 'html-presentation-export/v3', ownerUserId: state.users.memberA.id })
       const zip = state.exports.readArtifact(getOwnerContext(state.users.memberA.id), presentation.id, exported.export.id, 'zip')
       const embedded = JSON.parse(readStoredZip(zip).get('manifest.json')!.toString('utf8')) as { contractVersion: string; ownerUserId: string }
-      expect(embedded).toMatchObject({ contractVersion: 'html-presentation-export-package/v2', ownerUserId: state.users.memberA.id })
+      expect(embedded).toMatchObject({ contractVersion: 'html-presentation-export-package/v3', ownerUserId: state.users.memberA.id })
 
       expect((await state.app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/exports`)).status).toBe(401)
       const crossExport = await state.app.request(`http://127.0.0.1:3001/api/presentations/${presentation.id}/exports`, {
@@ -302,7 +302,7 @@ describe('P14 authenticated user ownership', () => {
       const backup = (await backupResponse.json() as { backup: { id: string; manifestSha256: string } }).backup
       const manifestResponse = await state.app.request(`http://127.0.0.1:3001/api/recovery/backups/${backup.id}/manifest`, { headers: cookie(state.authenticated.admin) })
       const manifestPayload = await manifestResponse.json() as { manifest: { database: { migrationLedger: unknown[] }; presentations: Array<{ ownerUserId: string }>; exports: Array<{ ownerUserId: string }> } }
-      expect(manifestPayload.manifest.database.migrationLedger).toHaveLength(7)
+      expect(manifestPayload.manifest.database.migrationLedger).toHaveLength(8)
       expect(manifestPayload.manifest.presentations).toEqual([expect.objectContaining({ ownerUserId: state.users.memberA.id })])
       expect(manifestPayload.manifest.exports).toEqual([expect.objectContaining({ ownerUserId: state.users.memberA.id })])
       expect(JSON.stringify(manifestPayload)).not.toMatch(/password|token|secret|credential|api[_-]?key/i)
@@ -327,14 +327,14 @@ describe('P14 authenticated user ownership', () => {
 })
 
 describe('P14 empty-only ownership migration', () => {
-  it('adds the non-null foreign key, index, immutable triggers and exact seventh recovery ledger entry on an empty target', () => {
+  it('adds the non-null foreign key, index, immutable triggers and current recovery ledger on an empty target', () => {
     const path = join(temporaryRoot('empty-migration'), 'asset-library.db')
     migrateDatabase(path)
     const database = openDatabase(path)
     try {
       expect(database.pragma('quick_check', { simple: true })).toBe('ok')
       expect(database.prepare('PRAGMA foreign_key_check').all()).toEqual([])
-      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(7)
+      expect(scalar(database, 'SELECT count(*) AS count FROM __drizzle_migrations')).toBe(8)
       expect((database.prepare('SELECT name FROM sqlite_master WHERE type = \'trigger\' ORDER BY name').all() as { name: string }[]).map((row) => row.name)).toEqual([...TARGET_DATABASE_TRIGGERS].sort())
       expect((database.prepare('PRAGMA table_info(presentations)').all() as { name: string; notnull: number }[])).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'owner_user_id', notnull: 1 })]))
       expect(database.prepare("SELECT count(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'presentations_owner_updated_idx'").get()).toEqual({ count: 1 })

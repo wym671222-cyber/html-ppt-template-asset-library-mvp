@@ -1,0 +1,239 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "交互模板 v2 终局恢复与上线",
+    "workspacePath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "repositoryPath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "implementationBranch": "feat/interactive-template-v2-export",
+    "baselineCommit": "bdd9acf35174fefe7953aa59c5d7bb670d4cf901"
+  },
+  "workflowPhase": "executing",
+  "plan": {
+    "version": "3.1",
+    "approved": true,
+    "approvedVersion": "3.0",
+    "approvedAt": "2026-08-17T12:37:50+08:00",
+    "approvalEvidence": "User explicitly approved the complete PocketBay 形态统一与云服务器资产同步方案 v3.0 following PLEASE IMPLEMENT THIS PLAN:.",
+    "mechanicalSplit": "P04 exceeded its safe single-phase context budget and was split without changing objective, scope, model class or acceptance."
+  },
+  "contextPolicy": {
+    "targetPercent": 50,
+    "hardLimitPercent": 70
+  },
+  "orchestration": {
+    "mode": "parent-supervisor",
+    "workspaceStrategy": "single-implementation-branch",
+    "currentPhaseId": "P05A",
+    "activePhaseThreadId": "/root/p05a_pocketbay_sealed_backup",
+    "terminalPhaseId": "P06"
+  },
+  "phases": [
+    {
+      "id": "P00",
+      "title": "恢复链初始化与失败基线",
+      "objective": "固化 PocketBay 裸 SQLite 物理漂移而逻辑状态不变的精确失败回归",
+      "status": "passed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "high",
+      "estimatedContextPercent": 30,
+      "dependsOn": [],
+      "successor": "P01",
+      "threadId": "/root/p00_recovery_baseline",
+      "commit": "3979fd68d90cdb1902870482300a47d7d82c1543",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to baseline a743702 exactly one atomic P00 commit across the approved new-chain documents, handoff and red-test path",
+          "parent Node 22.23.2/pnpm 9.15.0 rerun: P00 1/1 failed only with the exact Backup SQLite hash or size verification failed error and real exit 1",
+          "parent P09 recovery regression passed 10/10; official validator passed; legacy interactive and PocketBay chain hashes were unchanged",
+          "tracked worktree was clean and retained only the pre-existing untracked .workbuddy directory"
+        ]
+      }
+    },
+    {
+      "id": "P01",
+      "title": "密封备份架构",
+      "objective": "实现密封 ZIP 备份、旧目录兼容、无效备份隔离和恢复管理接口",
+      "status": "passed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P00"],
+      "successor": "P02",
+      "threadId": "/root/p01_sealed_backup",
+      "commit": "87ba2e0373f749d9198d38bde9020703b282c703",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to coordination baseline 6e09130 exactly one atomic P01 commit across the approved recovery service, Web contract, tests, status and handoff paths",
+          "parent Node 22.23.2/pnpm 9.15.0 rerun: P00/P01/P09/P12/P14/encryption passed 6 files and 38 tests; shared/API builds passed",
+          "parent Web check passed with 0 errors and 9 pre-existing warnings; Web adapter-node build passed",
+          "sealed ZIP preserves portable manifest v1 and all physical/logical/SQLite/CAS checks; invalid legacy items expose no operation URLs or controls"
+        ]
+      }
+    },
+    {
+      "id": "P02",
+      "title": "候选与独立门禁",
+      "objective": "完成全量验证并形成两个运行时代码一致的可部署候选",
+      "status": "passed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 40,
+      "dependsOn": ["P01"],
+      "successor": "P03R",
+      "threadId": "/root/p02_candidate_gate",
+      "commit": "b3b33347db436c3f515b1ef3fd6476b1d4704fad",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "parent Node 22.23.2 and pnpm 9.15.0 rerun passed 45 Vitest files and 835 tests, all shell suites, the three-package Turbo build and production audit with 370 dependencies and every severity zero",
+          "parent real Google Chrome rerun passed the P06 through P09 suite 12 of 12 and the explicit-Chrome P02 supplement 1 of 1; dedicated ports were released",
+          "candidate A 87ba2e0 and candidate B b3b3334 have an empty runtime/deploy-input diff; exact tracked git archives were created with SHA-256 d8c4ddd6c80ac3f4293684c66e0cf3c18f590be744218e5ffb976721a7ef61e1 and d8a8b15bfbd6a84f197588825b2c8656956397b0f72e7c451174b043467dab89",
+          "official validator passed and the tracked worktree was clean while the pre-existing untracked .workbuddy directory remained untouched"
+        ]
+      }
+    },
+    {
+      "id": "P03R",
+      "title": "v3.0 恢复链重基线",
+      "objective": "物化已批准 v3.0 父监督活动链并冻结基线、授权、门禁和禁止边界",
+      "status": "passed",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 20,
+      "dependsOn": ["P02"],
+      "successor": "P04A",
+      "threadId": "/root/p03r_v3_rebaseline",
+      "commit": "33a6f5ff0a52d3d9f0abeefbe4ad446966689457",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "exactly one P03R commit changed only the six approved recovery-chain documents relative to bdd9acf",
+          "parent reran the official validator and git diff --check with exit 0",
+          "parent confirmed P00-P02 evidence remained passed, superseded P03A/P03B were not promoted, and all production phases remained untouched",
+          "tracked worktree was clean and retained only the pre-existing untracked .workbuddy directory"
+        ]
+      }
+    },
+    {
+      "id": "P04A",
+      "title": "实时预览与大尺寸弹窗",
+      "objective": "完成 v1/v2 runtime 判别联合、大尺寸弹窗、焦点和真实浏览器验收",
+      "status": "passed",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 35,
+      "dependsOn": ["P03R"],
+      "successor": "P04B",
+      "threadId": "/root/p04a_live_preview_ui",
+      "commit": "966bcf95c2e28663286a2dd08f244000b1ae8aa0",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "parent independently built shared, API and Web under Node 22.23.2 and pnpm 9.15.0 with exit 0; Web check reported 0 errors and 9 pre-existing warnings",
+          "parent reran 4 focused files with 23 of 23 tests passing and the 12-component real click, drag and wheel fixture gate with zero HTTP(S) requests",
+          "parent reran the specified Google Chrome suite with 8 of 8 tests passing, including real fullscreen, two-step Escape, focus restoration and both required desktop viewports",
+          "parent application Browser inspection confirmed three visible columns, two-card grid, no horizontal overflow, PNG-only cards, real v1 and v2 runtime pages, replay/reset, iframe destruction and zero console warnings or errors",
+          "official validator and git diff check passed; tracked worktree remained clean with only the pre-existing untracked .workbuddy directory"
+        ]
+      }
+    },
+    {
+      "id": "P04B",
+      "title": "模板资产目录传输",
+      "objective": "完成密封目录包、管理员 API/BFF、只读保护、事务指纹和全部负测",
+      "status": "passed",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P04A"],
+      "successor": "P05A",
+      "threadId": "/root/p04b_catalog_transfer",
+      "commit": "699796b929fc6d3951e16dae4a164fa611ef9905",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "parent fixed-runtime rerun used Node 22.23.2 and pnpm 9.15.0, built shared first, and passed the final P04B catalog-transfer suite 9 of 9 plus focused integration 17 of 17",
+          "parent full regression from exact candidate 699796b passed 47 of 47 Vitest files and 853 of 853 tests plus all 8 shell suites",
+          "parent Web check passed with 0 errors and 9 pre-existing warnings; exact runtime PATH root build passed all 3 Shared/API/Web tasks",
+          "production audit exit 0 covered 370 dependencies with every severity zero; full audit exit 1 remained explicitly recorded at info 0 low 2 moderate 6 high 1 critical 1",
+          "official validator and git diff check passed; tracked worktree remained clean with only the pre-existing untracked .workbuddy directory, and no PocketBay, cloud, real-asset or remote write occurred"
+        ]
+      }
+    },
+    {
+      "id": "P05A",
+      "title": "PocketBay 双候选密封恢复证明",
+      "objective": "用运行时一致的候选 C/D 证明密封备份跨 PocketBay 版本字节不变并可隔离恢复",
+      "status": "in_progress",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P04B"],
+      "successor": "P05B",
+      "threadId": "/root/p05a_pocketbay_sealed_backup",
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P05B",
+      "title": "PocketBay 迁移与目录导出",
+      "objective": "完成 12 项 v2 晋升、3 项软退役、真实交互验收并导出权威目录包",
+      "status": "pending",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P05A"],
+      "successor": "P06",
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P06",
+      "title": "云服务器同步与终局验收",
+      "objective": "向固定云端部署同一 SHA、应用权威目录包并验证资产、账号、汇报和恢复边界",
+      "status": "pending",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P05B"],
+      "successor": null,
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    }
+  ],
+  "supersededPhases": [
+    {
+      "id": "P04",
+      "planVersion": "3.0",
+      "priorStatus": "in_progress",
+      "priorThreadId": "/root/p04_live_preview_catalog_transfer",
+      "priorCommit": null,
+      "priorGateResult": "pending",
+      "disposition": "split_required_into_P04A_and_P04B_without_scope_change"
+    },
+    {
+      "id": "P03A",
+      "planVersion": "2.1",
+      "priorStatus": "in_progress",
+      "priorThreadId": "/root/p03a_pocketbay_sync",
+      "priorCommit": null,
+      "priorGateResult": "pending",
+      "disposition": "not_passed_superseded_by_v3.0"
+    },
+    {
+      "id": "P03B",
+      "planVersion": "2.1",
+      "priorStatus": "pending",
+      "priorThreadId": null,
+      "priorCommit": null,
+      "priorGateResult": "pending",
+      "disposition": "not_started_superseded_by_v3.0"
+    }
+  ],
+  "blockedReason": null,
+  "updatedAt": "2026-08-17T14:42:34+08:00"
+}

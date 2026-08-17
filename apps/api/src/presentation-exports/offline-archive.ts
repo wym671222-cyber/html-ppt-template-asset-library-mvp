@@ -10,6 +10,11 @@ export type ArchiveFile = Readonly<{
   content: Buffer
 }>
 
+export type StoredZipLimits = Readonly<{
+  maxEntries?: number
+  maxBytes?: number
+}>
+
 export function sha256(content: Uint8Array): string {
   return createHash('sha256').update(content).digest('hex')
 }
@@ -29,8 +34,12 @@ function crc32(content: Uint8Array): number {
   return (crc ^ 0xffffffff) >>> 0
 }
 
-export function createStoredZip(files: readonly ArchiveFile[]): Buffer {
-  if (files.length < 1 || files.length > 202) throw new Error('Export ZIP must contain between 1 and 202 controlled files')
+export function createStoredZip(files: readonly ArchiveFile[], limits: StoredZipLimits = {}): Buffer {
+  const maxEntries = limits.maxEntries ?? 202
+  const maxBytes = limits.maxBytes ?? 64 * 1024 * 1024
+  if (!Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 65_535 || !Number.isInteger(maxBytes) || maxBytes < 1) throw new Error('Stored ZIP limits are invalid')
+  if (files.length < 1 || files.length > maxEntries) throw new Error(`Stored ZIP must contain between 1 and ${maxEntries} controlled files`)
+  if (files.reduce((size, file) => size + file.content.byteLength, 0) > maxBytes) throw new Error('Stored ZIP content exceeds its byte limit')
   const names = new Set<string>()
   const localParts: Buffer[] = []
   const centralParts: Buffer[] = []
@@ -93,7 +102,11 @@ export function createStoredZip(files: readonly ArchiveFile[]): Buffer {
   return Buffer.concat([...localParts, centralDirectory, end])
 }
 
-export function readStoredZip(content: Buffer): Map<string, Buffer> {
+export function readStoredZip(content: Buffer, limits: StoredZipLimits = {}): Map<string, Buffer> {
+  const maxEntries = limits.maxEntries ?? 202
+  const maxBytes = limits.maxBytes ?? 64 * 1024 * 1024
+  if (!Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 65_535 || !Number.isInteger(maxBytes) || maxBytes < 1) throw new Error('Stored ZIP limits are invalid')
+  if (content.byteLength < 22 || content.byteLength > maxBytes) throw new Error('Stored ZIP size is invalid')
   const files = new Map<string, Buffer>()
   const localOffsets = new Map<string, number>()
   let offset = 0
@@ -114,6 +127,7 @@ export function readStoredZip(content: Buffer): Map<string, Buffer> {
     const relativePath = content.subarray(nameStart, dataStart).toString('utf8')
     assertSafeExportPath(relativePath)
     if (files.has(relativePath)) throw new Error(`Export ZIP contains a duplicate path: ${relativePath}`)
+    if (files.size >= maxEntries) throw new Error('Stored ZIP contains too many files')
     const bytes = Buffer.from(content.subarray(dataStart, dataEnd))
     if (crc32(bytes) !== expectedCrc) throw new Error(`Export ZIP CRC mismatch: ${relativePath}`)
     files.set(relativePath, bytes)

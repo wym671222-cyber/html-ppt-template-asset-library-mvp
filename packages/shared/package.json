@@ -3,9 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
   "exports": {
-    ".": "./src/index.ts",
-    "./dnd-transforms": "./src/dnd-transforms.ts"
+    ".": "./dist/index.js",
+    "./dnd-transforms": "./dist/dnd-transforms.js"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

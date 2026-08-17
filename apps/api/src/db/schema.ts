@@ -91,8 +91,7 @@ export const templatePreviewDerivatives = sqliteTable('template_preview_derivati
   securityDiagnostic: text('security_diagnostic', { mode: 'json' }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 }, (table) => [
-  primaryKey({ columns: [table.templateVersionId, table.kind, table.contentDigest] }),
-  uniqueIndex('template_preview_derivatives_identity_unique').on(table.templateVersionId, table.kind, table.sourceDigest, table.rendererVersion),
+  primaryKey({ columns: [table.templateVersionId, table.kind, table.sourceDigest, table.rendererVersion] }),
 ])
 
 export const presentationExports = sqliteTable('presentation_exports', {

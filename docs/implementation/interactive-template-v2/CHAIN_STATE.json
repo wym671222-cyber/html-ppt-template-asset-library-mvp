@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "交互模板与导出修复",
+    "workspacePath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "repositoryPath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
+    "implementationBranch": "feat/interactive-template-v2-export",
+    "baselineCommit": "a427b530e05d79ae00b1d7196081f4a03c06451b"
+  },
+  "workflowPhase": "blocked",
+  "plan": {
+    "version": "2.0",
+    "approved": true,
+    "approvedVersion": "2.0",
+    "approvedAt": "2026-08-14T17:56:07+08:00"
+  },
+  "contextPolicy": {
+    "targetPercent": 50,
+    "hardLimitPercent": 70
+  },
+  "orchestration": {
+    "mode": "parent-supervisor",
+    "workspaceStrategy": "single-implementation-branch",
+    "currentPhaseId": null,
+    "activePhaseThreadId": null,
+    "terminalPhaseId": "P07"
+  },
+  "phases": [
+    {
+      "id": "P00",
+      "title": "执行链与失败基线",
+      "objective": "固化真实 data-image 导出失败回归和运行环境基线",
+      "status": "passed",
+      "model": "gpt-5.6-luna",
+      "reasoning": "high",
+      "estimatedContextPercent": 30,
+      "dependsOn": [],
+      "successor": "P01",
+      "threadId": "019fffb8-ed1b-78c2-bcb3-012d2db19b63",
+      "commit": "23a18fe77ee69cdc90f12a1917308faa771bc645",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination 316d64e exactly one atomic P00 commit across the three approved test, status and handoff paths",
+          "parent Node 22.23.2 and pnpm 9.15.0 rerun: P08 7 tests with only the planned data-image regression failing on the exact undeclared-reference error",
+          "the red regression asserts the exact Error.message and zero presentation_exports records before rethrowing the original error",
+          "parent PocketBay rerun 4 files and 20 tests passed; validator passed; main and PocketBay chain hashes were unchanged; worktree retained only .workbuddy/"
+        ]
+      }
+    },
+    {
+      "id": "P01",
+      "title": "v2 协议与白名单导入",
+      "objective": "增加 v2、规范化摘要、审核白名单和候选版本登记",
+      "status": "passed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P00"],
+      "successor": "P02",
+      "threadId": "019fffc5-7541-73c2-85a2-eee7f3555527",
+      "commit": "f696ee8988f983f297a8d797308f7f73864a1221",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination dc99f08 exactly one atomic P01 commit across the twelve approved protocol, import, repository, test and handoff paths",
+          "parent review verified v1 compatibility, deterministic v2 SHA-256 allowlisting, ZIP-only policy and candidate registration without early current-version promotion",
+          "the single bounded repair fail-closed binds render source and content digests to the immutable TemplateVersion before derivative writes and promotion, with zero-side-effect negative coverage",
+          "parent Node 22.23.2 and pnpm 9.15.0 rerun: shared and API builds passed; 11 files and 57 tests passed; the planned P08 data-image regression remained the only exact failure",
+          "validator passed; main and PocketBay chain hashes were unchanged; worktree retained only .workbuddy/"
+        ]
+      }
+    },
+    {
+      "id": "P02",
+      "title": "沙箱运行与安全预览",
+      "objective": "建立断网 iframe runtime 和白名单 v2 PNG 渲染",
+      "status": "passed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "max",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P01"],
+      "successor": "P03",
+      "threadId": "01a00074-dbcb-7c01-b683-02efc6422852",
+      "commit": "6dba2c0c2556b70a8d823d23591938799b752247",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination b35328d923abc7c33a8001ffcf9965a16a7c1623 exactly one atomic P02 commit after the single bounded repair amend; worktree retained only .workbuddy/",
+          "parent first gate reproduced Chrome self-frame navigation egress at targetHits=1; bounded repair used opaque supervisor plus frame-src data: and did not relax http/https/self/wildcard sources",
+          "parent second gate reran real Chrome P02 worker: unrestricted audit listener recorded fetch=0 and self-navigation=0, navigation-blocked was source/session/identity bound, supervisor context stayed bound, forged sequence rejected and legal sequence accepted, then preview/thumbnail promoted",
+          "parent Node 22.23.2 and pnpm 9.15.0: shared/API builds and Web check/build passed; P02/P15 11 tests passed; 40-file Vitest regression 810 tests passed; shell suites 8/8 passed",
+          "P08 planned red baseline remained exact: 7 tests with 6 passed and only Verified template HTML contains an undeclared reference failing; official validator passed"
+        ]
+      }
+    },
+    {
+      "id": "P03",
+      "title": "目录交互与模板下架",
+      "objective": "交付交互详情、目录 runtime 信息和管理员退役接口",
+      "status": "passed",
+      "model": "gpt-5.6-terra",
+      "reasoning": "high",
+      "estimatedContextPercent": 40,
+      "dependsOn": ["P02"],
+      "successor": "P04",
+      "threadId": "01a000bf-4ac0-7560-8d6c-5368af742242",
+      "commit": "901fc2d028449a94a59169cfe0951a53c3b5dff8",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination 0d21106f0307f1f7e3354acf5ce2ee68fbdf6e9b exactly one atomic P03 implementation commit; worker stopped without CHAIN_STATE/P04/production changes and worktree retained only .workbuddy/",
+          "parent review verified catalog current/runtime metadata is allowlist-bound without path or digest leakage, detail iframe exists only while open and item is present, uses exact sandbox=allow-scripts without allow-same-origin, and is destroyed on close/Escape/background/retire",
+          "parent Node 22.23.2 and pnpm 9.15.0 targeted rerun: 7 files and 32 tests passed, including real Chrome P02 second-listener fetch/self-navigation zero-hit/session-bound regression",
+          "parent shared/API builds, Web check (0 errors and 9 pre-existing warnings), Web build, 41-file 812-test Vitest regression excluding P08, and shell suites 8/8 passed",
+          "retire gate verified authenticated admin exact POST with no query, JSON empty body, invalid/missing/non-admin/method negatives, idempotent TEMPLATE_RETIRED/ALREADY_RETIRED audit, retired hidden from catalog and new selection, while fixed PresentationItem and derivative records remain",
+          "P08 planned red baseline remains exact: 7 tests with 6 passed and only Verified template HTML contains an undeclared reference failing; official validator passed"
+        ]
+      }
+    },
+    {
+      "id": "P04",
+      "title": "导出协议 v3",
+      "objective": "修复 v1 data-image 并实现 v1/v2 离线交互导出",
+      "status": "passed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "max",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P03"],
+      "successor": "P05",
+      "threadId": "01a000d0-a46a-7e00-bb94-fbf9f548477f",
+      "commit": "1045dd6752657add984d4a89504ef9aa357697fa",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "relative to parent coordination b9229270b2c28a6ed52a98d7ac6c5f393aa79d67 exactly one atomic P04 implementation commit 1045dd6752657add984d4a89504ef9aa357697fa; worker did not modify CHAIN_STATE, create P05, touch production or forbidden real asset directories; worktree retained only .workbuddy/",
+          "parent review verified v3 manifest/package with fixed Presentation revision and TemplateVersion identity, self-contained index plus per-slide sandbox=allow-scripts iframe, digest-deduplicated thumbnails, v1 legal data:image preservation with MIME/signature/base64/2 MiB validation, v2 allowlist-bound opaque supervisor/inner runtime with offline CSP and slot snapshot, and historical v2 read verification",
+          "parent Node 22.23.2 and pnpm 9.15.0 targeted P08/P09/P02/P14/P15 rerun passed 5 files and 36 tests; P08 verbose evidence passed 10/10 including real Chromium v1/v2 file/offline tests with no https requests",
+          "parent full Vitest regression passed 42 files and 822 tests; shared/API builds passed; Web check passed with 0 errors and 9 pre-existing warnings; Web build passed; shell suites passed 8/8; official validator passed",
+          "all P04 contract negatives remained enforced: external/file/blob/javascript/parent/active references, malformed or signature-mismatched data:image, stale/cross-owner/revision/tampered/partial inputs fail before export persistence with controlled hashes and ZIP allowlist re-verification"
+        ]
+      }
+    },
+    {
+      "id": "P05",
+      "title": "十二组件与迁移演练",
+      "objective": "生成十二个 v2 包并在隔离 DB/CAS 演练晋升和退役",
+      "status": "passed",
+      "model": "gpt-5.6-terra",
+      "reasoning": "high",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P04"],
+      "successor": "P06",
+      "threadId": "01a000e9-37c1-7361-914f-9d40d844a6ac",
+      "commit": "626ae6d53b4d52b63d7e618386b499e2387a4a43",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "parent revoked the former P05 pass after proving commit 59b0b111 only generated p05-interactive-01 through p05-interactive-12 synthetic button-counter fixtures rather than the twelve approved production asset IDs and required interaction families",
+          "the authoritative Release 264 import record recovered the twelve production component IDs without reading either forbidden source directory",
+          "the only bounded repair candidate 9fee3a4c uses the twelve exact production asset IDs and passes its automated suite, but its D3 test dispatches only pointerdown and an auxiliary zoom button while runtime marks starDragged on any pointerdown instead of proving a drag gesture",
+          "the same candidate replaces the Three.js orbit drag and Interact.js composer drag acceptance with auxiliary orbit-spin and layout-nudge button clicks, so Chrome assertions prove state-marker changes rather than the approved drag interactions",
+          "the worker handoff calls these real D3, Three.js and Interact interactions despite the test code bypassing their drag handlers; this is a semantic gate failure after the single allowed bounded repair, so P06, push and P07 production work must not start",
+          "parent read-only diagnosis repeated three times on Node 22 and real Chrome: the existing 300x150 outer iframe clips all three gesture targets and records zero events, while the unchanged packages at 960x540 perform real D3 drag and wheel zoom, Three WebGL drag and Interact drag with zero HTTP requests",
+          "user explicitly authorized reopening P05 on 2026-08-15; the candidate commit fixes only the 960x540 Chrome test viewport, true mouse-drag and wheel assertions, removal of the pointerdown and auxiliary-button probes, and three refreshed allowlist digests",
+          "parent rerun under Node 22.23.2/pnpm 9.15.0: P05 4/4, related P02/P03/P05/P08 33/33, full Vitest 43 files/826 tests, shell 8/8, shared/API/Web build and Web check 0 errors/9 warnings passed",
+          "staged P05 delivery is exactly one atomic commit 626ae6d53b4d52b63d7e618386b499e2387a4a43 across the allowlist, fixture generator, P05 test and P05 handoff; .workbuddy/ remains untracked and unstaged",
+          "real Chrome evidence uses fixed browser viewport 1024x768 and outer runtime iframe 960x540; D3 drag/wheel, Three pointer drag and Interact drag changed library-driven state with zero HTTP(S) requests"
+        ]
+      }
+    },
+    {
+      "id": "P06",
+      "title": "全量候选与独立门禁",
+      "objective": "完成全量验证和审计并形成唯一可部署候选",
+      "status": "passed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "xhigh",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P05"],
+      "successor": "P07",
+      "threadId": "01a00110-abc1-74b3-b71b-e88f9a02bee6",
+      "commit": "66135d5add134da929cb2da7e4810bad340e9ba3",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "P06 is resumed only after P05 passed on 626ae6d53b4d52b63d7e618386b499e2387a4a43; the former synthetic-ID P06 evidence remains historical and is not reused as current acceptance",
+          "approved Node 22.23.2/pnpm 9.15.0 runtime: full Vitest 43 files/826 tests, shell suites 8/8, shared/API/Web builds, Web check 0 errors/9 warnings and root Turbo build 3/3 passed; the first root build failure was isolated to the Codex fallback Node 24/pnpm 11 child runtime and the pnpm 9 shim rerun passed without dependency changes",
+          "real Google Chrome P06 suite passed 12/12: P06 catalog 5/5, P07 presentations 2/2, P08 offline export 3/3 and P09 recovery 2/2; the supplemental P02 suite passed 1/1; ports were zero-listener before launch and released after exit",
+          "pnpm audit --prod --json returned real exit 0 with 370 production dependencies and zero info/low/moderate/high/critical findings; the separate full audit returned exit 1 with low 2/moderate 6/high 1/critical 1 and is recorded as development/full-graph risk without ignore, force, threshold lowering or override",
+          "tracked-file scan covered 532 files: high-confidence token 0, private-key marker 0, credential-like assignment 19 across 7 paths including 1 deployable-source path; absolute user path and forbidden real-source-directory matches were 0 in deployable source, and .workbuddy remained untracked/unstaged",
+          "relative to the P05 implementation candidate, exactly one atomic P06 evidence commit contains the chain/status/handoff coordination and current P02 E2E route assertion; no product-source, dependency, manifest, lockfile, production DB/CAS, PocketBay, push or deployment change was included"
+        ]
+      }
+    },
+    {
+      "id": "P07",
+      "title": "PocketBay 迁移与终局验收",
+      "objective": "备份部署迁移并验证线上二十七个活动模板",
+      "status": "failed",
+      "model": "gpt-5.6-sol",
+      "reasoning": "max",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P06"],
+      "successor": null,
+      "threadId": "01a00120-bf9d-7950-a479-c15a213bed6d",
+      "commit": null,
+      "gate": {
+        "result": "failed",
+        "evidence": [
+          "P07 started after P06 passed on the current candidate; scope is write-before read-only verification only",
+          "the current known PocketBay project identity is html-ppt-template-asset-library / Release 264; public access has previously remained at the platform HTTP 204 sleep layer and no production write has occurred",
+          "2026-08-15T09:51:48+08:00 focused public probes for /, /login and /api/health/ready returned HTTP 204 with PocketBay/Cloudflare sleep-layer headers; no application-layer 200 was obtained",
+          "a controlled in-app browser navigation waited 8 seconds without a verifiable UI and was cleaned up; no cookies, storage, passwords or tokens were read, and no form or production action was submitted",
+          "after the user supplied the backup passphrase in the visible UI, admin/active access generated a current production backup manifest and isolated restore verification for 90 objects and 1 presentation; after waking and re-login, live/ready, catalog, recovery and the current archive returned 200, and the UI completed client-side AES-GCM encryption",
+          "the current encrypted .pba was obtained at /Users/rosswang/Downloads/backup-1786762483091-db42e892-f2e2-4d2c-9ff3-ce60df48acdd.pba; it is 11912171 bytes, starts with PBACKUP1 and has SHA-256 785f87082d0f5e2d65e04f3e4cdf6030fadae1f437b1be662062fe4b5a7b41fb; no deployment, import, promotion, retirement, database/CAS business write or Release switch was executed",
+          "before any write, P07 must revalidate live/ready 200, authenticated owner/admin access, authoritative 12-to-12 asset mapping, SQLite/CAS integrity and backup/rollback space; fixture evidence cannot substitute for production proof",
+          "write-before production preflight passed on Release 264: 30 active templates were exactly 15 Workshop plus 12 component v1 plus the three approved retire targets; the twelve production IDs matched the P05 v2 packages; the fixed presentation presentation-b81c6fc5-7c77-48d8-bed0-d79182e642e1 remained revision 18 with four v1 items",
+          "authenticated recovery inspection passed before deployment with 7 migrations, 90 content objects, 60 derivatives, 1 presentation and 0 exports; a current server backup matched state SHA-256 0c1ec65b1ac39b74ca919b6afc21030ad064d296c7b7e864e9119eaeb53efb98, database hash was stable before and after, SQLite quick_check was ok and foreign_key_check was empty",
+          "the exact P06 product candidate 66135d5add134da929cb2da7e4810bad340e9ba3 was packaged as 530 tracked files; forbidden paths, env files, credential paths, private keys, PocketBay tokens and bootstrap values were all zero, and package SHA-256 was 428f0e3d91776e5327371c6e2753fac91b07e73cc4ab4c0ea45ed60967dacb07",
+          "PocketBay accepted the first P07 upload and switched from active Release 264 to Release 326 with next_action done, project_status running and no failure stage; live and ready returned 200 after the documented wake flow",
+          "the immediate post-deploy recovery gate failed closed: /api/recovery and the two previously valid backup manifests returned 409 Backup SQLite hash or size verification failed, while one older backup directory was missing; catalog and presentation reads still proved 30 active templates, zero v2 current versions and the unchanged revision-18 all-v1 presentation",
+          "because the Release 326 data copy changed or omitted backup SQLite files, P07 stopped before all twelve imports, promotions and three retire calls; this is production-state drift that may require a backup storage-format or PocketBay data-sync architecture change, so the single bounded repair path is not applicable"
+        ]
+      }
+    }
+  ],
+  "blockedReason": "P07 failed its production recovery gate after PocketBay switched the exact P06 candidate to Release 326. Business data remains readable and unchanged at 30 active templates, zero current v2 versions and one revision-18 all-v1 presentation, but /api/recovery now fails because two previously valid server backup SQLite files no longer match their manifests and one older backup directory is missing after /data version synchronization. No v2 import, promotion or retire operation was executed. The chain is stopped pending user-authenticated PocketBay console review and an explicit rollback/architecture decision; the agent must not trigger PocketBay version rollback automatically.",
+  "updatedAt": "2026-08-15T13:32:37+08:00"
+}
