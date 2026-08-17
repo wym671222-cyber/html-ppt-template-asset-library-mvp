@@ -22,8 +22,8 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P03R",
-    "activePhaseThreadId": "/root/p03r_v3_rebaseline",
+    "currentPhaseId": "P04",
+    "activePhaseThreadId": "/root/p04_live_preview_catalog_transfer",
     "terminalPhaseId": "P06"
   },
   "phases": [
@@ -97,27 +97,35 @@
       "id": "P03R",
       "title": "v3.0 恢复链重基线",
       "objective": "物化已批准 v3.0 父监督活动链并冻结基线、授权、门禁和禁止边界",
-      "status": "in_progress",
+      "status": "passed",
       "model": "gpt-5.1-codex-max",
       "reasoning": "high",
       "estimatedContextPercent": 20,
       "dependsOn": ["P02"],
       "successor": "P04",
       "threadId": "/root/p03r_v3_rebaseline",
-      "commit": null,
-      "gate": { "result": "pending", "evidence": [] }
+      "commit": "33a6f5ff0a52d3d9f0abeefbe4ad446966689457",
+      "gate": {
+        "result": "passed",
+        "evidence": [
+          "exactly one P03R commit changed only the six approved recovery-chain documents relative to bdd9acf",
+          "parent reran the official validator and git diff --check with exit 0",
+          "parent confirmed P00-P02 evidence remained passed, superseded P03A/P03B were not promoted, and all production phases remained untouched",
+          "tracked worktree was clean and retained only the pre-existing untracked .workbuddy directory"
+        ]
+      }
     },
     {
       "id": "P04",
       "title": "实时预览与目录传输实现",
       "objective": "实现大尺寸安全实时预览、v1/v2 runtime 合同和模板资产目录传输包",
-      "status": "pending",
+      "status": "in_progress",
       "model": "gpt-5.1-codex-max",
       "reasoning": "high",
       "estimatedContextPercent": 50,
       "dependsOn": ["P03R"],
       "successor": "P05A",
-      "threadId": null,
+      "threadId": "/root/p04_live_preview_catalog_transfer",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
@@ -185,5 +193,5 @@
     }
   ],
   "blockedReason": null,
-  "updatedAt": "2026-08-17T12:37:50+08:00"
+  "updatedAt": "2026-08-17T12:47:21+08:00"
 }

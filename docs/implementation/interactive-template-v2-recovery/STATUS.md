@@ -3,10 +3,10 @@
 - 工作流阶段：executing
 - 计划版本：3.0
 - 用户批准版本：3.0
-- 当前阶段：P03R v3.0 恢复链重基线
-- 活动线程：`/root/p03r_v3_rebaseline`
-- 最后核实提交：`bdd9acf35174fefe7953aa59c5d7bb670d4cf901`
-- 下一安全动作：仅完成 P03R 文档门禁、显式暂存、原子提交并交由父级验收；不得启动 P04 或操作生产、远端。
+- 当前阶段：P04 实时预览与目录传输实现
+- 活动线程：`/root/p04_live_preview_catalog_transfer`
+- 最后核实提交：`33a6f5ff0a52d3d9f0abeefbe4ad446966689457`
+- 下一安全动作：只执行 P04 本地产品实现、隔离测试与一个原子提交；不得启动 P05A、操作生产、远端或真实素材目录。
 
 ## 阶段账本
 
@@ -15,8 +15,8 @@
 | P00 | passed | `3979fd68d90cdb1902870482300a47d7d82c1543` | `/root/p00_recovery_baseline` | passed | 父级复跑红测精确失败且 exit 1；P09 10/10、validator、旧链哈希和工作树门禁通过 |
 | P01 | passed | `87ba2e0373f749d9198d38bde9020703b282c703` | `/root/p01_sealed_backup` | passed | 父级定向 38/38、Shared/API build、Web check/build 与代码合同复核通过 |
 | P02 | passed | `b3b33347db436c3f515b1ef3fd6476b1d4704fad` | `/root/p02_candidate_gate` | passed | 父级全量 835/835、Shell、Turbo、Chrome 13/13、prod audit 五级全零与 A/B 运行时一致性通过 |
-| P03R | in_progress | — | `/root/p03r_v3_rebaseline` | pending | 仅物化 v3.0 父监督链并等待父级验收 |
-| P04 | pending | — | — | pending | 未启动；依赖 P03R |
+| P03R | passed | `33a6f5ff0a52d3d9f0abeefbe4ad446966689457` | `/root/p03r_v3_rebaseline` | passed | 六文件边界、validator、diff check、历史状态和工作树门禁通过 |
+| P04 | in_progress | — | `/root/p04_live_preview_catalog_transfer` | pending | 大尺寸 v1/v2 runtime 与目录传输本地实现 |
 | P05A | pending | — | — | pending | 未启动；依赖 P04 |
 | P05B | pending | — | — | pending | 未启动；依赖 P05A |
 | P06 | pending | — | — | pending | 未启动；依赖 P05B；terminal |
@@ -29,7 +29,7 @@
 
 ## 当前边界
 
-- v3.0 的 PocketBay/云端生产阶段尚未启动；P03R 不执行任何生产或远端操作。
+- v3.0 的 PocketBay/云端生产阶段尚未启动；P04 只允许本地产品实现与隔离测试。
 - 后继固定顺序为 PocketBay 恢复证明、PocketBay 迁移与目录导出、云端 `119.29.241.146` / `ppt.ajjy-ai.site` 同 SHA 同步。
 - 旧 interactive-template-v2 链保持 blocked/failed 历史，不重写。
 - 工作树原有 `.workbuddy/` 未跟踪目录保持不读、不改、不暂存。
