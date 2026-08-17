@@ -5,14 +5,15 @@
     "workspacePath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
     "repositoryPath": "/Users/rosswang/Desktop/HTML - PPT/03_HTML汇报模板资产管理与组装平台",
     "implementationBranch": "feat/interactive-template-v2-export",
-    "baselineCommit": "a7437024d471f6f4679202824ddd30a060642055"
+    "baselineCommit": "bdd9acf35174fefe7953aa59c5d7bb670d4cf901"
   },
   "workflowPhase": "executing",
   "plan": {
-    "version": "2.1",
+    "version": "3.0",
     "approved": true,
-    "approvedVersion": "2.1",
-    "approvedAt": "2026-08-15T15:50:00+08:00"
+    "approvedVersion": "3.0",
+    "approvedAt": "2026-08-17T12:37:50+08:00",
+    "approvalEvidence": "User explicitly approved the complete PocketBay 形态统一与云服务器资产同步方案 v3.0 following PLEASE IMPLEMENT THIS PLAN:."
   },
   "contextPolicy": {
     "targetPercent": 50,
@@ -21,9 +22,9 @@
   "orchestration": {
     "mode": "parent-supervisor",
     "workspaceStrategy": "single-implementation-branch",
-    "currentPhaseId": "P03A",
-    "activePhaseThreadId": "/root/p03a_pocketbay_sync",
-    "terminalPhaseId": "P03B"
+    "currentPhaseId": "P03R",
+    "activePhaseThreadId": "/root/p03r_v3_rebaseline",
+    "terminalPhaseId": "P06"
   },
   "phases": [
     {
@@ -79,7 +80,7 @@
       "reasoning": "xhigh",
       "estimatedContextPercent": 40,
       "dependsOn": ["P01"],
-      "successor": "P03A",
+      "successor": "P03R",
       "threadId": "/root/p02_candidate_gate",
       "commit": "b3b33347db436c3f515b1ef3fd6476b1d4704fad",
       "gate": {
@@ -93,34 +94,96 @@
       }
     },
     {
-      "id": "P03A",
-      "title": "PocketBay 双版本同步证明",
-      "objective": "在两个运行时一致版本间证明密封备份字节不变并可隔离恢复",
+      "id": "P03R",
+      "title": "v3.0 恢复链重基线",
+      "objective": "物化已批准 v3.0 父监督活动链并冻结基线、授权、门禁和禁止边界",
       "status": "in_progress",
-      "model": "gpt-5.6-sol",
-      "reasoning": "max",
-      "estimatedContextPercent": 50,
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 20,
       "dependsOn": ["P02"],
-      "successor": "P03B",
-      "threadId": "/root/p03a_pocketbay_sync",
+      "successor": "P04",
+      "threadId": "/root/p03r_v3_rebaseline",
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     },
     {
-      "id": "P03B",
-      "title": "业务迁移与终局验收",
-      "objective": "完成十二项 v2 晋升、三项软退役、交互导出和最终恢复验收",
+      "id": "P04",
+      "title": "实时预览与目录传输实现",
+      "objective": "实现大尺寸安全实时预览、v1/v2 runtime 合同和模板资产目录传输包",
       "status": "pending",
-      "model": "gpt-5.6-sol",
-      "reasoning": "max",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
       "estimatedContextPercent": 50,
-      "dependsOn": ["P03A"],
+      "dependsOn": ["P03R"],
+      "successor": "P05A",
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P05A",
+      "title": "PocketBay 双候选密封恢复证明",
+      "objective": "用运行时一致的候选 C/D 证明密封备份跨 PocketBay 版本字节不变并可隔离恢复",
+      "status": "pending",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 45,
+      "dependsOn": ["P04"],
+      "successor": "P05B",
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P05B",
+      "title": "PocketBay 迁移与目录导出",
+      "objective": "完成 12 项 v2 晋升、3 项软退役、真实交互验收并导出权威目录包",
+      "status": "pending",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P05A"],
+      "successor": "P06",
+      "threadId": null,
+      "commit": null,
+      "gate": { "result": "pending", "evidence": [] }
+    },
+    {
+      "id": "P06",
+      "title": "云服务器同步与终局验收",
+      "objective": "向固定云端部署同一 SHA、应用权威目录包并验证资产、账号、汇报和恢复边界",
+      "status": "pending",
+      "model": "gpt-5.1-codex-max",
+      "reasoning": "high",
+      "estimatedContextPercent": 50,
+      "dependsOn": ["P05B"],
       "successor": null,
       "threadId": null,
       "commit": null,
       "gate": { "result": "pending", "evidence": [] }
     }
   ],
+  "supersededPhases": [
+    {
+      "id": "P03A",
+      "planVersion": "2.1",
+      "priorStatus": "in_progress",
+      "priorThreadId": "/root/p03a_pocketbay_sync",
+      "priorCommit": null,
+      "priorGateResult": "pending",
+      "disposition": "not_passed_superseded_by_v3.0"
+    },
+    {
+      "id": "P03B",
+      "planVersion": "2.1",
+      "priorStatus": "pending",
+      "priorThreadId": null,
+      "priorCommit": null,
+      "priorGateResult": "pending",
+      "disposition": "not_started_superseded_by_v3.0"
+    }
+  ],
   "blockedReason": null,
-  "updatedAt": "2026-08-15T16:39:07+08:00"
+  "updatedAt": "2026-08-17T12:37:50+08:00"
 }

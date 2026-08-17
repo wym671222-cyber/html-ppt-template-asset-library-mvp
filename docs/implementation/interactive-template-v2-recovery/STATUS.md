@@ -1,12 +1,12 @@
 # 交互模板 v2 终局恢复与上线状态
 
 - 工作流阶段：executing
-- 计划版本：2.1
-- 用户批准版本：2.1
-- 当前阶段：P03A PocketBay 双版本同步证明
-- 活动线程：`/root/p03a_pocketbay_sync`
-- 最后核实提交：`b3b33347db436c3f515b1ef3fd6476b1d4704fad`
-- 下一安全动作：精确推送当前协调提交，并只在当前 PocketBay 项目依次部署候选 A/B，证明密封归档跨版本字节不变且可隔离恢复；任何失败都停止，禁止导入或退役。
+- 计划版本：3.0
+- 用户批准版本：3.0
+- 当前阶段：P03R v3.0 恢复链重基线
+- 活动线程：`/root/p03r_v3_rebaseline`
+- 最后核实提交：`bdd9acf35174fefe7953aa59c5d7bb670d4cf901`
+- 下一安全动作：仅完成 P03R 文档门禁、显式暂存、原子提交并交由父级验收；不得启动 P04 或操作生产、远端。
 
 ## 阶段账本
 
@@ -15,15 +15,25 @@
 | P00 | passed | `3979fd68d90cdb1902870482300a47d7d82c1543` | `/root/p00_recovery_baseline` | passed | 父级复跑红测精确失败且 exit 1；P09 10/10、validator、旧链哈希和工作树门禁通过 |
 | P01 | passed | `87ba2e0373f749d9198d38bde9020703b282c703` | `/root/p01_sealed_backup` | passed | 父级定向 38/38、Shared/API build、Web check/build 与代码合同复核通过 |
 | P02 | passed | `b3b33347db436c3f515b1ef3fd6476b1d4704fad` | `/root/p02_candidate_gate` | passed | 父级全量 835/835、Shell、Turbo、Chrome 13/13、prod audit 五级全零与 A/B 运行时一致性通过 |
-| P03A | in_progress | — | `/root/p03a_pocketbay_sync` | pending | 候选 A/B 跨版本 `/data` 同步和隔离恢复 |
-| P03B | pending | — | — | pending | 依赖 P03A |
+| P03R | in_progress | — | `/root/p03r_v3_rebaseline` | pending | 仅物化 v3.0 父监督链并等待父级验收 |
+| P04 | pending | — | — | pending | 未启动；依赖 P03R |
+| P05A | pending | — | — | pending | 未启动；依赖 P04 |
+| P05B | pending | — | — | pending | 未启动；依赖 P05A |
+| P06 | pending | — | — | pending | 未启动；依赖 P05B；terminal |
+
+## 被 v3.0 取代的阶段历史
+
+- 旧 P03A：计划 v2.1，原状态 `in_progress`、gate `pending`、线程 `/root/p03a_pocketbay_sync`、无提交；未通过并被 v3.0 取代。
+- 旧 P03B：计划 v2.1，原状态 `pending`、gate `pending`、无线程、无提交；未启动并被 v3.0 取代。
+- 以上不是 passed 记录，也不授权或表示任何 P04/P05/P06 工作已经开始。
 
 ## 当前边界
 
-- 当前线上保留 v788；不回滚 v710。
+- v3.0 的 PocketBay/云端生产阶段尚未启动；P03R 不执行任何生产或远端操作。
+- 后继固定顺序为 PocketBay 恢复证明、PocketBay 迁移与目录导出、云端 `119.29.241.146` / `ppt.ajjy-ai.site` 同 SHA 同步。
 - 旧 interactive-template-v2 链保持 blocked/failed 历史，不重写。
 - 工作树原有 `.workbuddy/` 未跟踪目录保持不读、不改、不暂存。
-- P00 禁止产品源码、生产、远端和真实素材操作。
+- 两个真实素材目录保持不读、不改；P03R 禁止产品源码、测试、ops、生产和远端操作。
 
 ## P00 worker evidence
 

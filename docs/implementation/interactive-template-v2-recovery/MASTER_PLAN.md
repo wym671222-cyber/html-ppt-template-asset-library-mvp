@@ -1,17 +1,19 @@
 # 交互模板 v2 终局恢复与上线主计划
 
-- 状态：已批准并执行
-- 计划版本：2.1
+- 状态：v3.0 已批准并执行 P03R
+- 计划版本：3.0
 - 实施分支：`feat/interactive-template-v2-export`
-- 基线提交：`a7437024d471f6f4679202824ddd30a060642055`
-- 终局阶段：P03B
+- 实施基线：`bdd9acf35174fefe7953aa59c5d7bb670d4cf901`
+- 终局阶段：P06
 
-## 全局边界
+## 全局目标与边界
 
-- 新备份原子写为 `/data/recovery-backups/<backupId>.zip`；内部 manifest/SQLite/CAS 验证不放宽。
-- 旧有效目录只读兼容；旧无效目录保留并显式隔离；重复 ID 整体失败。
-- 不读取两个真实来源目录；十二包仅由仓库内 P05 确定性生成器产生。
-- 生产写入只发生在 P03A/P03B 且前置恢复门禁通过之后。
+- `ppt.ajjy-ai.site` 最终采用与 PocketBay 一致的三栏资产库、真实缩略图和大尺寸实时预览；两端运行同一完整 SHA。
+- 先通过 PocketBay 恢复门禁并完成 12 项 v2 晋升、3 项软退役，再以 PocketBay 最终 manifest 为唯一事实源同步云服务器。
+- 目录同步只包含模板、标签、版本、current 指针、HTML/CSS/JS 内容对象、预览图、缩略图和 renderer identity。
+- 用户、密码、Session、汇报、汇报项目、导出历史、恢复备份和密钥不进入传输包；云端既有记录同步前后指纹必须一致。
+- 不读取两个真实来源目录；12 个 v2 只使用仓库内确定性生成器；`.workbuddy/` 不读、不改、不暂存。
+- P03R 不操作产品、测试、ops、生产或远端。P04/P05A/P05B/P06 只能由父级在前置门禁 passed 后启动。
 
 ## 阶段
 
@@ -19,48 +21,65 @@
 |---|---|---|---|---:|---|---|
 | P00 | 恢复链初始化与失败基线 | gpt-5.6-sol | high | 30% | 无 | P01 |
 | P01 | 密封备份架构 | gpt-5.6-sol | xhigh | 50% | P00 | P02 |
-| P02 | 候选与独立门禁 | gpt-5.6-sol | xhigh | 40% | P01 | P03A |
-| P03A | PocketBay 双版本同步证明 | gpt-5.6-sol | max | 50% | P02 | P03B |
-| P03B | 业务迁移与终局验收 | gpt-5.6-sol | max | 50% | P03A | 无 |
+| P02 | 候选与独立门禁 | gpt-5.6-sol | xhigh | 40% | P01 | P03R |
+| P03R | v3.0 恢复链重基线 | gpt-5.1-codex-max | high | 20% | P02 | P04 |
+| P04 | 实时预览与目录传输实现 | gpt-5.1-codex-max | high | 50% | P03R | P05A |
+| P05A | PocketBay 双候选密封恢复证明 | gpt-5.1-codex-max | high | 45% | P04 | P05B |
+| P05B | PocketBay 迁移与目录导出 | gpt-5.1-codex-max | high | 50% | P05A | P06 |
+| P06 | 云服务器同步与终局验收 | gpt-5.1-codex-max | high | 50% | P05B | 无 |
 
-### P00
+旧计划 v2.1 的 P03A/P03B 不属于活动阶段：P03A 保留为未通过的 `in_progress` 历史，P03B 保留为未启动的 `pending` 历史，二者均由 v3.0 取代。
 
-- 仅新增本链文档、P00 handoff 和一个精确红测；禁止改产品源码、旧链、生产和来源目录。
-- 红测必须证明逻辑状态不变、裸 SQLite 物理哈希变化、当前 overview 以精确完整性错误失败。
-- 一个原子提交；父级独立复跑红测、旧链哈希、validator 和工作树门禁。
+### P03R — v3.0 恢复链重基线
 
-### P01
+- 仅更新本恢复链的 PROJECT_BRIEF、DECISION_LOG、MASTER_PLAN、STATUS、CHAIN_STATE 和 P03R handoff。
+- 固定 v3.0 批准记录、精确基线、新活动链、阶段模型/推理/上下文、授权与禁止边界。
+- 保持 P00–P02 的 passed 提交和门禁证据不变；P04 继续 pending，禁止创建后继线程。
+- 门禁：官方 validator、`git diff --check`、显式 staged diff 审查、单个 Conventional Commit、提交后仅保留既有 `.workbuddy/`。
 
-- 实现密封 ZIP 写入/导入/读取/恢复；旧目录逐项兼容和无效隔离；API/UI 使用 `integrity` 判别联合。
-- 主 DB/CAS/root 异常仍整体失败；无效项不得获得 manifest/archive/restore/activate 能力。
-- 覆盖篡改、缺失、重复 ID、原子失败、平台物理重写模拟和旧客户端安全边界。
+### P04 — 实时预览与目录传输实现
 
-### P02
+- 列表仅使用 PNG 缩略图；眼睛按钮打开居中大尺寸 16:9 弹窗，交互页面位于首屏，元数据进入可收起信息区。
+- 弹窗提供关闭、全屏和适应窗口；v2 提供重播、重置。Esc 先退出全屏、再关闭，关闭后销毁 iframe 并归还焦点。
+- v1 真实 HTML/CSS 使用不允许脚本的 opaque sandbox；v2 保持 `sandbox="allow-scripts"` 双层运行时，禁止外网、导航、下载和宿主存储。
+- 扩展目录 runtime：`mode = sandboxed-static | sandboxed-js`，并声明 `viewport`、`url` 和 `commands`。
+- 实现仅管理员可用的 `asset-library-catalog-transfer/v1` 密封 ZIP 导出、暂存校验和显式 apply；P04 只做本地实现与隔离测试，不接触生产。
 
-- 全量 Vitest、shell、shared/API/Web build、Web check、真实 Chrome、生产 audit 和凭据/路径扫描通过。
-- P01 产品提交为候选 A；P02 只新增门禁证据形成候选 B。证明两提交的运行时/部署代码相同。
-- 仅推送精确实施分支，不触碰生产。
+## 公共接口与传输合同
 
-### P03A
+- `GET /api/admin/catalog-transfers/export`：导出密封 ZIP，记录来源发布 SHA、活动模板清单、文件摘要和目录状态摘要。
+- `POST /api/admin/catalog-transfers`：上传到隔离暂存区并校验，返回 transfer ID、manifest SHA、源/目标目录状态 SHA 和确定性变更清单；不得修改数据库。
+- `POST /api/admin/catalog-transfers/:id/apply`：请求必须携带预期 manifest SHA 和目标状态 SHA；目标漂移返回 409 且零数据库副作用。
+- 相同版本 ID 与内容摘要一致时幂等复用；摘要冲突、重复 ID、路径穿越、缺失对象或非法 renderer identity 整体失败。
+- PocketBay 元数据和 current 指针作为活动目录权威值；目标额外活动模板软退役，不删除版本或 CAS。
+- 内容对象先在隔离暂存区完成摘要验证，模板数据库变更在一个事务内提交；提交前后认证与汇报数据指纹必须一致。
 
-- 写前核对 v788、30 active、0 v2、历史 revision 18、现有外部 `.pba` 和恢复错误。
-- 部署候选 A，创建密封备份并记录归档 SHA-256；部署候选 B 后证明同一归档字节不变并首次隔离恢复。
-- 任一门禁失败立即停止；候选 A 失败可回滚 v788，候选 B 失败可回滚 A；不得导入、晋升或退役。
+### P05A — PocketBay 双候选密封恢复证明
 
-### P03B
+- P04 全量验证通过后形成候选 C；再用仅包含门禁证据的提交形成候选 D，并证明 C/D 运行时和部署输入完全一致。
+- PocketBay 保持当前版本，依次部署 C、D；在 C 创建密封备份，记录归档 SHA，在 D 证明同一归档字节不变并可隔离恢复。
+- 任一备份、摘要或恢复门禁失败立即停止，不自动回滚，不导入、不晋升、不退役；登录和备份口令由用户手工完成。
 
-- 创建迁移前密封备份并隔离恢复；逐项生成、上传、等待预览和验证 12 个 v2 current，全部成功后软退役 3 个固定 ID。
-- 失败时激活迁移前备份并重启验证 30 个 v1；CAS 不清理。
-- 成功门禁：27=15+12、12 个 v2、3 个 retire、历史汇报固定 v1、12 类真实交互零外连、混合导出离线成功、最终备份与 `.pba` 成功。
+### P05B — PocketBay 迁移与目录导出
 
-## 公共接口
+- 先创建迁移前密封备份并完成隔离恢复，再逐项晋升 12 个 v2；全部真实预览通过后才软退役 3 个既定模板。
+- 成功目录为 27 个活动模板，即 15 个 Workshop 加 12 个 v2；历史汇报固定版本保持不变，CAS 不清理。
+- 导出最终目录包并记录 manifest SHA、活动模板 ID 清单和资产数量；该包是 P06 唯一允许的同步输入。
+- 迁移失败时保持停止状态，由用户明确决定是否激活迁移前备份；不得自动恢复或继续后继。
 
-- `RecoveryBackup` 改为 `integrity: valid | invalid` 判别联合；invalid 仅含受控 ID、storageKind 和泛化 diagnostic。
-- `GET /api/recovery` 在主状态健康时返回逐项备份结果；精确无效备份操作继续返回 409。
-- 不改变 portable backup manifest v1、外部加密 `.pba` 或恢复激活确认合同。
+### P06 — 云服务器同步与终局验收
 
-## 未授权
+- 唯一目标为 `119.29.241.146`、Origin 为 `https://ppt.ajjy-ai.site`；部署与 PocketBay 相同的候选 D 完整 SHA，不允许服务器侧补丁。
+- 云端先进入维护和只读，记录代码、DB/CAS、账号、汇报和模板指纹；创建 DB/CAS/Caddy/systemd 备份并在隔离目录验证可恢复。
+- 生产预检不要求汇报表为空，改为验证用户归属、版本引用、外键、位置唯一性和历史汇报可解析。
+- 上传并校验 P05B 目录包，在审核确定性变更清单后开放一次受控写入 apply；随后立即恢复只读并执行完整验收。
+- 只有终局门禁全部通过后才恢复正常写入和解除维护。目录 apply 失败必须事务回滚；apply 后验收失败时保持维护，由用户明确批准后才可恢复迁移前 DB、原代码 symlink、Caddy/systemd；CAS 和备份不删除。
 
-- 删除或覆盖旧备份、CAS、模板版本；自动升级历史 PresentationItem。
-- 操作其他 PocketBay 项目、腾讯服务器链、其他远端或两个真实来源目录。
-- 读取、记录或输出任何凭据值。
+## 测试与终局门禁
+
+- 合同负测：篡改摘要、路径穿越、重复 ID、版本冲突、过期目标状态、缺失对象和非法 renderer identity 均零数据库副作用失败。
+- 数据保护：传输包不含认证、汇报或恢复数据；同步前后用户、Session、汇报、项目和导出记录计数及内容指纹一致。
+- UI：1440×900 与 1920×1080 同时可见左筛选、中双列卡片、右汇报面板，无横向溢出和空白预览。
+- v1：真实 DOM/CSS 可见，脚本、外网、导航和下载全部被拒绝。v2：12 个组件用真实鼠标、拖拽和滚轮验收，重播、重置、全屏和关闭有效，HTTP(S) 外连为零。
+- 线上：两端完整 SHA 相同；云端活动模板 ID 与最终 manifest 相同；所有活动模板均有有效缩略图和实时页面。
+- 历史：云端原账号可登录、原汇报可打开和导出；软退役模板不在活动目录，但历史引用仍有效；浏览器无 console error、破图或加载遮罩残留。
