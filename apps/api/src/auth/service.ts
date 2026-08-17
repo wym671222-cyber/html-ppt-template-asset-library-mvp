@@ -21,6 +21,7 @@ export type AuthAction =
   | 'admin.user_disable'
   | 'admin.user_reset_password'
   | 'admin.template_retire'
+  | 'catalog-transfer.access'
   | 'auth.bootstrap_admin'
   | 'security.origin'
   | 'business.access'

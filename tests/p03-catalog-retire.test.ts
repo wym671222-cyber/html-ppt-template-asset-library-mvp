@@ -76,7 +76,7 @@ describe('P03 catalog detail and administrative retirement', () => {
     const current = await state()
     try {
       const before = await current.app.request('http://127.0.0.1:3001/api/catalog', { headers: headers('member') })
-      expect(await before.json()).toMatchObject({ total: 1, items: [{ version: { isCurrent: true, status: 'verified', contractVersion: 'html-template/v1' }, runtime: null, derivative: { previewUrl: `/api/catalog/assets/${current.template.assetId}/preview`, thumbnailUrl: `/api/catalog/assets/${current.template.assetId}/thumbnail` } }] })
+      expect(await before.json()).toMatchObject({ total: 1, items: [{ version: { isCurrent: true, status: 'verified', contractVersion: 'html-template/v1' }, runtime: { mode: 'sandboxed-static', viewport: { width: 1920, height: 1080 }, url: `/api/catalog/assets/${current.template.assetId}/runtime`, commands: [] }, derivative: { previewUrl: `/api/catalog/assets/${current.template.assetId}/preview`, thumbnailUrl: `/api/catalog/assets/${current.template.assetId}/thumbnail` } }] })
 
       const create = await current.app.request('http://127.0.0.1:3001/api/presentations', { method: 'POST', headers: headers('member'), body: JSON.stringify({ name: '历史引用' }) })
       const presentation = (await create.json() as { presentation: { id: string; revision: number } }).presentation

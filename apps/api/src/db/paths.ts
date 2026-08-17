@@ -35,6 +35,7 @@ export const MIGRATIONS_DIRECTORY = resolve(dbDirectory, '../../drizzle')
 export const LOCAL_CONTENT_STORE_PATH = resolve(ASSET_LIBRARY_DATA_ROOT, 'objects')
 export const LOCAL_RECOVERY_BACKUP_PATH = resolve(ASSET_LIBRARY_DATA_ROOT, 'recovery-backups')
 export const LOCAL_RECOVERY_DRILL_PATH = resolve(ASSET_LIBRARY_DATA_ROOT, 'recovery-drills')
+export const LOCAL_CATALOG_TRANSFER_STAGING_PATH = resolve(ASSET_LIBRARY_DATA_ROOT, 'catalog-transfer-staging')
 
 export function requireFixedDatabaseUrl(url: string | undefined): string {
   if (url !== undefined && url !== LOCAL_DATABASE_URL) {

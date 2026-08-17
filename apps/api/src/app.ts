@@ -18,6 +18,7 @@ import { createAdminRouter } from './routes/admin.js'
 import { createBusinessAuthMiddleware, type AuthVariables } from './middleware/auth.js'
 import { createAdminMiddleware } from './middleware/admin.js'
 import { MAX_TEMPLATE_HTML_JSON_BYTES, MAX_TEMPLATE_ZIP_BYTES, TemplateImportError, TemplateImportService } from './templates/template-import.js'
+import { CatalogTransferError, CatalogTransferService, MAX_CATALOG_TRANSFER_ARCHIVE_BYTES } from './assets/catalog-transfer.js'
 
 export const LOOPBACK_HOST = '127.0.0.1'
 export const PRODUCTION_APP_ORIGIN = 'https://ppt.ajjy-ai.site'
@@ -139,6 +140,11 @@ function templateRetireError(context: { json(value: { error: string }, status: 4
   return context.json({ error: 'Template retirement failed' }, 500)
 }
 
+function catalogTransferError(context: { json(value: { error: string }, status: 400 | 404 | 409 | 503 | 500): Response }, error: unknown): Response {
+  if (error instanceof CatalogTransferError) return context.json({ error: error.message }, error.status)
+  return context.json({ error: 'Catalog transfer request failed' }, 500)
+}
+
 function assertOnlyKeys(body: Record<string, unknown>, keys: readonly string[]): void {
   if (Object.keys(body).sort().join(',') !== [...keys].sort().join(',')) throw new ExportRequestError(`JSON request body must contain only ${keys.join(' and ')}`)
 }
@@ -153,6 +159,7 @@ export function createApp(options: {
   exports?: PresentationExportRepository
   recovery?: LocalRecoveryService
   templateImports?: TemplateImportService
+  catalogTransfers?: CatalogTransferService
   auth?: AuthApplicationService
   allowedOrigins?: readonly string[]
   registrationEnabled?: boolean
@@ -165,6 +172,7 @@ export function createApp(options: {
   const exports = options.exports
   const recovery = options.recovery
   const templateImports = options.templateImports
+  const catalogTransfers = options.catalogTransfers
   const auth = options.auth
   const allowedOrigins = options.allowedOrigins ?? TEST_APP_ORIGINS
   if (allowedOrigins.length === 0 || allowedOrigins.some((origin) => !isPermittedConfiguredOrigin(origin))) throw new Error('Allowed application Origin is invalid')
@@ -182,6 +190,8 @@ export function createApp(options: {
   const templateImportAuth = auth ? createBusinessAuthMiddleware(auth, 'template-import.access') : unavailableAuth
   const templateImportAdmin = auth ? createAdminMiddleware(auth, 'template-import.access') : unavailableAuth
   const templateRetireAdmin = auth ? createAdminMiddleware(auth, 'admin.template_retire') : unavailableAuth
+  const catalogTransferAuth = auth ? createBusinessAuthMiddleware(auth, 'catalog-transfer.access') : unavailableAuth
+  const catalogTransferAdmin = auth ? createAdminMiddleware(auth, 'catalog-transfer.access') : unavailableAuth
 
   app.use('*', async (context, next) => {
     const host = context.req.header('host') ?? new URL(context.req.url).host
@@ -204,7 +214,8 @@ export function createApp(options: {
       return context.body(null, 204)
     }
 
-    if (readOnly && context.req.path.startsWith('/api/') && WRITE_METHODS.has(context.req.method)) {
+    const readOnlySafeCatalogStage = context.req.method === 'POST' && context.req.path === '/api/admin/catalog-transfers'
+    if (readOnly && context.req.path.startsWith('/api/') && WRITE_METHODS.has(context.req.method) && !readOnlySafeCatalogStage) {
       context.header('Cache-Control', 'no-store')
       return context.json({ error: 'APP_READ_ONLY' }, 503)
     }
@@ -242,6 +253,8 @@ export function createApp(options: {
   app.use('/api/template-imports', templateImportAuth, templateImportAdmin)
   app.use('/api/template-imports/*', templateImportAuth, templateImportAdmin)
   app.use('/api/admin/templates/*', businessAuth, templateRetireAdmin)
+  app.use('/api/admin/catalog-transfers', catalogTransferAuth, catalogTransferAdmin)
+  app.use('/api/admin/catalog-transfers/*', catalogTransferAuth, catalogTransferAdmin)
   app.get('/api/owner', (context) => context.json({ owner: getOwnerContext(context.get('auth').user.id) }))
   app.get('/api/catalog', (context) => {
     if (!catalog) return context.json({ error: 'Catalog service unavailable' }, 503)
@@ -300,6 +313,41 @@ export function createApp(options: {
       if (error instanceof TemplateRetireError && auth) auth.recordFailure('admin.template_retire', context.get('auth').user.id, error.status === 404 ? 'TEMPLATE_NOT_FOUND' : 'INVALID_REQUEST')
       return templateRetireError(context, error)
     }
+  })
+  app.get('/api/admin/catalog-transfers/export', async (context) => {
+    if (!catalogTransfers) return context.json({ error: 'Catalog transfer service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Catalog transfer export does not accept query parameters' }, 400)
+    try {
+      const archive = await catalogTransfers.exportArchive()
+      context.header('Content-Type', 'application/zip')
+      context.header('Content-Length', String(archive.byteLength))
+      context.header('Content-Disposition', 'attachment; filename="asset-library-catalog-transfer.zip"')
+      context.header('Cache-Control', 'no-store')
+      context.header('X-Content-Type-Options', 'nosniff')
+      return context.body(new Uint8Array(archive))
+    } catch (error) { return catalogTransferError(context, error) }
+  })
+  app.post('/api/admin/catalog-transfers', async (context) => {
+    if (!catalogTransfers) return context.json({ error: 'Catalog transfer service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Catalog transfer upload does not accept query parameters' }, 400)
+    if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/zip') return context.json({ error: 'Catalog transfer Content-Type must be application/zip' }, 415)
+    try {
+      const content = await boundedBinaryBody(context.req.raw, MAX_CATALOG_TRANSFER_ARCHIVE_BYTES, (message) => new CatalogTransferError(message))
+      return context.json({ transfer: await catalogTransfers.validateArchive(content) }, 201)
+    } catch (error) { return catalogTransferError(context, error) }
+  })
+  app.post('/api/admin/catalog-transfers/:transferId/apply', async (context) => {
+    if (!catalogTransfers) return context.json({ error: 'Catalog transfer service unavailable' }, 503)
+    if (new URL(context.req.url).search) return context.json({ error: 'Catalog transfer apply does not accept query parameters' }, 400)
+    if ((context.req.header('content-type') ?? '').toLowerCase().trim() !== 'application/json') return context.json({ error: 'Catalog transfer apply Content-Type must be application/json' }, 415)
+    try {
+      const body = await boundedJsonObject(context.req.raw, MAX_JSON_BYTES, (message) => new CatalogTransferError(message))
+      if (Object.keys(body).sort().join(',') !== 'expectedManifestSha256,expectedTargetCatalogStateSha256') throw new CatalogTransferError('Catalog transfer apply body is invalid')
+      return context.json({ transfer: await catalogTransfers.apply(context.req.param('transferId'), {
+        expectedManifestSha256: String(body.expectedManifestSha256 ?? ''),
+        expectedTargetCatalogStateSha256: String(body.expectedTargetCatalogStateSha256 ?? ''),
+      }) })
+    } catch (error) { return catalogTransferError(context, error) }
   })
   app.get('/api/presentations', (context) => {
     if (!presentations) return context.json({ error: 'Presentation service unavailable' }, 503)

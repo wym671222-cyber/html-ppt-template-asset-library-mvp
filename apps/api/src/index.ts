@@ -15,6 +15,8 @@ import { LocalJobRepository } from './jobs/local-jobs.js'
 import { TemplatePreviewJobWorker } from './previews/preview-jobs.js'
 import { SecurePreviewRenderer } from './previews/secure-preview.js'
 import { TemplateImportService } from './templates/template-import.js'
+import { CatalogTransferService } from './assets/catalog-transfer.js'
+import { LOCAL_CATALOG_TRANSFER_STAGING_PATH } from './db/paths.js'
 
 const recovery = new LocalRecoveryService({
   databasePath: LOCAL_DATABASE_PATH,
@@ -59,6 +61,13 @@ const app = createApp({
   exports: new PresentationExportRepository(sqlite, contentStore),
   recovery,
   templateImports: new TemplateImportService(sqlite, new AssetCatalogRepository(sqlite, contentStore), jobs),
+  catalogTransfers: new CatalogTransferService({
+    database: sqlite,
+    contentStore,
+    stagingRoot: LOCAL_CATALOG_TRANSFER_STAGING_PATH,
+    sourceReleaseSha: process.env.SOURCE_RELEASE_SHA ?? '',
+    readOnly: env.appReadOnly,
+  }),
   auth: new AuthApplicationService(sqlite),
   allowedOrigins: [env.appOrigin],
   registrationEnabled: env.registrationEnabled,

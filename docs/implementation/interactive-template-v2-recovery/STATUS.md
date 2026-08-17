@@ -6,7 +6,7 @@
 - 当前阶段：P04B 模板资产目录传输
 - 活动线程：`/root/p04b_catalog_transfer`
 - 最后核实提交：`966bcf95c2e28663286a2dd08f244000b1ae8aa0`
-- 下一安全动作：恢复隔离的 P04B transfer 草稿，只完成本地密封目录包、管理员 API/BFF、只读保护、事务/指纹及负测；不得启动 P05A 或操作生产、远端、真实素材目录。
+- 下一安全动作：父级从 P04B 原子提交独立复核目录传输、负测、全量回归、构建和工作树门禁；worker 不启动 P05A，不操作生产、远端或真实素材目录。
 
 ## 阶段账本
 
@@ -61,6 +61,22 @@
 - 父级真实 Google Chrome 复跑 `8/8`，覆盖全屏、两步 Esc、关闭销毁 iframe、焦点归还和两个桌面视口；12 个 v2 的真实 click/drag/wheel 状态变化与 HTTP(S) 外连零请求门禁 exit `0`。
 - 父级应用内 Browser 复核 1440×900 与 1920×1080 三栏双列、无横向溢出、卡片 iframe `0`、v1 真实 DOM/CSS、v2 replay/reset、关闭销毁及 console error/warn `0`。该容器对 Esc 的自动化注入会在页面处理后把焦点重置到 `BODY`，故焦点结论采用指定真实 Google Chrome 的直接 E2E，不伪造容器通过。
 - 提交与验收后 tracked worktree 干净，仅保留既有 `?? .workbuddy/`。P04A 通过；父级现按固定顺序启动 P04B，本结论不授权 P05A 或任何生产操作。
+
+## P04B worker evidence
+
+- worker 只完成 P04B；`CHAIN_STATE.json` 继续保持 `P04B / in_progress / pending / commit:null`，等待父级独立门禁，未启动 P05A。
+- 新增 `asset-library-catalog-transfer/v1` 确定性密封 ZIP：仅含活动模板资产、标签、全部对应版本/current 指针、模板与 PNG CAS 对象、renderer identity、安全计数诊断、文件摘要、来源目录摘要和 `SOURCE_RELEASE_SHA`；manifest 不含认证、汇报、导出历史、恢复备份或密钥字段。
+- 导出与暂存会校验精确 ZIP 文件表、UTF-8 canonical manifest、计数/关系、SHA-256/大小、模板包 canonical bytes、v1/v2 安全策略、v2 allowlist、slot schema、current 元数据、完整 preview/thumbnail pair、PNG 尺寸和 renderer identity。路径穿越、重复 ID、缺失对象、篡改摘要、非法 renderer 和目标冲突均在暂存前失败。
+- `POST /api/admin/catalog-transfers` 在 `APP_READ_ONLY=true` 时仍只写隔离 staging 文件、不改业务 DB；apply 无例外返回 `503 APP_READ_ONLY`。apply 重新解析 staged ZIP，在 SQLite `IMMEDIATE` 单事务内复核目标状态、复用同摘要版本、写入模板目录并软退役目标多余活动模板；版本、CAS 和历史 PresentationItem 均不删除。
+- apply 前后对 `users`、`sessions`、`auth_throttle`、`presentations`、`presentation_items`、`presentation_exports` 逐表记录 count + SHA-256，并在事务内要求完全一致。数据库中途强制失败负测证明六张目录表整体回滚；仅完整验证后的 immutable CAS 字节可能保留为未引用对象，未验证对象不会进入 live CAS。
+- 父级驳回初版后已修复两处语义缺口：已有 manifest 版本同步来源 `status`；manifest 所含版本的 derivative 集合精确同步，目标独有历史版本及 CAS 保留。同 derivative identity 的 content/security/created_at 不一致 fail closed `409`，不会静默覆盖。
+- 最终回归证明状态漂移和目标独有较新 renderer 均被 diff 标为 update；apply 后 current 模板可见且目录只选择来源 renderer，二次 validate 为 reuse、二次 apply 成功，受保护指纹不变。导数 delete guard 仅在 `IMMEDIATE` 事务内短暂移除；服务从精确 trigger 名称的 `sqlite_master.sql` 捕获非空定义并在 `finally` 原样恢复。自定义格式的 guard SQL 在成功 reconciliation、幂等 apply 和强制事务回滚后均逐字一致，普通 delete 仍被 append-only trigger 拒绝。
+- 管理 API/BFF 固定为 export、stage、apply 三条精确路径，64 MiB 上传上限；匿名为 `401`、member 为 `403`、错误媒体类型为 `415`、过期目标状态为 `409`、只读 apply 为 `503`。BFF 不使用 catch-all proxy，不转发浏览器伪造 forwarding header、内部路径、stack 或秘密。
+- 修正 P04A 后遗留的一处 P03 断言：v1 catalog runtime 从旧 `null` 期望更新为已通过 P04A 门禁的 `sandboxed-static` 合同；只改测试，不改退役产品行为。
+- 固定 Node `v22.23.2` / pnpm `9.15.0`，先构建 Shared。本次修补最终 P04B `9/9`、聚焦回归 `6 files / 36 tests`、API build、Web check/build 均 exit `0`；Web check 为 `0 errors / 9` 条既有 warning。被驳回候选曾通过的全量 `851/851` 与 shell `8/8` 不作为修补后提交证据，留给父级从 amended SHA 独立复跑。
+- 被驳回候选的 API build、Web check/build 和 root Turbo build 均曾 exit `0`，Turbo 为 `3/3 successful`。本次修补已重新通过 Shared/API/Web；修补后 root Turbo 留给父级独立复跑。首次 root Turbo 调用被内部 fallback 解析为 Node 24/pnpm 11，真实 exit `1` 且只触发 engine guard；使用临时 PATH 明确绑定 Node 22/pnpm 9 后从头重跑通过，不把环境误调用记为产品失败或通过证据。
+- 全量测试首次发现 P04A 的旧 `runtime:null` 断言，真实为 `1 failed / 850 passed`；更新为批准的静态 runtime 合同后从头重跑为 `851/851`。未执行 production audit，因为本 worker 明确禁止网络；该门禁留给父级/P05A 的获准候选流程。
+- 未读取、修改或暂存 `.workbuddy/`；未访问两个真实素材目录，也未触碰 PocketBay、云服务器、生产、凭据、远端、push、deploy、rollback 或后继线程。
 
 ## P00 worker evidence
 
