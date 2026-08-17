@@ -16,7 +16,7 @@
 
   let importOpen = $state(false)
   let importMode = $state<'html' | 'zip'>('html')
-  let templateFile: File | null = $state(null)
+  let templateFiles: File[] = $state([])
   let templateBusy = $state(false)
   let templateError = $state('')
   let templateResult: TemplateImportResult | null = $state(null)
@@ -28,6 +28,7 @@
   let htmlTags = $state('')
   let importStage = $state<'idle' | 'validating' | 'registering' | 'previewing' | 'ready'>('idle')
   let fileInput: HTMLInputElement | undefined = $state()
+  let batchProgress = $state('')
 
   let recovery = $state<RecoveryOverview | null>(null)
   let recoveryLoading = $state(true)
@@ -55,13 +56,15 @@
   function tags(): string[] { return htmlTags.split(/[,，\n]/).map((value) => value.trim()).filter(Boolean) }
   function accept(): string { return importMode === 'html' ? '.html,.htm,text/html' : '.zip,application/zip' }
 
-  function chooseFile(file: File | null): void {
-    templateError = ''; templateResult = null; templateJob = null; htmlValidation = null; importStage = 'idle'
-    if (!file) { templateFile = null; return }
-    const valid = importMode === 'html' ? /\.html?$/i.test(file.name) : /\.zip$/i.test(file.name)
-    if (!valid) { templateError = importMode === 'html' ? '请选择 .html 或 .htm 文件。' : '请选择 .zip 模板包。'; templateFile = null; return }
-    templateFile = file
-    if (importMode === 'html' && !htmlTitle) htmlTitle = file.name.replace(/\.html?$/i, '')
+  function chooseFiles(files: File[]): void {
+    templateError = ''; templateResult = null; templateJob = null; htmlValidation = null; importStage = 'idle'; batchProgress = ''
+    if (files.length === 0) { templateFiles = []; return }
+    if (importMode === 'html' && files.length !== 1) { templateError = 'HTML 模式一次只能选择一个文件。'; templateFiles = []; return }
+    if (importMode === 'zip' && files.length > 12) { templateError = 'ZIP 模式一次最多导入 12 个模板包。'; templateFiles = []; return }
+    const invalid = files.find((file) => importMode === 'html' ? !/\.html?$/i.test(file.name) : !/\.zip$/i.test(file.name))
+    if (invalid) { templateError = importMode === 'html' ? '请选择 .html 或 .htm 文件。' : '请选择 .zip 模板包。'; templateFiles = []; return }
+    templateFiles = files
+    if (importMode === 'html' && !htmlTitle) htmlTitle = files[0].name.replace(/\.html?$/i, '')
   }
 
   async function waitForPreview(result: TemplateImportResult): Promise<void> {
@@ -78,25 +81,33 @@
   }
 
   async function importTemplate(): Promise<void> {
-    if (!templateFile || templateBusy) return
-    templateBusy = true; templateError = ''; templateResult = null; templateJob = null; htmlValidation = null
+    if (templateFiles.length === 0 || templateBusy) return
+    const files = [...templateFiles]
+    templateBusy = true; templateError = ''; templateResult = null; templateJob = null; htmlValidation = null; batchProgress = ''
     try {
       if (importMode === 'html') {
         if (!htmlTitle.trim() || !htmlSummary.trim() || !htmlCategory.trim()) throw new Error('请填写标题、摘要和分类。')
         const metadata = { title: htmlTitle, summary: htmlSummary, category: htmlCategory, tags: tags() }
         importStage = 'validating'
-        htmlValidation = await validateTemplateHtml(templateFile, metadata)
+        htmlValidation = await validateTemplateHtml(files[0], metadata)
         importStage = 'registering'
-        templateResult = await uploadTemplateHtml(templateFile, metadata)
+        const result = await uploadTemplateHtml(files[0], metadata)
+        templateResult = result
+        await waitForPreview(result)
       } else {
-        importStage = 'validating'
-        templateResult = await uploadTemplateZip(templateFile)
-        importStage = 'registering'
+        for (const [index, file] of files.entries()) {
+          batchProgress = `正在导入 ${index + 1} / ${files.length}：${file.name}`
+          importStage = 'validating'
+          const result = await uploadTemplateZip(file)
+          templateResult = result
+          importStage = 'registering'
+          await waitForPreview(result)
+        }
+        batchProgress = `已完成 ${files.length} / ${files.length} 个模板包。`
       }
-      await waitForPreview(templateResult)
-      templateFile = null
+      templateFiles = []
       if (fileInput) fileInput.value = ''
-    } catch (cause) { templateError = cause instanceof Error ? cause.message : '模板导入失败'; importStage = 'idle' }
+    } catch (cause) { templateError = `${batchProgress ? `${batchProgress}；` : ''}${cause instanceof Error ? cause.message : '模板导入失败'}`; importStage = 'idle' }
     finally { templateBusy = false }
   }
 
@@ -175,19 +186,20 @@
   <div class="modal-backdrop">
     <button class="backdrop-close" type="button" aria-label="关闭导入弹窗" disabled={templateBusy} onclick={() => { importOpen = false }}></button>
     <div id="template-import" class="import-modal" role="dialog" aria-modal="true" aria-labelledby="template-import-heading" aria-busy={templateBusy} tabindex="-1">
-      <header><div><h2 id="template-import-heading">导入 HTML 模板</h2><p>单文件 HTML 或标准 html-template/v1 ZIP</p></div><button type="button" aria-label="关闭导入弹窗" disabled={templateBusy} onclick={() => { importOpen = false }}>×</button></header>
-      <div class="mode-tabs" role="tablist"><button class:active={importMode === 'html'} type="button" role="tab" aria-selected={importMode === 'html'} onclick={() => { importMode = 'html'; chooseFile(null); if (fileInput) fileInput.value = '' }}>HTML 文件</button><button class:active={importMode === 'zip'} type="button" role="tab" aria-selected={importMode === 'zip'} onclick={() => { importMode = 'zip'; chooseFile(null); if (fileInput) fileInput.value = '' }}>ZIP 包</button></div>
-      <label class="drop-zone" ondragover={(event) => event.preventDefault()} ondrop={(event) => { event.preventDefault(); chooseFile(event.dataTransfer?.files?.[0] ?? null) }}>
-        <input class="sr-only" bind:this={fileInput} type="file" accept={accept()} onchange={(event) => chooseFile(event.currentTarget.files?.[0] ?? null)} />
-        <span class="upload-icon">⇧</span><strong>{templateFile ? templateFile.name : `拖入或点击选择 ${importMode === 'html' ? '.html / .htm' : '.zip'} 文件`}</strong><small>{importMode === 'html' ? 'UTF-8、自包含、最大 5 MiB；拒绝脚本与外链' : 'html-template/v1、最大 5 MiB、最多 32 个 HTML/CSS 文件'}</small>
+      <header><div><h2 id="template-import-heading">导入 HTML 模板</h2><p>单文件 HTML，或一次最多 12 个 html-template/v1 / v2 ZIP</p></div><button type="button" aria-label="关闭导入弹窗" disabled={templateBusy} onclick={() => { importOpen = false }}>×</button></header>
+      <div class="mode-tabs" role="tablist"><button class:active={importMode === 'html'} type="button" role="tab" aria-selected={importMode === 'html'} onclick={() => { importMode = 'html'; chooseFiles([]); if (fileInput) fileInput.value = '' }}>HTML 文件</button><button class:active={importMode === 'zip'} type="button" role="tab" aria-selected={importMode === 'zip'} onclick={() => { importMode = 'zip'; chooseFiles([]); if (fileInput) fileInput.value = '' }}>ZIP 包</button></div>
+      <label class="drop-zone" ondragover={(event) => event.preventDefault()} ondrop={(event) => { event.preventDefault(); chooseFiles(Array.from(event.dataTransfer?.files ?? [])) }}>
+        <input class="sr-only" bind:this={fileInput} type="file" accept={accept()} multiple={importMode === 'zip'} onchange={(event) => chooseFiles(Array.from(event.currentTarget.files ?? []))} />
+        <span class="upload-icon">⇧</span><strong>{templateFiles.length ? (templateFiles.length === 1 ? templateFiles[0].name : `已选择 ${templateFiles.length} 个 ZIP 包`) : `拖入或点击选择 ${importMode === 'html' ? '.html / .htm' : '最多 12 个 .zip'} 文件`}</strong><small>{importMode === 'html' ? 'UTF-8、自包含、最大 5 MiB；拒绝脚本与外链' : '支持 html-template/v1 / v2；逐个校验、生成预览并晋升可用版本'}</small>
       </label>
       {#if importMode === 'html'}<div class="metadata-grid"><label>模板标题<input bind:value={htmlTitle} maxlength="120" placeholder="例如：季度经营分析汇报" /></label><label>分类<input bind:value={htmlCategory} maxlength="80" placeholder="通用汇报" /></label><label class="wide">摘要<textarea bind:value={htmlSummary} maxlength="500" rows="3" placeholder="说明模板用途与适用场景"></textarea></label><label class="wide">标签<input bind:value={htmlTags} placeholder="使用逗号分隔，例如：季度汇报，管理层" /></label></div>{/if}
       <ol class="stage-list" aria-label="导入进度"><li class:active={importStage === 'validating'} class:done={['registering','previewing','ready'].includes(importStage)}>1 校验</li><li class:active={importStage === 'registering'} class:done={['previewing','ready'].includes(importStage)}>2 入库</li><li class:active={importStage === 'previewing'} class:done={importStage === 'ready'}>3 生成预览</li><li class:active={importStage === 'ready'}>4 目录可用</li></ol>
       {#if htmlValidation}<p class="validation">已规范化：{htmlValidation.normalizedFiles.join('、')} · {htmlValidation.sourceBytes} 字节</p>{/if}
+      {#if batchProgress}<p class="validation" role="status">{batchProgress}</p>{/if}
       {#if templateJob}<p class="validation" role="status">任务 {templateJob.status} · 尝试 {templateJob.attempt}/{templateJob.maxAttempts}</p>{/if}
       {#if templateError}<p class="message error" role="alert">{templateError}</p>{/if}
       {#if templateResult && templateJob?.available}<p class="message success" role="status">模板 {templateResult.assetId} 已进入目录。<a href="/">返回资产库查看</a></p>{/if}
-      <footer><button type="button" disabled={templateBusy} onclick={() => { importOpen = false }}>取消</button><button class="primary" type="button" disabled={!templateFile || templateBusy} onclick={() => void importTemplate()}>{templateBusy ? '正在处理…' : '校验并导入'}</button></footer>
+      <footer><button type="button" disabled={templateBusy} onclick={() => { importOpen = false }}>取消</button><button class="primary" type="button" disabled={templateFiles.length === 0 || templateBusy} onclick={() => void importTemplate()}>{templateBusy ? '正在处理…' : templateFiles.length > 1 ? `导入 ${templateFiles.length} 个模板` : '校验并导入'}</button></footer>
     </div>
   </div>
 {/if}
