@@ -13,7 +13,7 @@ import { TemplatePreviewJobWorker, TEMPLATE_PREVIEW_JOB_TYPE, type PreviewRender
 import type { SecurePreviewRender } from '../apps/api/src/previews/secure-preview.js'
 import { adaptSimulatedTemplatePackage } from '../apps/api/src/templates/simulated-adapter.js'
 import { createTrustedTestAuth, seedTestUser } from './p14-test-support.js'
-import { catalogQuery, runtimeViewportScale, safeDerivativeUrl, safeRuntimeUrl } from '../apps/web/src/lib/asset-library.js'
+import { catalogQuery, isCatalogRuntime, runtimeViewportScale, safeDerivativeUrl, safeRuntimeUrl } from '../apps/web/src/lib/asset-library.js'
 
 type SQLite = {
   pragma(statement: string, options?: { simple: true }): unknown
@@ -95,6 +95,10 @@ describe('P06 bounded deterministic catalog query', () => {
       expect(() => safeDerivativeUrl(value)).toThrow(/unsafe/)
       expect(() => safeRuntimeUrl(value)).toThrow(/unsafe/)
     }
+    expect(isCatalogRuntime({ mode: 'sandboxed-static', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: [] })).toBe(true)
+    expect(isCatalogRuntime({ mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: ['replay', 'reset'] })).toBe(true)
+    expect(isCatalogRuntime({ mode: 'sandboxed-static', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: ['reset'] })).toBe(false)
+    expect(isCatalogRuntime({ mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 }, url: '/api/catalog/assets/safe/runtime', commands: [] })).toBe(false)
   })
 
   it('fits the fixed 1920x1080 runtime viewport into the detail panel without changing the iframe viewport', () => {
@@ -136,6 +140,7 @@ describe('P06 read-only catalog API and PNG trust boundary', () => {
         id: state.assetId,
         title: 'Simulated Quarterly Brief',
         version: { id: state.versionId, number: 1, status: 'verified', contractVersion: 'html-template/v1' },
+        runtime: { mode: 'sandboxed-static', viewport: { width: 1920, height: 1080 }, commands: [] },
         derivative: { rendererVersion: 'p05-p06-test-renderer' },
       })
       expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{64}|relative_path|file:|https?:\/\//)
@@ -224,7 +229,7 @@ describe('P06 schema and Web execution boundary', () => {
     }
   })
 
-  it('does not inject or execute template HTML in the P06 Web surface', () => {
+  it('keeps template HTML inside exact opaque sandbox variants in the P06 Web surface', () => {
     const paths = [
       'apps/web/src/routes/(app)/+page.svelte',
       'apps/web/src/lib/components/library/AssetCard.svelte',
@@ -234,6 +239,7 @@ describe('P06 schema and Web execution boundary', () => {
     const source = paths.map((path) => readFileSync(join(process.cwd(), path), 'utf8')).join('\n')
     expect(source).toContain('{#if open && item}')
     expect(source).toContain('sandbox="allow-scripts"')
+    expect(source).toContain('sandbox=""')
     expect(source).not.toMatch(/allow-same-origin|srcdoc|\{@html|innerHTML|blob:|createObjectURL|file:\/\//i)
     expect(source).not.toMatch(/https?:\/\//i)
   })

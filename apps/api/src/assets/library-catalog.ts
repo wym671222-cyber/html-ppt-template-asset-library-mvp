@@ -1,5 +1,5 @@
 import type BetterSqlite3 from 'better-sqlite3'
-import { INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION, type TemplatePackageSource } from '@slide-maker/shared'
+import { INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION, TEMPLATE_PACKAGE_CONTRACT_VERSION, type TemplatePackageSource } from '@slide-maker/shared'
 import { isUserId, type OwnerContext } from '../owner.js'
 import { isAllowlistedInteractiveTemplateDigest } from '../templates/interactive-template-allowlist.js'
 import {
@@ -7,6 +7,7 @@ import {
   InteractiveTemplateRuntimeError,
   type CompiledInteractiveTemplateRuntime,
 } from '../templates/interactive-template-runtime.js'
+import { compileStaticTemplateRuntime, StaticTemplateRuntimeError, type CompiledStaticTemplateRuntime } from '../templates/static-template-runtime.js'
 import { AssetCatalogRepository, type RetiredTemplate } from './catalog-repository.js'
 import { LocalContentStore } from './content-store.js'
 
@@ -50,9 +51,10 @@ export type CatalogItem = Readonly<{
     isCurrent: true
   }
   runtime: null | {
-    mode: 'sandboxed-js'
+    mode: 'sandboxed-static' | 'sandboxed-js'
     viewport: { width: 1920; height: 1080 }
     url: string
+    commands: Array<'replay' | 'reset'>
   }
   derivative: {
     rendererVersion: string
@@ -98,12 +100,15 @@ type DerivativeRow = {
 type RuntimeRow = {
   asset_id: string
   version_number: number
+  contract_version: string
   source_digest: string
   content_digest: string
   media_type: string
   byte_size: number
   relative_path: string
 }
+
+export type CompiledCatalogRuntime = CompiledStaticTemplateRuntime | (CompiledInteractiveTemplateRuntime & { mode: 'sandboxed-js' })
 
 function assertOwner(owner: OwnerContext): void {
   if (owner.kind !== 'user' || !isUserId(owner.id)) throw new CatalogRequestError('Authenticated user OwnerContext required', 404)
@@ -246,12 +251,13 @@ export class AssetLibraryCatalog {
       category: row.category,
       tags: (this.database.prepare('SELECT t.label FROM template_asset_tags at JOIN tags t ON t.id = at.tag_id WHERE at.asset_id = ? ORDER BY t.label COLLATE NOCASE ASC, t.id ASC LIMIT 100').all(row.id) as { label: string }[]).map(({ label }) => label),
       version: { id: row.version_id, number: row.version_number, status: row.version_status, contractVersion: row.contract_version, isCurrent: true as const },
-      runtime: row.contract_version === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION
-        && isAllowlistedInteractiveTemplateDigest(row.source_digest)
+      runtime: row.contract_version === TEMPLATE_PACKAGE_CONTRACT_VERSION
+        || (row.contract_version === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION && isAllowlistedInteractiveTemplateDigest(row.source_digest))
         ? {
-            mode: 'sandboxed-js' as const,
+            mode: row.contract_version === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION ? 'sandboxed-js' as const : 'sandboxed-static' as const,
             viewport: { width: 1920 as const, height: 1080 as const },
             url: `/api/catalog/assets/${encodeURIComponent(row.id)}/runtime`,
+            commands: row.contract_version === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION ? ['replay' as const, 'reset' as const] : [],
           }
         : null,
       derivative: {
@@ -350,11 +356,11 @@ export class AssetLibraryCatalog {
     return content
   }
 
-  readRuntime(owner: OwnerContext, assetId: string): CompiledInteractiveTemplateRuntime {
+  readRuntime(owner: OwnerContext, assetId: string): CompiledCatalogRuntime {
     assertOwner(owner)
     assertAssetId(assetId)
     const row = this.database.prepare(`
-      SELECT asset.id AS asset_id, version.version_number, version.source_digest,
+      SELECT asset.id AS asset_id, version.version_number, version.contract_version, version.source_digest,
         object.digest AS content_digest, object.media_type, object.byte_size, object.relative_path
       FROM template_assets asset
       JOIN template_versions version
@@ -363,23 +369,21 @@ export class AssetLibraryCatalog {
       WHERE asset.id = ?
         AND asset.status = 'active'
         AND version.status IN ('verified', 'available')
-        AND version.contract_version = ?
+        AND version.contract_version IN (?, ?)
         AND version.content_object_digest = version.source_digest
       LIMIT 1
-    `).get(assetId, INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) as RuntimeRow | undefined
-    if (!row || !isAllowlistedInteractiveTemplateDigest(row.source_digest)) {
-      throw new CatalogRequestError('Interactive runtime not found', 404)
-    }
+    `).get(assetId, TEMPLATE_PACKAGE_CONTRACT_VERSION, INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION) as RuntimeRow | undefined
+    if (!row || (row.contract_version === INTERACTIVE_TEMPLATE_PACKAGE_CONTRACT_VERSION && !isAllowlistedInteractiveTemplateDigest(row.source_digest))) throw new CatalogRequestError('Template runtime not found', 404)
     if (row.content_digest !== row.source_digest
       || row.media_type !== 'application/vnd.html-template-package+json'
       || row.relative_path !== this.contentStore.relativePathFor(row.content_digest)) {
-      throw new CatalogRequestError('Interactive runtime content metadata is invalid', 409)
+      throw new CatalogRequestError('Template runtime content metadata is invalid', 409)
     }
 
     let content: Buffer
     try { content = this.contentStore.read(row.content_digest) }
-    catch { throw new CatalogRequestError('Interactive runtime content integrity check failed', 409) }
-    if (content.byteLength !== row.byte_size) throw new CatalogRequestError('Interactive runtime content size check failed', 409)
+    catch { throw new CatalogRequestError('Template runtime content integrity check failed', 409) }
+    if (content.byteLength !== row.byte_size) throw new CatalogRequestError('Template runtime content size check failed', 409)
 
     let source: TemplatePackageSource
     try {
@@ -392,17 +396,18 @@ export class AssetLibraryCatalog {
         || !record.files || typeof record.files !== 'object' || Array.isArray(record.files)) throw new Error('invalid package shape')
       source = value as TemplatePackageSource
     } catch {
-      throw new CatalogRequestError('Interactive runtime package is invalid', 409)
+      throw new CatalogRequestError('Template runtime package is invalid', 409)
     }
 
     try {
-      return compileInteractiveTemplateRuntime(source, {
-        expectedSourceDigest: row.source_digest,
-        expectedAssetId: row.asset_id,
-        expectedVersion: row.version_number,
-      })
+      if (row.contract_version === TEMPLATE_PACKAGE_CONTRACT_VERSION) {
+        return compileStaticTemplateRuntime(source, { sourceDigest: row.source_digest, assetId: row.asset_id, version: row.version_number })
+      }
+      return { mode: 'sandboxed-js', ...compileInteractiveTemplateRuntime(source, {
+        expectedSourceDigest: row.source_digest, expectedAssetId: row.asset_id, expectedVersion: row.version_number,
+      }) }
     } catch (error) {
-      if (error instanceof InteractiveTemplateRuntimeError) throw new CatalogRequestError('Interactive runtime package verification failed', 409)
+      if (error instanceof InteractiveTemplateRuntimeError || error instanceof StaticTemplateRuntimeError) throw new CatalogRequestError('Template runtime package verification failed', 409)
       throw error
     }
   }

@@ -25,6 +25,7 @@
   let retry = $state(0)
   let detailItem = $state<CatalogItem | null>(null)
   let detailOpen = $state(false)
+  let detailTrigger: HTMLButtonElement | null = null
 
   let presentations = $state<Presentation[]>([])
   let selectedPresentationId = $state<string | null>(null)
@@ -198,7 +199,18 @@
   }
 
   async function logout(): Promise<void> { try { await api.p15Logout() } finally { await goto('/login') } }
-  function closeDetail(): void { detailOpen = false; detailItem = null }
+  function openDetail(item: CatalogItem, trigger: HTMLButtonElement): void {
+    detailItem = item
+    detailTrigger = trigger
+    detailOpen = true
+  }
+  function closeDetail(): void {
+    const trigger = detailTrigger
+    detailOpen = false
+    detailItem = null
+    detailTrigger = null
+    requestAnimationFrame(() => trigger?.focus())
+  }
   function handleRetired(): void { closeDetail(); retry += 1 }
 
   function pageNumbers(): number[] {
@@ -238,7 +250,7 @@
       {:else if error}
         <div class="state-panel error-state" role="alert"><h2>无法加载资产目录</h2><p>{error}</p><button type="button" onclick={() => { retry += 1 }}>重新加载</button></div>
       {:else if catalog && catalog.items.length > 0}
-        <AssetGrid items={catalog.items} selectedIds={selectedVersionIds} {view} onToggle={(item) => { void toggleTemplate(item) }} onPreview={(item) => { detailItem = item; detailOpen = true }} />
+        <AssetGrid items={catalog.items} selectedIds={selectedVersionIds} {view} onToggle={(item) => { void toggleTemplate(item) }} onPreview={openDetail} />
       {:else}
         <div class="state-panel" role="status"><h2>{hasFilters ? '没有匹配的模板' : '资产库暂为空'}</h2><p>{hasFilters ? '减少筛选条件或更换搜索词。' : '通过安全预览验证的模板会显示在这里。'}</p>{#if hasFilters}<button type="button" onclick={resetFilters}>清除筛选</button>{/if}</div>
       {/if}

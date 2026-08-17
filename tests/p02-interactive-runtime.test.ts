@@ -7,10 +7,12 @@ import {
   buildTemplateRuntimeCsp,
   isTemplateRuntimeCommand,
   isTemplateRuntimeEventMessage,
+  TEMPLATE_RUNTIME_MODE_HEADER,
   TEMPLATE_RUNTIME_PROTOCOL,
   TEMPLATE_RUNTIME_PROTOCOL_HEADER,
   TEMPLATE_RUNTIME_SESSION_HEADER,
   TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS,
+  TEMPLATE_STATIC_RUNTIME_CSP,
   templateRuntimeNonceFromCsp,
   type TemplatePackageSource,
 } from '../packages/shared/src/index.js'
@@ -232,11 +234,20 @@ describe('P02 active/current/allowlisted runtime API boundary', () => {
     }
   })
 
-  it('refuses v1 and non-current v2, then serves only the promoted current v2 with exact headers', async () => {
+  it('serves current v1 as static, refuses non-current v2, then serves promoted v2 with exact headers', async () => {
     const current = state()
     try {
       const path = `http://127.0.0.1:3001/api/catalog/assets/${current.v2.assetId}/runtime`
-      expect((await current.app.request(path)).status).toBe(404)
+      const staticResponse = await current.app.request(path)
+      expect(staticResponse.status).toBe(200)
+      expect(staticResponse.headers.get(TEMPLATE_RUNTIME_MODE_HEADER)).toBe('sandboxed-static')
+      expect(staticResponse.headers.get(TEMPLATE_RUNTIME_PROTOCOL_HEADER)).toBeNull()
+      expect(staticResponse.headers.get(TEMPLATE_RUNTIME_SESSION_HEADER)).toBeNull()
+      expect(staticResponse.headers.get('content-security-policy')).toBe(TEMPLATE_STATIC_RUNTIME_CSP)
+      const staticHtml = await staticResponse.text()
+      expect(staticHtml).toContain('Quarterly brief title')
+      expect(staticHtml).toContain('<style data-template-stylesheet="styles.css">')
+      expect(staticHtml).not.toMatch(/<script\b|<link\b|https?:|file:/i)
       expect(current.database.prepare('SELECT current_version_id FROM template_assets WHERE id = ?').get(current.v2.assetId)).toEqual({ current_version_id: current.v1.versionId })
 
       const render = fakeRender()
@@ -250,7 +261,7 @@ describe('P02 active/current/allowlisted runtime API boundary', () => {
         items: [{
           id: current.v2.assetId,
           version: { id: current.v2.versionId, number: 2, status: 'verified', contractVersion: 'html-template/v2', isCurrent: true },
-          runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 }, url: `/api/catalog/assets/${current.v2.assetId}/runtime` },
+          runtime: { mode: 'sandboxed-js', viewport: { width: 1920, height: 1080 }, url: `/api/catalog/assets/${current.v2.assetId}/runtime`, commands: ['replay', 'reset'] },
           derivative: { previewUrl: `/api/catalog/assets/${current.v2.assetId}/preview`, thumbnailUrl: `/api/catalog/assets/${current.v2.assetId}/thumbnail` },
         }],
       })
@@ -258,6 +269,7 @@ describe('P02 active/current/allowlisted runtime API boundary', () => {
       const response = await current.app.request(path)
       expect(response.status).toBe(200)
       for (const [name, value] of Object.entries(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)) expect(response.headers.get(name)).toBe(value)
+      expect(response.headers.get(TEMPLATE_RUNTIME_MODE_HEADER)).toBe('sandboxed-js')
       expect(response.headers.get(TEMPLATE_RUNTIME_PROTOCOL_HEADER)).toBe(TEMPLATE_RUNTIME_PROTOCOL)
       expect(response.headers.get(TEMPLATE_RUNTIME_SESSION_HEADER)).toMatch(/^[0-9a-f]{32}$/)
       expect(templateRuntimeNonceFromCsp(response.headers.get('content-security-policy'))).not.toBeNull()

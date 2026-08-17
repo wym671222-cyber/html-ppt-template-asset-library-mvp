@@ -10,7 +10,7 @@ import { AssetLibraryCatalog } from '../apps/api/src/assets/library-catalog.js'
 import { LocalContentStore } from '../apps/api/src/assets/content-store.js'
 import { migrateDatabase } from '../apps/api/src/db/migrate.js'
 import { LocalJobRepository } from '../apps/api/src/jobs/local-jobs.js'
-import { TEMPLATE_PREVIEW_JOB_TYPE, TemplatePreviewJobWorker } from '../apps/api/src/previews/preview-jobs.js'
+import { TEMPLATE_PREVIEW_JOB_TYPE, TemplatePreviewJobWorker, type PreviewRenderer } from '../apps/api/src/previews/preview-jobs.js'
 import { PresentationRepository } from '../apps/api/src/presentations/presentation-repository.js'
 import { PresentationExportRepository } from '../apps/api/src/presentation-exports/presentation-export-repository.js'
 import { LocalRecoveryService } from '../apps/api/src/recovery/local-recovery.js'
@@ -18,6 +18,8 @@ import { SecurePreviewRenderer } from '../apps/api/src/previews/secure-preview.j
 import { adaptSimulatedTemplatePackage, adaptTemplatePackageSource } from '../apps/api/src/templates/simulated-adapter.js'
 import { TemplateImportService } from '../apps/api/src/templates/template-import.js'
 import { seedTestUser } from './p14-test-support.js'
+import { P05_INTERACTIVE_FIXTURE_IDS, createP05InteractivePackage } from '../fixtures/p05-interactive-v2/generator.js'
+import { isInteractiveTemplatePackageManifest } from '../packages/shared/src/index.js'
 
 type SQLite = {
   pragma(statement: string): unknown
@@ -41,7 +43,7 @@ async function main(): Promise<void> {
   })
   const store = new LocalContentStore(join(directory, 'objects'))
   const fixture = adaptSimulatedTemplatePackage(join(process.cwd(), 'fixtures/p03-simulated-template'))
-  const variants = [
+  const staticVariants = [
     { id: 'simulated-quarterly-brief', title: 'Simulated Quarterly Brief', category: 'report/quarterly', tags: ['brief', 'fixture'] },
     { id: 'fixture-quarterly-review', title: '季度经营复盘', category: '经营管理', tags: ['季度汇报', '管理层'] },
     { id: 'fixture-strategy-roadmap', title: '年度战略规划', category: '战略规划', tags: ['路线图', '年度计划'] },
@@ -52,6 +54,7 @@ async function main(): Promise<void> {
     manifest: { ...fixture.source.manifest, id: variant.id, title: variant.title, category: variant.category, tags: variant.tags },
     files: fixture.source.files,
   }))
+  const variants = [...staticVariants, createP05InteractivePackage(P05_INTERACTIVE_FIXTURE_IDS[0])]
   const catalogRepository = new AssetCatalogRepository(database as never, store)
   const jobs = new LocalJobRepository(database as never)
   for (const [index, template] of variants.entries()) {
@@ -63,16 +66,39 @@ async function main(): Promise<void> {
       inputRevision: 0,
     })
   }
+  const secureRenderer = new SecurePreviewRenderer({ chromiumExecutablePath, navigationTimeoutMs: 20_000 })
+  const reviewedFixturePng = await secureRenderer.render(fixture.source)
+  const renderer: PreviewRenderer = {
+    render: async (source) => isInteractiveTemplatePackageManifest(source.manifest)
+      ? {
+          previewPng: reviewedFixturePng.previewPng,
+          thumbnailPng: reviewedFixturePng.thumbnailPng,
+          rendererVersion: 'p04a-e2e-reviewed-v2-fixture',
+          diagnostic: {
+            allowedRequestCount: 1, blockedRequestCount: 0, blockedSecurityEventCount: 0,
+            cookieHeaderCount: 0, contextCookieCount: 0, documentCookiePresent: false,
+            forbiddenDomNodeCount: 0, newWindowCount: 0, runtimeOpaqueOrigin: true,
+            templateOpaqueOrigin: true, cookieAccessBlocked: true, localStorageAccessBlocked: true,
+            sessionStorageAccessBlocked: true, parentDomAccessBlocked: true, topLocationAccessBlocked: true,
+            popupAccessBlocked: true, topNavigationBlocked: true, networkAccessBlocked: true,
+            networkAuditHitCount: 0, selfNavigationAuditHitCount: 0, selfNavigationBlocked: true,
+            runtimeContextBound: true, commandProtocolBound: true, forgedCommandRejected: true,
+            allowScriptsOnlySandbox: true,
+          },
+        }
+      : secureRenderer.render(source),
+  }
   const worker = new TemplatePreviewJobWorker(
     database as never,
     jobs,
     store,
-    new SecurePreviewRenderer({ chromiumExecutablePath, navigationTimeoutMs: 20_000 }),
+    renderer,
     'p06-e2e-worker',
     60_000,
   )
   while (await worker.runOnce()) { /* Render every repository fixture through the production policy. */ }
-  if (variants.some((_template, index) => jobs.get(`p06-e2e-preview-${index}`)?.status !== 'succeeded')) throw new Error('P06 E2E fixture preview failed P05 verification')
+  const failedPreviews = variants.map((_template, index) => jobs.get(`p06-e2e-preview-${index}`)).filter((job) => job?.status !== 'succeeded')
+  if (failedPreviews.length) throw new Error(`P06 E2E fixture preview failed P05 verification: ${failedPreviews.map((job) => job?.diagnostic ?? 'missing job').join('; ')}`)
   let workerBusy = false
   setInterval(() => {
     if (workerBusy) return

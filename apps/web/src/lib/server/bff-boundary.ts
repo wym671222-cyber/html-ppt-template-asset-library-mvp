@@ -2,9 +2,11 @@ import { isIP } from 'node:net'
 import {
   isTemplateRuntimeSessionId,
   TEMPLATE_RUNTIME_PROTOCOL,
+  TEMPLATE_RUNTIME_MODE_HEADER,
   TEMPLATE_RUNTIME_PROTOCOL_HEADER,
   TEMPLATE_RUNTIME_SESSION_HEADER,
   TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS,
+  TEMPLATE_STATIC_RUNTIME_CSP,
   templateRuntimeNonceFromCsp,
 } from '@slide-maker/shared'
 
@@ -98,16 +100,26 @@ export function trustedApiHeaders(browserHeaders: Headers, clientAddress: unknow
 
 export function validatedTemplateRuntimeHeaders(upstream: Headers): Headers | null {
   const contentSecurityPolicy = upstream.get('content-security-policy')
+  const mode = upstream.get(TEMPLATE_RUNTIME_MODE_HEADER)
   const sessionId = upstream.get(TEMPLATE_RUNTIME_SESSION_HEADER)
-  if (templateRuntimeNonceFromCsp(contentSecurityPolicy) === null
-    || upstream.get(TEMPLATE_RUNTIME_PROTOCOL_HEADER) !== TEMPLATE_RUNTIME_PROTOCOL
-    || !isTemplateRuntimeSessionId(sessionId)) return null
+  const interactive = mode === 'sandboxed-js'
+    && templateRuntimeNonceFromCsp(contentSecurityPolicy) !== null
+    && upstream.get(TEMPLATE_RUNTIME_PROTOCOL_HEADER) === TEMPLATE_RUNTIME_PROTOCOL
+    && isTemplateRuntimeSessionId(sessionId)
+  const staticRuntime = mode === 'sandboxed-static'
+    && contentSecurityPolicy === TEMPLATE_STATIC_RUNTIME_CSP
+    && upstream.get(TEMPLATE_RUNTIME_PROTOCOL_HEADER) === null
+    && sessionId === null
+  if (!interactive && !staticRuntime) return null
   for (const [name, value] of Object.entries(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)) {
     if (upstream.get(name) !== value) return null
   }
   const headers = new Headers(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)
   headers.set('Content-Security-Policy', contentSecurityPolicy!)
-  headers.set(TEMPLATE_RUNTIME_PROTOCOL_HEADER, TEMPLATE_RUNTIME_PROTOCOL)
-  headers.set(TEMPLATE_RUNTIME_SESSION_HEADER, sessionId)
+  headers.set(TEMPLATE_RUNTIME_MODE_HEADER, mode!)
+  if (interactive) {
+    headers.set(TEMPLATE_RUNTIME_PROTOCOL_HEADER, TEMPLATE_RUNTIME_PROTOCOL)
+    headers.set(TEMPLATE_RUNTIME_SESSION_HEADER, sessionId!)
+  }
   return headers
 }

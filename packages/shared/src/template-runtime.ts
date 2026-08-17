@@ -6,6 +6,7 @@ export const TEMPLATE_RUNTIME_RESET = 'reset' as const
 
 export const TEMPLATE_RUNTIME_PROTOCOL_HEADER = 'X-PPT-Template-Runtime-Protocol'
 export const TEMPLATE_RUNTIME_SESSION_HEADER = 'X-PPT-Template-Runtime-Session'
+export const TEMPLATE_RUNTIME_MODE_HEADER = 'X-PPT-Template-Runtime-Mode'
 export const TEMPLATE_RUNTIME_REPLAY_EVENT = 'html-template:replay'
 export const TEMPLATE_RUNTIME_RESET_EVENT = 'html-template:reset'
 
@@ -55,6 +56,28 @@ export const TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS = Object.freeze({
   'X-Permitted-Cross-Domain-Policies': 'none',
   'X-Robots-Tag': 'noindex, nofollow, noarchive',
 })
+
+export const TEMPLATE_STATIC_RUNTIME_CSP = [
+  "default-src 'none'",
+  "script-src 'none'",
+  "script-src-attr 'none'",
+  "style-src 'unsafe-inline'",
+  "style-src-attr 'none'",
+  'img-src data:',
+  "connect-src 'none'",
+  "media-src 'none'",
+  "font-src 'none'",
+  "frame-src 'none'",
+  "child-src 'none'",
+  "worker-src 'none'",
+  "manifest-src 'none'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "navigate-to 'none'",
+  "frame-ancestors 'self'",
+  'sandbox',
+].join('; ')
 
 const RUNTIME_NONCE = /^[A-Za-z0-9_-]{43}$/
 const RUNTIME_SESSION = /^[0-9a-f]{32}$/

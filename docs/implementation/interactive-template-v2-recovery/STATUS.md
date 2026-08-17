@@ -41,6 +41,19 @@
 - 原 P04 worker 在约 55–60% 上下文主动停止，没有提交或后继；`git diff --check` exit `0`，未修改 CHAIN_STATE、生产、远端、真实素材目录或 `.workbuddy/`。
 - 已有 runtime 与 transfer 草稿均未经过完整测试，不作为通过证据。父级按执行协议机械拆分为 P04A/P04B，批准目标、范围和验收保持不变。
 
+## P04A worker evidence
+
+- worker 只完成 P04A；阶段账本和 `CHAIN_STATE.json` 继续保持 `in_progress / pending / commit:null`，未启动 P04B/P05A，等待父级独立门禁。
+- v1 current 模板现在返回 `sandboxed-static` runtime：真实 HTML/CSS 经摘要、身份和静态预览策略复核后内联声明 CSS，响应 CSP 与 opaque `sandbox=""` 同时禁止脚本、外网、导航、下载、frame、worker 和宿主存储能力。v2 保持精确 `sandbox="allow-scripts"`、nonce/session 双层运行时，并仅声明 `replay/reset`。
+- 列表卡片仍只有 CAS 重验 PNG；眼睛按钮打开居中大尺寸 16:9 弹窗，首屏为实际 runtime，元数据默认收起。适应窗口、全屏、v2 重播/重置、Esc 先退出全屏再关闭、关闭销毁 iframe 和焦点归还原按钮均已实现。
+- 固定运行时命令 `env PATH="/tmp/node22.i31hC1/node-v22.23.2-darwin-arm64/bin:$PATH" "$NODE" "$PNPM_CJS" exec node --version && ... --version && ... --filter @slide-maker/shared build`：exit `0`，Node `v22.23.2`、pnpm `9.15.0`、Shared TypeScript build 通过。
+- 首次未给 pnpm 子进程固定 `PATH` 的聚焦测试真实 exit `1`，仅因 `better-sqlite3` ABI 127/137 不匹配；修正子进程路径后从头执行 `pnpm exec vitest run tests/p04a-live-preview.test.ts tests/p02-interactive-runtime.test.ts tests/p06-asset-library.test.ts tests/p15-bff.test.ts`：exit `0`，`4/4 files、23/23 tests`。
+- `pnpm --filter @slide-maker/web check`：exit `0`，`0 errors / 9 warnings`；9 条均在未修改的既有文件。`pnpm --filter @slide-maker/api build && pnpm --filter @slide-maker/web build`：exit `0`；API TypeScript 与 Web adapter-node production build 通过，既有 Svelte/Rollup warning 原样保留。
+- 应用内 Browser 在 `http://127.0.0.1:5175/` 验证页面 identity、非空 DOM、无 framework overlay、console error/warn `0`；1440×900 为 `280px / 770px / 390px` 三栏和双列卡片，1920×1080 为 `280px / 1250px / 390px` 三栏和双列卡片，两者 document width 等于 viewport、卡片 iframe `0`。v1 实际 heading 可见、sandbox 为空、元数据收起、v2 replay/reset 状态依次为 `replay:1` / `reset:2`，关闭后 iframe `0` 且焦点归还。该 Browser 容器未暴露 Fullscreen API，因此未把它作为全屏通过证据。
+- 明确指定 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` 执行 `pnpm exec playwright test --config playwright.p06.config.ts e2e/p06-asset-library.spec.ts`：exit `0`，`8/8`；真实全屏进入、退出按钮、第一次 Esc 退出全屏且保留弹窗、第二次 Esc 关闭并归还焦点全部通过，1440×900/1920×1080 与静态 runtime 外连零请求也通过。
+- 明确指定同一 Google Chrome 执行 `pnpm exec vitest run tests/p05-interactive-fixtures.test.ts -t "uses a sandboxed offline document and proves every component changes its own observable state"`：exit `0`，过滤后 `1 passed / 3 skipped`；该一项逐个覆盖 12 个确定性 v2，真实 click、drag、wheel 状态变化均通过且 HTTP(S) 请求数组为空。
+- 未读取、修改或暂存 `.workbuddy/`；未访问两个真实素材目录、P04B 隔离草稿、生产、PocketBay、云服务器或任何远端，也未 push、部署、回滚或创建后继线程。
+
 ## P00 worker evidence
 
 - 起点：`a7437024d471f6f4679202824ddd30a060642055`；模型合同：`gpt-5.6-sol / high`；计划版本：`2.1`。

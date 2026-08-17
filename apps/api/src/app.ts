@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import {
   TEMPLATE_RUNTIME_PROTOCOL,
+  TEMPLATE_RUNTIME_MODE_HEADER,
   TEMPLATE_RUNTIME_PROTOCOL_HEADER,
   TEMPLATE_RUNTIME_SESSION_HEADER,
   TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS,
@@ -259,12 +260,15 @@ export function createApp(options: {
       for (const [name, value] of Object.entries(TEMPLATE_RUNTIME_STATIC_RESPONSE_HEADERS)) context.header(name, value)
       context.header('Content-Length', String(runtime.html.byteLength))
       context.header('Content-Security-Policy', runtime.contentSecurityPolicy)
-      context.header(TEMPLATE_RUNTIME_PROTOCOL_HEADER, TEMPLATE_RUNTIME_PROTOCOL)
-      context.header(TEMPLATE_RUNTIME_SESSION_HEADER, runtime.sessionId)
+      context.header(TEMPLATE_RUNTIME_MODE_HEADER, runtime.mode)
+      if (runtime.mode === 'sandboxed-js') {
+        context.header(TEMPLATE_RUNTIME_PROTOCOL_HEADER, TEMPLATE_RUNTIME_PROTOCOL)
+        context.header(TEMPLATE_RUNTIME_SESSION_HEADER, runtime.sessionId)
+      }
       return context.body(new Uint8Array(runtime.html))
     } catch (error) {
       if (error instanceof CatalogRequestError) return context.json({ error: error.message }, error.status)
-      return context.json({ error: 'Interactive runtime read failed' }, 500)
+      return context.json({ error: 'Template runtime read failed' }, 500)
     }
   })
   app.get('/api/catalog/assets/:assetId/:kind', (context) => {

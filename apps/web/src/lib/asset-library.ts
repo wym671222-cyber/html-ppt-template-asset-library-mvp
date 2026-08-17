@@ -12,9 +12,10 @@ export type CatalogItem = Readonly<{
     isCurrent: true
   }
   runtime: null | {
-    mode: 'sandboxed-js'
+    mode: 'sandboxed-static' | 'sandboxed-js'
     viewport: { width: 1920; height: 1080 }
     url: string
+    commands: Array<'replay' | 'reset'>
   }
   derivative: {
     rendererVersion: string
@@ -23,6 +24,8 @@ export type CatalogItem = Readonly<{
     createdAt: number
   }
 }>
+
+type CatalogRuntime = NonNullable<CatalogItem['runtime']>
 
 export type CatalogResponse = Readonly<{
   items: CatalogItem[]
@@ -55,8 +58,27 @@ export function safeDerivativeUrl(value: string): string {
 }
 
 export function safeRuntimeUrl(value: string): string {
-  if (!RUNTIME_URL.test(value)) throw new Error('Catalog returned an unsafe interactive runtime URL')
+  if (!RUNTIME_URL.test(value)) throw new Error('Catalog returned an unsafe template runtime URL')
   return value
+}
+
+export function isCatalogRuntime(value: unknown): value is CatalogRuntime {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const runtime = value as Record<string, unknown>
+  if (Object.keys(runtime).sort().join(',') !== 'commands,mode,url,viewport'
+    || (runtime.mode !== 'sandboxed-static' && runtime.mode !== 'sandboxed-js')
+    || typeof runtime.url !== 'string'
+    || !Array.isArray(runtime.commands)
+    || runtime.viewport === null
+    || typeof runtime.viewport !== 'object'
+    || Array.isArray(runtime.viewport)) return false
+  const viewport = runtime.viewport as Record<string, unknown>
+  if (Object.keys(viewport).sort().join(',') !== 'height,width'
+    || viewport.width !== 1920
+    || viewport.height !== 1080) return false
+  return runtime.mode === 'sandboxed-static'
+    ? runtime.commands.length === 0
+    : runtime.commands.length === 2 && runtime.commands[0] === 'replay' && runtime.commands[1] === 'reset'
 }
 
 export function runtimeViewportScale(containerWidth: number, viewportWidth: number): number {
@@ -87,7 +109,10 @@ export async function loadCatalog(filters: CatalogFilters, signal?: AbortSignal)
   for (const item of body.items) {
     safeDerivativeUrl(item.derivative.previewUrl)
     safeDerivativeUrl(item.derivative.thumbnailUrl)
-    if (item.runtime !== null) safeRuntimeUrl(item.runtime.url)
+    if (item.runtime !== null) {
+      if (!isCatalogRuntime(item.runtime)) throw new Error('资产目录运行时响应不符合共享目录契约')
+      safeRuntimeUrl(item.runtime.url)
+    }
   }
   return body
 }

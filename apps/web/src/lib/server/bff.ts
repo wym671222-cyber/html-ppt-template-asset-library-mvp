@@ -134,7 +134,7 @@ export async function forwardArtifact(event: RequestEvent, pathname: string, kin
 }
 
 export async function forwardTemplateRuntime(event: RequestEvent, pathname: string): Promise<Response> {
-  if (!isTemplateRuntimePath(pathname)) return Response.json({ error: '交互模板运行页路径不符合契约' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
+  if (!isTemplateRuntimePath(pathname)) return Response.json({ error: '模板运行页路径不符合契约' }, { status: 400, headers: { 'Cache-Control': 'no-store' } })
   const response = await fetch(new URL(pathname, apiBaseUrl()), { method: 'GET', headers: apiHeaders(event, 'GET'), redirect: 'error' })
   const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
   if (!response.ok) {
@@ -142,7 +142,7 @@ export async function forwardTemplateRuntime(event: RequestEvent, pathname: stri
     return new Response(await response.arrayBuffer(), { status: response.status, headers: JSON_HEADERS })
   }
   const headers = validatedTemplateRuntimeHeaders(response.headers)
-  if (!headers) return Response.json({ error: '交互模板运行页安全响应头不符合契约' }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
+  if (!headers) return Response.json({ error: '模板运行页安全响应头不符合契约' }, { status: 502, headers: { 'Cache-Control': 'no-store' } })
   const content = await response.arrayBuffer()
   headers.set('Content-Length', String(content.byteLength))
   return new Response(content, { status: 200, headers })

@@ -2,7 +2,7 @@
   import type { CatalogItem } from '$lib/asset-library'
   import { safeDerivativeUrl } from '$lib/asset-library'
 
-  let { item, selected, view, onToggle, onPreview }: { item: CatalogItem; selected: boolean; view: 'grid' | 'list'; onToggle: () => void; onPreview: () => void } = $props()
+  let { item, selected, view, onToggle, onPreview }: { item: CatalogItem; selected: boolean; view: 'grid' | 'list'; onToggle: () => void; onPreview: (trigger: HTMLButtonElement) => void } = $props()
   let imageFailed = $state(false)
 </script>
 
@@ -19,7 +19,7 @@
     </span>
     <span class="selected-mark" aria-hidden="true">{selected ? '✓' : ''}</span>
   </button>
-  <button class="preview" type="button" aria-label={`预览 ${item.title}`} onclick={onPreview}>
+  <button class="preview" type="button" aria-label={`预览 ${item.title}`} onclick={(event) => onPreview(event.currentTarget)}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
   </button>
 </article>
